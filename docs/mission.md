@@ -38,7 +38,7 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 - **Deployment:** Docker image for the CLI/headless mode; AWS Terraform stub kept for future team-shared services.
 - **PR ownership:** Rob initiates PRs. Claude does not push branches or open PRs without explicit instruction.
 
-## Scope explicitly *out* of v1
+## Scope explicitly _out_ of v1
 
 - Karma + Jasmine emitter (deferred — most active Bellese projects are on Jest or migrating).
 - Angular 18 and earlier.

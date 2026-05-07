@@ -4,7 +4,7 @@ An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / 
 
 ## Current state
 
-**Design phase.** No code yet. The architecture, decisions, and rationale live in `docs/` and should be updated as the design evolves.
+**Foundations laid (M0 complete on `V0dot1dot0/Foundations`).** Monorepo scaffold (pnpm workspaces, TypeScript project references, ESLint, Prettier, Vitest, multi-stage Node 20 Dockerfile) is in place; the CLI `--help` stub builds and runs in the image. No feature code yet — M1 is next: lock the `Analysis` contract artifact and the `LLMProvider` seam.
 
 ## How to read this repo
 
@@ -18,7 +18,7 @@ An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / 
 
 - **Design before code.** Decisions are aligned in conversation, recorded in `docs/`, then implemented. Don't write code that contradicts a doc — update the doc first.
 - **The build plan is authoritative.** `docs/07-build-plan.md` is the order of work and the source of truth for "are we done." Tick boxes as tasks land. Do not start a new milestone before the previous one's "Done when" is true.
-- **Surfacing unanticipated decisions.** If implementation reveals a question the design didn't answer, *stop coding*, update the relevant doc (or `99-open-questions.md`), then resume. No silent decisions in code.
+- **Surfacing unanticipated decisions.** If implementation reveals a question the design didn't answer, _stop coding_, update the relevant doc (or `99-open-questions.md`), then resume. No silent decisions in code.
 - **The contract artifact is the spine.** Identify in `01-architecture.md` the one canonical intermediate representation that every module produces or consumes. When in doubt, route through it.
 
 ## Versioning
@@ -42,6 +42,7 @@ Versions/
 ```
 
 The script:
+
 1. Refuses to run on a dirty working tree.
 2. Finds the latest existing `v*.*.*` folder, bumps it.
 3. Creates a branch named `V{major}dot{minor}dot{patch}/{Description_With_Underscores}`.

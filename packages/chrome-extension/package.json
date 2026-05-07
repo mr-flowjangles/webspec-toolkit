@@ -1,0 +1,14 @@
+{
+  "name": "@bellese/test-chrome-extension",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Manifest V3 Chrome extension for runtime WCAG/508 audits.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bellese/test-core": "workspace:*"
+  }
+}
