@@ -45,11 +45,11 @@ Goal: project skeleton ready, dev environment wired, no feature code yet.
 
 Goal: lock the `Analysis` shape (all three variants: `TestPlan`, `A11yReport`, `WorkflowRecording`) and the `LLMProvider` interface in code; ship one adapter; nothing else.
 
-- [ ] Create `packages/core/src/types/analysis.ts` matching the sketch in `01-architecture.md`. Add zod schemas alongside (`TestPlan`, `A11yReport`, `WorkflowRecording`, `RecordedEvent`, `HardenedSelector`).
-- [ ] Create `packages/core/src/llm/provider.ts` defining `LLMProvider`. Document the contract.
-- [ ] Implement `AnthropicAdapter` (`packages/core/src/llm/anthropic.ts`) with structured-output validation via zod.
-- [ ] Add a fixture-based test that asserts: given a known prompt + recorded mock response, the adapter validates and returns a typed value.
-- [ ] Decision recorded in `02-contract-spec.md`: schemaVersion strategy and the rule for evolving the IR without breaking surfaces. Include the rationale for `WorkflowRecording` being LLM-free at capture time and LLM-polished only at render time.
+- [x] Created `packages/core/src/types/analysis.ts` with zod schemas + inferred types for the full `Analysis` discriminated union (3 variants) plus sub-shapes (`TestPlan` w/ `TestCase`/`SurfaceInput`/`SurfaceOutput`/etc., `A11yReport` w/ `Finding`, `WorkflowRecording` w/ `RecordedEvent` discriminated union + `HardenedSelector`/`NetworkRequest`/`ObservedState`).
+- [x] Created `packages/core/src/llm/provider.ts` with the vendor-neutral `LLMProvider` interface, `CompletionRequest`, `ChatMessage`, and `LLMValidationError`. Documented the contract — adapters MUST validate against the zod schema before returning.
+- [x] Implemented `AnthropicAdapter` (`packages/core/src/llm/anthropic.ts`) using `tools` + `tool_choice` for structured output, zod 4 native `z.toJSONSchema()` for the tool's `input_schema`, adaptive thinking + `effort: 'high'` defaults, system-prompt prompt caching via `cache_control: 'ephemeral'`, injectable `client` for tests. Default model `claude-opus-4-7`.
+- [x] Added `packages/core/tests/llm/anthropic.test.ts` — 11 fixture-based tests covering happy path, request shape (tool_choice forcing, cache_control on system, adaptive+effort defaults, maxTokens override), and failure modes (no tool_use block, mismatched tool name, zod validation failure, transport error pass-through).
+- [x] Wrote `docs/02-contract-spec.md` — variant rationale, the `schemaVersion` evolution rule (Buckets A/B/C), why `WorkflowRecording` is LLM-free at capture and LLM-polished only at render time, what the M1 contract test guarantees about the seam.
 
 **Done when:** `Analysis`, `LLMProvider`, and `AnthropicAdapter` exist; the contract test passes; `02-contract-spec.md` is written.
 

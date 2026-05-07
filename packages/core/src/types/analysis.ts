@@ -1,0 +1,252 @@
+/**
+ * The Analysis contract artifact.
+ *
+ * Every Phase 1 analyzer produces an `Analysis`. Every Phase 2 renderer (and every
+ * UI surface) consumes one. Three variants today: `TestPlan` (source-driven unit
+ * test gen), `A11yReport` (axe-core a11y audit), and `WorkflowRecording` (browser
+ * workflow capture). See docs/01-architecture.md and docs/02-contract-spec.md.
+ */
+import { z } from 'zod';
+
+// ---------------------------------------------------------------------------
+// Shared envelope
+// ---------------------------------------------------------------------------
+
+export const AnalysisMetaSchema = z.object({
+  schemaVersion: z.literal('1'),
+  toolVersion: z.string(),
+  createdAt: z.string(), // ISO-8601
+  source: z.object({
+    kind: z.enum(['file', 'url', 'dom', 'recordingSession']),
+    ref: z.string(),
+  }),
+  // ResolvedConfig is owned by @bellese/test-config; in core we accept any shape
+  // and let the consumer narrow it. Keeps core free of a config-package dependency.
+  config: z.unknown(),
+});
+
+// ---------------------------------------------------------------------------
+// Variant 1 — TestPlan (Jest unit tests from Angular source)
+// ---------------------------------------------------------------------------
+
+export const SurfaceInputSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  required: z.boolean().optional(),
+  isSignal: z.boolean(),
+});
+
+export const SurfaceOutputSchema = z.object({
+  name: z.string(),
+  emitsType: z.string(),
+  isSignalOutput: z.boolean(),
+});
+
+export const SurfaceMethodSchema = z.object({
+  name: z.string(),
+  signature: z.string(),
+});
+
+export const LifecycleHookSchema = z.enum([
+  'ngOnInit',
+  'ngOnDestroy',
+  'ngOnChanges',
+  'ngAfterViewInit',
+  'ngAfterContentInit',
+  'ngAfterContentChecked',
+  'ngAfterViewChecked',
+  'ngDoCheck',
+]);
+
+export const InjectedDepSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  via: z.enum(['inject', 'constructor']),
+});
+
+export const TestCaseSchema = z.object({
+  name: z.string(),
+  arrange: z.string(),
+  act: z.string(),
+  assert: z.string(),
+  imports: z.array(z.string()).optional(),
+});
+
+export const TestPlanSchema = z.object({
+  unit: z.object({
+    kind: z.enum(['component', 'service', 'directive', 'pipe']),
+    name: z.string(),
+    filePath: z.string(),
+  }),
+  surface: z.object({
+    inputs: z.array(SurfaceInputSchema),
+    outputs: z.array(SurfaceOutputSchema),
+    publicMethods: z.array(SurfaceMethodSchema),
+    lifecycle: z.array(LifecycleHookSchema),
+    deps: z.array(InjectedDepSchema),
+  }),
+  cases: z.array(TestCaseSchema),
+  framework: z.literal('jest'),
+  styleHints: z.object({
+    useStandalone: z.boolean(),
+    useSignals: z.boolean(),
+    useInject: z.boolean(),
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// Variant 2 — A11yReport (axe-core findings, WCAG 2.1 AA + Section 508)
+// ---------------------------------------------------------------------------
+
+export const A11yRuleTagSchema = z.enum(['wcag21aa', 'section508']);
+
+export const A11ySeveritySchema = z.enum(['minor', 'moderate', 'serious', 'critical']);
+
+export const FindingSchema = z.object({
+  ruleId: z.string(),
+  ruleSets: z.array(A11yRuleTagSchema),
+  severity: A11ySeveritySchema,
+  selector: z.string(),
+  failureSummary: z.string(),
+  fixHint: z.string().optional(),
+  helpUrl: z.url().optional(),
+});
+
+export const A11yReportSchema = z.object({
+  target: z.object({
+    kind: z.enum(['url', 'dom', 'staticBundle']),
+    ref: z.string(),
+  }),
+  ruleSet: z.object({
+    tags: z.array(A11yRuleTagSchema),
+    engineVersion: z.string(),
+  }),
+  findings: z.array(FindingSchema),
+  passCount: z.number().int().nonnegative(),
+  incompleteCount: z.number().int().nonnegative(),
+});
+
+// ---------------------------------------------------------------------------
+// Variant 3 — WorkflowRecording (Chrome recorder → Playwright e2e)
+// ---------------------------------------------------------------------------
+
+export const HardenedSelectorSchema = z.object({
+  preferred: z.string(),
+  strategy: z.enum(['testId', 'role', 'text', 'css']),
+  fallbacks: z.array(z.string()),
+});
+
+export const ObservedStateSchema = z.object({
+  description: z.string(),
+  evidence: z.string(),
+});
+
+export const NetworkRequestSchema = z.object({
+  t: z.number(),
+  method: z.string(),
+  url: z.string(),
+});
+
+/**
+ * RecordedEvent — the leaves of the recorder's event trace. Discriminated by
+ * `kind`. Captured deterministically; no LLM in the loop at this stage.
+ */
+export const RecordedEventSchema = z.discriminatedUnion('kind', [
+  z.object({
+    t: z.number(),
+    kind: z.literal('click'),
+    selector: HardenedSelectorSchema,
+    targetText: z.string().optional(),
+  }),
+  z.object({
+    t: z.number(),
+    kind: z.literal('input'),
+    selector: HardenedSelectorSchema,
+    value: z.string(),
+    sensitive: z.boolean(),
+  }),
+  z.object({
+    t: z.number(),
+    kind: z.literal('change'),
+    selector: HardenedSelectorSchema,
+    value: z.string(),
+  }),
+  z.object({
+    t: z.number(),
+    kind: z.literal('submit'),
+    selector: HardenedSelectorSchema,
+  }),
+  z.object({
+    t: z.number(),
+    kind: z.literal('keydown'),
+    key: z.string(),
+    selector: HardenedSelectorSchema.optional(),
+  }),
+  z.object({
+    t: z.number(),
+    kind: z.literal('navigate'),
+    url: z.string(),
+  }),
+  z.object({
+    t: z.number(),
+    kind: z.literal('assertObserved'),
+    observation: ObservedStateSchema,
+  }),
+]);
+
+export const WorkflowRecordingSchema = z.object({
+  startedAt: z.string(),
+  endedAt: z.string(),
+  startUrl: z.string(),
+  events: z.array(RecordedEventSchema),
+  network: z.array(NetworkRequestSchema),
+  framework: z.literal('playwright'),
+});
+
+// ---------------------------------------------------------------------------
+// The Analysis discriminated union
+// ---------------------------------------------------------------------------
+
+export const AnalysisSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('testPlan'),
+    data: TestPlanSchema,
+    meta: AnalysisMetaSchema,
+  }),
+  z.object({
+    kind: z.literal('a11yReport'),
+    data: A11yReportSchema,
+    meta: AnalysisMetaSchema,
+  }),
+  z.object({
+    kind: z.literal('workflowRecording'),
+    data: WorkflowRecordingSchema,
+    meta: AnalysisMetaSchema,
+  }),
+]);
+
+// ---------------------------------------------------------------------------
+// Inferred TS types — public API of this module
+// ---------------------------------------------------------------------------
+
+export type AnalysisMeta = z.infer<typeof AnalysisMetaSchema>;
+export type SurfaceInput = z.infer<typeof SurfaceInputSchema>;
+export type SurfaceOutput = z.infer<typeof SurfaceOutputSchema>;
+export type SurfaceMethod = z.infer<typeof SurfaceMethodSchema>;
+export type LifecycleHook = z.infer<typeof LifecycleHookSchema>;
+export type InjectedDep = z.infer<typeof InjectedDepSchema>;
+export type TestCase = z.infer<typeof TestCaseSchema>;
+export type TestPlan = z.infer<typeof TestPlanSchema>;
+export type A11yRuleTag = z.infer<typeof A11yRuleTagSchema>;
+export type A11ySeverity = z.infer<typeof A11ySeveritySchema>;
+export type Finding = z.infer<typeof FindingSchema>;
+export type A11yReport = z.infer<typeof A11yReportSchema>;
+export type HardenedSelector = z.infer<typeof HardenedSelectorSchema>;
+export type ObservedState = z.infer<typeof ObservedStateSchema>;
+export type NetworkRequest = z.infer<typeof NetworkRequestSchema>;
+export type RecordedEvent = z.infer<typeof RecordedEventSchema>;
+export type WorkflowRecording = z.infer<typeof WorkflowRecordingSchema>;
+export type Analysis = z.infer<typeof AnalysisSchema>;
+
+/** Current contract artifact schema version. Bump when the IR changes shape. */
+export const CURRENT_SCHEMA_VERSION = '1' as const;
