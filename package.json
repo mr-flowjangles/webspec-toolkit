@@ -1,0 +1,27 @@
+{
+  "name": "angular-automated-testing",
+  "private": true,
+  "version": "0.0.0",
+  "description": "An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / WCAG audits — shared core with VS Code and Chrome extensions on top, reusable across Bellese projects.",
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "build:clean": "tsc -b --clean",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/node": "^20.17.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.15.0",
+    "vitest": "^2.1.5"
+  }
+}

@@ -50,7 +50,7 @@ Bellese engineers building Angular 19+ frontends for customers with Section 508 
     └────────────────┘         └────────────────┘         └────────────────┘
 ```
 
-The contract between core and any UI surface is the typed `Analysis` artifact. Surfaces *render* it; they don't re-analyze.
+The contract between core and any UI surface is the typed `Analysis` artifact. Surfaces _render_ it; they don't re-analyze.
 
 ## Reading order
 
@@ -58,7 +58,7 @@ The contract between core and any UI surface is the typed `Analysis` artifact. S
 
 1. **This doc** — the what and why.
 2. `01-architecture.md` — the spine: Phase 1 (Analyze) → `Analysis` artifact → Phase 2 (Render).
-3. *(subsystem deep-dives `02-` through `06-` to be added as the design firms up: contract spec, LLM provider interface, a11y engine wrapper, VS Code surface, Chrome surface.)*
+3. _(subsystem deep-dives `02-` through `06-` to be added as the design firms up: contract spec, LLM provider interface, a11y engine wrapper, VS Code surface, Chrome surface.)_
 
 **Build (the how and when):**
 

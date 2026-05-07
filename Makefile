@@ -4,7 +4,7 @@
 # Targets that produce no files are .PHONY so make doesn't try to track them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup test lint format ci image smoke clean version version-minor version-major
+.PHONY: help setup build test lint format format-check ci image smoke clean version version-minor version-major
 
 # ---------------------------------------------------------------------------
 # Help
@@ -23,30 +23,28 @@ help: ## Show this help (default target)
 	@echo ""
 
 # ---------------------------------------------------------------------------
-# Local dev environment
+# Local dev environment (pnpm workspaces; Node 20+; see .nvmrc)
 # ---------------------------------------------------------------------------
-# TODO: replace these stubs with your language's commands.
-# Examples:
-#   Python: $(PIP) install -e ".[dev]"   |   $(PYTEST) tests/   |   $(RUFF) check src/ tests/
-#   Node:   npm install                  |   npm test           |   npm run lint
-setup: ## Install dependencies (TODO: wire to your toolchain)
-	@echo "TODO: define setup for your stack (e.g. 'npm install' or 'pip install -e \".[dev]\"')"
-	@exit 1
+setup: ## Install dependencies across the workspace
+	pnpm install
+
+build: ## Build all packages (tsc -b with project references)
+	pnpm build
 
 # ---------------------------------------------------------------------------
 # Quality
 # ---------------------------------------------------------------------------
-test: ## Run tests (TODO: wire to your toolchain)
-	@echo "TODO: define test command (e.g. 'npm test' or 'pytest')"
-	@exit 1
+test: ## Run tests across the workspace (vitest)
+	pnpm test
 
-lint: ## Run linter (TODO: wire to your toolchain)
-	@echo "TODO: define lint command (e.g. 'npm run lint' or 'ruff check src/ tests/')"
-	@exit 1
+lint: ## Lint TypeScript sources (eslint)
+	pnpm lint
 
-format: ## Apply formatter (TODO: wire to your toolchain)
-	@echo "TODO: define format command (e.g. 'npm run format' or 'ruff format src/ tests/')"
-	@exit 1
+format: ## Apply prettier across the workspace
+	pnpm format
+
+format-check: ## Check formatting without writing (CI use)
+	pnpm format:check
 
 ci: lint test ## Lint + test, suitable for CI gating
 
@@ -62,9 +60,10 @@ smoke: ## Smoke-test the built image (override CMD as appropriate for your tool)
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
-clean: ## Remove caches and build artifacts (extend per language)
-	rm -rf .pytest_cache .ruff_cache .mypy_cache build dist node_modules/.cache .next
-	find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+clean: ## Remove caches, build outputs, and node_modules
+	pnpm build:clean 2>/dev/null || true
+	find . -type d \( -name dist -o -name node_modules -o -name .turbo \) -prune -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name '*.tsbuildinfo' -delete 2>/dev/null || true
 	@echo "Cleaned."
 
 # ---------------------------------------------------------------------------

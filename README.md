@@ -4,7 +4,17 @@ An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / 
 
 ## Status
 
-**Design phase.** The architecture, decisions, and rationale are recorded in `docs/`. No application code yet. Implementation starts at milestone **M0** in `docs/07-build-plan.md`.
+**M0 complete (Foundations).** Monorepo scaffold + toolchain wired (pnpm, tsc -b, ESLint, Prettier, Vitest, Docker). CLI `--help` stub builds and ships in the image. **M1 — Contract artifact + LLM provider seam — is next.** See `docs/07-build-plan.md` for the milestone sequence.
+
+## Quickstart
+
+```sh
+nvm use            # Node 20 (see .nvmrc)
+make setup         # pnpm install
+make ci            # lint + test (empty suite for now)
+make build         # tsc -b across the workspace
+make image && make smoke
+```
 
 ## Where to start
 
@@ -21,10 +31,9 @@ An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / 
 ├── Makefile                  # `make help` for available targets
 ├── Dockerfile                # ship target
 ├── docs/                     # design + build plan
+├── packages/                 # monorepo: core, cli, vscode-extension, chrome-extension, config
 ├── scripts/                  # ceremony scripts (versioning, vendor fetch, etc.)
 ├── infra/terraform/          # AWS deployment (defined when deployment is real)
-├── src/                      # application code
-├── tests/                    # test suite
 └── Versions/                 # one folder per version, with release-notes.md
 ```
 

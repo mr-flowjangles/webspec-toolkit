@@ -1,0 +1,18 @@
+{
+  "name": "@bellese/test-cli",
+  "private": true,
+  "version": "0.0.0",
+  "description": "bellese-test CLI for Angular Automated Testing (gen / audit).",
+  "type": "module",
+  "bin": {
+    "bellese-test": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bellese/test-core": "workspace:*",
+    "@bellese/test-config": "workspace:*"
+  }
+}

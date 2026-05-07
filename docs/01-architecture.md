@@ -41,7 +41,7 @@ A small interface — `LLMProvider` — with `complete(messages, schema): Promis
 
 - `packages/cli/` — `commander`-based CLI. Wraps `core`. The first surface implemented; validates the contract.
 - `packages/vscode-extension/` — VS Code commands and sidebar. Wraps `core` directly (no IPC; runs in the extension host).
-- `packages/chrome-extension/` — Manifest V3. Bundles a subset of `core` (`A11yAnalyzer` browser mode + `ReportRenderer`); test generation is *not* exposed in the Chrome surface (no filesystem access).
+- `packages/chrome-extension/` — Manifest V3. Bundles a subset of `core` (`A11yAnalyzer` browser mode + `ReportRenderer`); test generation is _not_ exposed in the Chrome surface (no filesystem access).
 - `packages/config/` — shared config schema (`bellese-test.config.json`) with auto-detection logic for Angular projects.
 
 ## The contract artifact
@@ -80,7 +80,7 @@ export type TestPlan = {
 export type A11yReport = {
   target: { kind: 'url' | 'dom' | 'staticBundle'; ref: string };
   ruleSet: { tags: ('wcag21aa' | 'section508')[]; engineVersion: string };
-  findings: Finding[];   // each tagged with which rule sets flagged it
+  findings: Finding[]; // each tagged with which rule sets flagged it
   passCount: number;
   incompleteCount: number;
 };
@@ -116,16 +116,16 @@ angular-automated-testing/
 
 ## Subsystem responsibilities
 
-| Subsystem            | Owns                                                                  | Talks to                              |
-| -------------------- | --------------------------------------------------------------------- | ------------------------------------- |
-| `core/analyze`       | Source parsing, axe orchestration, LLM prompt construction & validation | `core/llm`, axe-core, ts-morph, Puppeteer |
-| `core/llm`           | Provider abstraction; SDK imports live here only                      | Anthropic / OpenAI / future SDKs      |
-| `core/render`        | `Analysis` → text/markdown/JSON                                       | (pure)                                |
-| `core/types`         | Discriminated `Analysis` and its sub-shapes                           | (consumed by everything)              |
-| `cli`                | Argv parsing, exit codes, file I/O                                    | `core`, `config`                      |
-| `vscode-extension`   | VS Code commands, panels, SecretStorage for keys                      | `core`, `config`, VS Code API         |
-| `chrome-extension`   | Manifest V3 popup, content script DOM hand-off, chrome.storage for keys | `core` (subset), Chrome API           |
-| `config`             | Config schema + Angular project auto-detection                        | (consumed by surfaces)                |
+| Subsystem          | Owns                                                                    | Talks to                                  |
+| ------------------ | ----------------------------------------------------------------------- | ----------------------------------------- |
+| `core/analyze`     | Source parsing, axe orchestration, LLM prompt construction & validation | `core/llm`, axe-core, ts-morph, Puppeteer |
+| `core/llm`         | Provider abstraction; SDK imports live here only                        | Anthropic / OpenAI / future SDKs          |
+| `core/render`      | `Analysis` → text/markdown/JSON                                         | (pure)                                    |
+| `core/types`       | Discriminated `Analysis` and its sub-shapes                             | (consumed by everything)                  |
+| `cli`              | Argv parsing, exit codes, file I/O                                      | `core`, `config`                          |
+| `vscode-extension` | VS Code commands, panels, SecretStorage for keys                        | `core`, `config`, VS Code API             |
+| `chrome-extension` | Manifest V3 popup, content script DOM hand-off, chrome.storage for keys | `core` (subset), Chrome API               |
+| `config`           | Config schema + Angular project auto-detection                          | (consumed by surfaces)                    |
 
 ## Non-goals for the architecture
 

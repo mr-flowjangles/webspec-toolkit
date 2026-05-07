@@ -2,7 +2,7 @@
 
 The implementation order is the order in this doc. Milestones are sequential, tasks within a milestone are ordered. **We check the boxes as we go.** When a milestone is fully checked, the next one starts.
 
-If something forces us off this plan (a discovered constraint, a customer arriving early, etc.), we update this doc *first*, then change course. Don't drift silently.
+If something forces us off this plan (a discovered constraint, a customer arriving early, etc.), we update this doc _first_, then change course. Don't drift silently.
 
 The convention is `## M<N> — {Title}` so `make version-M<N>` can auto-resolve the milestone title from this file.
 
@@ -25,16 +25,16 @@ v1 ships when **all** of the following are true:
 
 Goal: project skeleton ready, dev environment wired, no feature code yet.
 
-- [ ] Initialize git repo, make initial commit of design docs and scaffold.
-- [ ] Add root `package.json` and `pnpm-workspace.yaml`; create empty `packages/{core,cli,vscode-extension,chrome-extension,config}` with stub `package.json` files.
-- [ ] Pin Node + pnpm versions in `.nvmrc` / `package.json#packageManager`.
-- [ ] Wire `make setup` → `pnpm install`, `make test` → `pnpm -r test`, `make lint` → `pnpm -r lint`, `make format` → `pnpm -r format`.
-- [ ] Add TypeScript project references across packages; verify `tsc -b` builds clean.
-- [ ] Add ESLint + Prettier at the root; verify `pnpm -r lint` passes on empty packages.
-- [ ] Add Vitest at the root for `core` unit tests; verify `make test` passes with no tests.
-- [ ] Verify `make ci` passes.
-- [ ] Replace the `Dockerfile` stub with a multi-stage Node 20 build that produces a CLI-only image; verify `make image` and `make smoke` run.
-- [ ] Verify versioning ceremony: `./scripts/new-version.sh --dry-run "Smoke Test"` prints the plan with no side effects.
+- [x] Initialize git repo, make initial commit of design docs and scaffold.
+- [x] Add root `package.json` and `pnpm-workspace.yaml`; create `packages/{core,cli,vscode-extension,chrome-extension,config}` with stub `package.json` files and `src/index.ts` placeholders.
+- [x] Pin Node + pnpm versions in `.nvmrc` / `package.json#packageManager` (Node 20, pnpm 9.12.3).
+- [x] Wire `make setup` → `pnpm install`, `make build` → `tsc -b`, `make test` → `vitest run`, `make lint` → `eslint .`, `make format` → `prettier --write .`.
+- [x] Add TypeScript project references across packages; root `tsc -b` builds the full graph clean.
+- [x] Add ESLint flat config (typescript-eslint) + Prettier at the root; `make lint` and `make format-check` pass on the empty packages.
+- [x] Add Vitest at the root with `passWithNoTests`; `make test` passes with no tests yet.
+- [x] Verify `make ci` passes.
+- [x] Replace the `Dockerfile` stub with a multi-stage Node 20 build (CLI runtime image); `make image` builds and `make smoke` returns the CLI's `--help`.
+- [x] Verify versioning ceremony: `./scripts/new-version.sh --dry-run "Smoke Test"` prints the plan with no side effects; `make version-M0` created the `V0dot1dot0/Foundations` branch and `Versions/v0/v0.1.0/release-notes.md`.
 
 **Done when:** monorepo builds, `make ci` is green, Docker image builds + smoke-tests, versioning ceremony runs cleanly.
 
