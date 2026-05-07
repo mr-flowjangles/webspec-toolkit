@@ -73,6 +73,12 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 **Resolution trigger:** M5 spike against three real Bellese sites — if too many elements lack `data-testid` and `aria-label` and the text-based fallback produces brittle selectors, we revisit.
 **Notes:** Playwright's own codegen orders: `getByRole`, `getByLabel`, `getByPlaceholder`, `getByText`, then css. We're prioritizing `data-testid` first because Bellese projects can be coached to add them; the `data-testid` opt-in produces the most stable tests. If a site has no `data-testid` coverage, we fall back to Playwright's order. Document the policy in `04-recorder-protocol.md` once written.
 
+## M2 e2e: live Jest verification against a sample Angular 20 app
+
+**Status:** deferred to M3
+**Resolution trigger:** M3 CLI work needs an Angular fixture app for end-to-end testing (`bellese-test gen` → `.spec.ts` → Jest run → assert pass). That same harness verifies the M2 done-when criterion. No reason to build it twice.
+**Notes:** v0.3.0 (M2) shipped with parser + renderer + 3 hand-authored TestPlan fixtures. The renderer's output is verified by golden tests and integration assertions on idiom presence (e.g. `provideHttpClientTesting`, `imports: [Component]`, signal-aware `setInput`). What's NOT verified yet: that the rendered `.spec.ts` actually compiles + runs under Jest in a real Angular 20 app. To close that gap: bootstrap a minimal Angular 20 app under `tests/fixtures/angular-app/` with `jest-preset-angular`, run the rendered specs through Jest, assert pass. Best done as part of M3 since the CLI wants the same fixture for its own e2e.
+
 ## How does a recording get from the Chrome extension to a Node renderer?
 
 **Status:** leaning resolved (download `recording.json`, point CLI at it), confirm at M5

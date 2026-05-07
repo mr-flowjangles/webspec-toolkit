@@ -59,28 +59,31 @@ Goal: lock the `Analysis` shape (all three variants: `TestPlan`, `A11yReport`, `
 
 Goal: end-to-end test generation for one Angular component shape.
 
-- [ ] Implement `TestPlanAnalyzer` for **Angular 19+ standalone components** using `ts-morph`. Extract: name, selector, inputs (`@Input` and `input()` signal), outputs (`@Output` and `output()`), public methods, lifecycle hooks, injected deps (`inject()` and constructor DI).
-- [ ] Build the prompt template; LLM returns a `TestPlan` with `cases[]`.
-- [ ] Implement `TestRenderer`: `TestPlan` → Jest `.spec.ts` source string. Cover `TestBed.configureTestingModule({ imports: [...standaloneComponent] })` patterns and `provideRouter` / `provideHttpClient` mocks.
-- [ ] Golden-test `TestRenderer` with hand-written `TestPlan` fixtures (no LLM in the loop).
-- [ ] Add three end-to-end tests using small example components: simple presentational, service-injecting, signal-based.
+- [x] Implemented `TestPlanAnalyzer` for **Angular 19+ standalone components** using `ts-morph` (`packages/core/src/analyze/test-plan/`). Extracts: name, selector inferred from @Component, inputs (decorator `@Input` + `input()` signal + `input.required<T>()`), outputs (decorator `@Output` + `output()` signal), public methods (private/protected/lifecycle filtered out), lifecycle hooks captured separately, injected deps (`inject()` field initializer + constructor DI), `styleHints` (useStandalone, useSignals, useInject).
+- [x] Built the prompt template (`packages/core/src/analyze/test-plan/prompt.ts`). System prompt is long + stable (caches via the adapter's `cache_control`); user prompt is per-component and varies. The LLM returns only `cases[]`; the analyzer assembles the full TestPlan locally so the model cannot fabricate a different surface.
+- [x] Implemented `TestRenderer` (`packages/core/src/render/test/renderer.ts`): pure function `TestPlan → string`. Emits `import { ComponentFixture, TestBed }`, the standalone `imports: [Component]` pattern, standard provider mocks for `HttpClient` (→ `provideHttpClient() + provideHttpClientTesting()`) and `Router` (→ `provideRouter([])`), generic `{ provide: X, useValue: {} }` stubs for unrecognized deps, and `it()` blocks with arrange/act/assert comments.
+- [x] Golden-tested `TestRenderer` with 15 hand-written `TestPlan` fixtures + an inline-snapshot full-layout assertion (no LLM in the loop).
+- [x] Added 16 parser unit tests covering decorator inputs/outputs, signal inputs/outputs, constructor DI, `inject()` deps, lifecycle hooks, standalone defaults, and non-component file rejection.
+- [x] Added three example components as fixtures (`packages/core/tests/fixtures/components/`): `greeter.component.ts` (presentational, decorator-based), `user-list.component.ts` (service-injecting, constructor DI with HttpClient + Router + a custom service), `signal-counter.component.ts` (modern signal API: `input()`, `input.required()`, `output()`, `inject()`, `computed()`).
+- [x] Added three hand-authored `TestPlan` JSON fixtures and an integration test (18 tests) pinning the parser → renderer round-trip against each fixture.
 
-**Done when:** generated `.spec.ts` files for the three example components compile and pass when run with Jest in a sample Angular 20 app.
+**Done when:** code-complete with parser + renderer + golden tests + 3-fixture integration test green. **Live Jest run against a sample Angular 20 app deferred** — see `docs/99-open-questions.md` "M2 e2e: live Jest verification". That work bundles naturally with M3 CLI integration (which needs the same Angular fixture app) and has been moved there.
 
 ---
 
 ## M3 — CLI surface
 
-Goal: validate the contract through the simplest UI before tackling the IDE/browser surfaces. Make onboarding a single command.
+Goal: validate the contract through the simplest UI before tackling the IDE/browser surfaces. Make onboarding a single command. Also closes the M2 e2e gap: bootstraps the Angular 20 fixture app the integration test runs against.
 
 - [ ] `packages/cli/`: `bellese-test gen <path>` reads source, runs analysis, writes `.spec.ts` next to the source.
 - [ ] `bellese-test audit <url>` is stubbed (returns "M4 not yet implemented" — wired for the contract).
-- [ ] `bellese-test init` — onboarding wizard. Detects the Angular project (reads `angular.json` / `package.json`), drops a sane `bellese-test.config.json`, prompts once for LLM provider + key and stores it via OS keychain (`keytar` or equivalent), prints install URLs for the Chrome and VS Code extensions. Idempotent — re-running updates the config in place.
+- [ ] `bellese-test init` — onboarding wizard. Detects the Angular project (reads `angular.json` / `package.json`), drops a sane `bellese-test.config.json`, prompts for AWS region (credentials come from the standard AWS chain), prints install URLs for the Chrome and VS Code extensions. Idempotent — re-running updates the config in place.
 - [ ] Implement `bellese-test.config.json` resolution + Angular-project auto-detection in `packages/config/`.
 - [ ] Exit codes: 0 success, 2 user error, 3 LLM/provider error, 4 internal error.
-- [ ] Integration test: run the CLI against a sample repo, verify file emitted + Jest passes; separate test for `init` against a fresh Angular project fixture.
+- [ ] **Bootstrap the Angular 20 fixture app** under `tests/fixtures/angular-app/` (jest-preset-angular wired up; the three M2 fixture components live here). Closes the deferred M2 e2e verification.
+- [ ] Integration test: run the CLI against the fixture repo, verify file emitted + Jest passes (using a recorded TestPlan to keep CI offline) + a separate gated suite that calls live Bedrock when `BEDROCK_LIVE_E2E=true`. Separate test for `init` against a fresh Angular project fixture.
 
-**Done when:** `bellese-test init && bellese-test gen <path>` works end-to-end against a sample Angular repo from a fresh checkout.
+**Done when:** `bellese-test init && bellese-test gen <path>` works end-to-end against the fixture Angular repo; `npx jest` against the rendered specs returns green.
 
 ---
 

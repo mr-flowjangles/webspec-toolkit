@@ -1,0 +1,44 @@
+{
+  "unit": {
+    "kind": "component",
+    "name": "UserListComponent",
+    "filePath": "packages/core/tests/fixtures/components/user-list.component.ts"
+  },
+  "surface": {
+    "inputs": [],
+    "outputs": [],
+    "publicMethods": [
+      { "name": "load", "signature": "() => void" },
+      { "name": "open", "signature": "(id: string) => void" }
+    ],
+    "lifecycle": ["ngOnInit"],
+    "deps": [
+      { "name": "http", "type": "HttpClient", "via": "constructor" },
+      { "name": "router", "type": "Router", "via": "constructor" },
+      { "name": "userService", "type": "UserService", "via": "constructor" }
+    ]
+  },
+  "cases": [
+    {
+      "name": "load() requests /api/users via HttpClient",
+      "arrange": "const httpController = TestBed.inject(HttpTestingController);",
+      "act": "component.load();",
+      "assert": "const req = httpController.expectOne('/api/users');\nexpect(req.request.method).toBe('GET');\nreq.flush([{ id: '1', name: 'Ada' }]);\nexpect(component.users).toEqual([{ id: '1', name: 'Ada' }]);",
+      "imports": []
+    },
+    {
+      "name": "ngOnInit triggers load()",
+      "arrange": "const httpController = TestBed.inject(HttpTestingController);",
+      "act": "fixture.detectChanges();",
+      "assert": "httpController.expectOne('/api/users').flush([]);\nexpect(component.users).toEqual([]);"
+    },
+    {
+      "name": "open(id) navigates to /users/:id",
+      "arrange": "const router = TestBed.inject(Router);\nconst spy = jest.spyOn(router, 'navigate');",
+      "act": "component.open('42');",
+      "assert": "expect(spy).toHaveBeenCalledWith(['/users', '42']);"
+    }
+  ],
+  "framework": "jest",
+  "styleHints": { "useStandalone": true, "useSignals": false, "useInject": false }
+}

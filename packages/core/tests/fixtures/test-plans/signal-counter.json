@@ -1,0 +1,48 @@
+{
+  "unit": {
+    "kind": "component",
+    "name": "SignalCounterComponent",
+    "filePath": "packages/core/tests/fixtures/components/signal-counter.component.ts"
+  },
+  "surface": {
+    "inputs": [
+      { "name": "initial", "type": "number", "required": false, "isSignal": true },
+      { "name": "step", "type": "number", "required": true, "isSignal": true }
+    ],
+    "outputs": [{ "name": "changed", "emitsType": "{ next: number }", "isSignalOutput": true }],
+    "publicMethods": [
+      { "name": "increment", "signature": "() => void" },
+      { "name": "reset", "signature": "() => void" }
+    ],
+    "lifecycle": [],
+    "deps": [{ "name": "http", "type": "HttpClient", "via": "inject" }]
+  },
+  "cases": [
+    {
+      "name": "renders the initial value",
+      "arrange": "fixture.componentRef.setInput('initial', 5);\nfixture.componentRef.setInput('step', 1);",
+      "act": "fixture.detectChanges();",
+      "assert": "expect(element.querySelector('[data-testid=\"value\"]')!.textContent).toBe('5');"
+    },
+    {
+      "name": "increment() advances the displayed value by step()",
+      "arrange": "fixture.componentRef.setInput('initial', 10);\nfixture.componentRef.setInput('step', 3);\nfixture.detectChanges();",
+      "act": "component.increment();\nfixture.detectChanges();",
+      "assert": "expect(element.querySelector('[data-testid=\"value\"]')!.textContent).toBe('13');"
+    },
+    {
+      "name": "increment() emits changed with the new value",
+      "arrange": "fixture.componentRef.setInput('initial', 0);\nfixture.componentRef.setInput('step', 2);\nconst spy = jest.fn();\ncomponent.changed.subscribe(spy);",
+      "act": "component.increment();",
+      "assert": "expect(spy).toHaveBeenCalledWith({ next: 2 });"
+    },
+    {
+      "name": "reset() POSTs to /api/counter/reset and zeros the internal counter",
+      "arrange": "fixture.componentRef.setInput('initial', 0);\nfixture.componentRef.setInput('step', 1);\ncomponent.increment();\nfixture.detectChanges();\nconst httpController = TestBed.inject(HttpTestingController);",
+      "act": "component.reset();",
+      "assert": "const req = httpController.expectOne('/api/counter/reset');\nexpect(req.request.method).toBe('POST');\nreq.flush({});\nfixture.detectChanges();\nexpect(element.querySelector('[data-testid=\"value\"]')!.textContent).toBe('0');"
+    }
+  ],
+  "framework": "jest",
+  "styleHints": { "useStandalone": true, "useSignals": true, "useInject": true }
+}
