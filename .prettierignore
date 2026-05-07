@@ -1,0 +1,6 @@
+**/dist/**
+**/node_modules/**
+**/*.tsbuildinfo
+Versions/**
+infra/**
+pnpm-lock.yaml
