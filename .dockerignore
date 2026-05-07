@@ -1,0 +1,49 @@
+# Keep build context tight — only include what the image needs.
+
+# Version control
+.git
+.gitignore
+.github
+
+# Editors
+.vscode
+.idea
+*.swp
+
+# Secrets — never bake into images
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__
+*.py[cod]
+.venv
+venv
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Node
+node_modules
+.next
+out
+*.tsbuildinfo
+
+# Build artifacts
+dist
+build
+
+# Project meta — not needed at runtime
+docs
+Versions
+infra
+README.md
+CLAUDE.md
+Makefile
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
