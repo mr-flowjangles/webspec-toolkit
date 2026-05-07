@@ -23,7 +23,7 @@ Bellese engineers building Angular 19+ frontends for customers with Section 508 
 - **E2E:** Chrome-extension recorder captures clicks / form fills / navigation / key events / network calls, hardens selectors (data-testid > role/aria > text > css), and the e2e renderer emits a Playwright `.spec.ts`. LLM names the test and inserts assertions.
 - Normalized `Analysis` artifact consumed by every UI surface (see `01-architecture.md`). Three variants: `TestPlan`, `A11yReport`, `WorkflowRecording`.
 - Pluggable LLM adapters: Anthropic, OpenAI in v1.
-- VS Code extension: right-click → "Generate Spec," sidebar a11y panel, BYOK settings. (No recording UI in v1 — that's the Chrome ext.)
+- VS Code extension: right-click → "Generate Spec," sidebar a11y panel, AWS region/profile settings. (No recording UI in v1 — that's the Chrome ext.)
 - Chrome extension: popup with two modes — "Audit this tab" (a11y) and "Record" (e2e capture).
 - CLI: `bellese-test init`, `gen <path>`, `audit <url>`, and `record-to-spec <recording.json>` (renders a recording into Playwright code).
 - Drop-in config file (`bellese-test.config.json`) with auto-detected defaults.

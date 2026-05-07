@@ -16,7 +16,7 @@ v1 ships when **all** of the following are true:
 - [ ] CLI: `bellese-test record-to-spec <recording.json>` produces a Playwright `.spec.ts` that runs end-to-end against the same app.
 - [ ] Chrome extension: popup has both modes — "Audit this tab" returns axe findings; "Record" captures a workflow and exports a `WorkflowRecording` JSON.
 - [ ] VS Code extension: right-click on a `.component.ts` → "Generate Spec" produces the same output as the CLI; sidebar a11y panel runs against `localhost:4200`.
-- [ ] LLM provider switch is a config change. Both Anthropic and OpenAI adapters pass the same fixture-based contract test.
+- [ ] LLM access is via AWS Bedrock with standard AWS credentials. The `LLMProvider` interface is provider-agnostic — adding a second adapter (M8) is a code change scoped to one new file plus a config flip; no renderer or surface changes.
 - [ ] All milestones below are checked.
 - [ ] `README.md` has a quickstart that a new operator can follow end-to-end (gen + audit + record-to-spec).
 
@@ -45,13 +45,13 @@ Goal: project skeleton ready, dev environment wired, no feature code yet.
 
 Goal: lock the `Analysis` shape (all three variants: `TestPlan`, `A11yReport`, `WorkflowRecording`) and the `LLMProvider` interface in code; ship one adapter; nothing else.
 
-- [ ] Create `packages/core/src/types/analysis.ts` matching the sketch in `01-architecture.md`. Add zod schemas alongside (`TestPlan`, `A11yReport`, `WorkflowRecording`, `RecordedEvent`, `HardenedSelector`).
-- [ ] Create `packages/core/src/llm/provider.ts` defining `LLMProvider`. Document the contract.
-- [ ] Implement `AnthropicAdapter` (`packages/core/src/llm/anthropic.ts`) with structured-output validation via zod.
-- [ ] Add a fixture-based test that asserts: given a known prompt + recorded mock response, the adapter validates and returns a typed value.
-- [ ] Decision recorded in `02-contract-spec.md`: schemaVersion strategy and the rule for evolving the IR without breaking surfaces. Include the rationale for `WorkflowRecording` being LLM-free at capture time and LLM-polished only at render time.
+- [x] Created `packages/core/src/types/analysis.ts` with zod schemas + inferred types for the full `Analysis` discriminated union (3 variants) plus sub-shapes (`TestPlan` w/ `TestCase`/`SurfaceInput`/`SurfaceOutput`/etc., `A11yReport` w/ `Finding`, `WorkflowRecording` w/ `RecordedEvent` discriminated union + `HardenedSelector`/`NetworkRequest`/`ObservedState`).
+- [x] Created `packages/core/src/llm/provider.ts` with the vendor-neutral `LLMProvider` interface, `CompletionRequest`, `ChatMessage`, and `LLMValidationError`. Documented the contract — adapters MUST validate against the zod schema before returning.
+- [x] Implemented `BedrockAdapter` (`packages/core/src/llm/bedrock.ts`) using `@anthropic-ai/bedrock-sdk` (AWS standard credential chain, no API key), `tools` + `tool_choice` for structured output, zod 4 native `z.toJSONSchema()` for the tool's `input_schema`, adaptive thinking + `effort: 'high'` defaults, system-prompt prompt caching via `cache_control: 'ephemeral'`, injectable `client` for tests. Default model `us.anthropic.claude-opus-4-5-20251101-v1:0` (cross-region inference profile).
+- [x] Added `packages/core/tests/llm/bedrock.test.ts` — 12 fixture-based tests covering happy path, request shape (tool_choice forcing, cache_control on system, adaptive+effort defaults, maxTokens override), and failure modes (no tool_use block, mismatched tool name, zod validation failure, transport error pass-through).
+- [x] Wrote `docs/02-contract-spec.md` — variant rationale, the `schemaVersion` evolution rule (Buckets A/B/C), why `WorkflowRecording` is LLM-free at capture and LLM-polished only at render time, what the M1 contract test guarantees about the seam.
 
-**Done when:** `Analysis`, `LLMProvider`, and `AnthropicAdapter` exist; the contract test passes; `02-contract-spec.md` is written.
+**Done when:** `Analysis`, `LLMProvider`, and `BedrockAdapter` exist; the contract test passes; `02-contract-spec.md` is written.
 
 ---
 
@@ -114,7 +114,7 @@ Goal: ship the only surface non-developers can use. Two modes — runtime a11y a
 - [ ] Background service worker captures outgoing requests via `webRequest` (URL + method only — no response bodies in v1).
 - [ ] Sensitive-input masking: any `<input type="password">` value is replaced with a marker; everything else captured raw with a "review before sharing" warning in the export UI.
 - [ ] Stop button → presents the trace summary in the popup → "Download recording.json" button writes a `WorkflowRecording` JSON to disk via `chrome.downloads`.
-- [ ] BYOK settings page (chrome.storage) — for future LLM-backed in-extension features. v1 Chrome ext does not call the LLM directly.
+- [ ] No LLM auth in the Chrome extension for v1 — it doesn't call the LLM (a11y is local; recorder is deterministic). Settings UI is limited to recorder behavior (selector strategy, masking rules). LLM-backed Chrome features would require AWS credentials in the browser, which is awkward; defer until concretely needed.
 
 **Verification:**
 
@@ -143,7 +143,7 @@ Goal: turn a recording into a runnable Playwright test. Two-pass renderer; LLM p
 Goal: in-editor surface for two of the three capabilities (test generation in-flow, dev-time a11y). The recorder lives in the Chrome ext only — no live tab in VS Code.
 
 - [ ] Scaffold the extension with `yo code` (or equivalent); set up `vsce package`.
-- [ ] BYOK settings: provider selector + key in VS Code SecretStorage.
+- [ ] AWS settings: optional `aws_region` and `aws_profile` overrides in VS Code settings. No SecretStorage for credentials — AWS auth uses the system's default credential chain (env / `~/.aws/credentials` / IAM role).
 - [ ] Command: `Bellese Test: Generate Spec for Active File` → calls `core` → writes `.spec.ts`.
 - [ ] Command: `Bellese Test: Run A11y Audit (URL)` → input box for URL → calls `core` → opens a webview panel rendering the `A11yReport`.
 - [ ] Command: `Bellese Test: Render Recording to Playwright Spec` → file picker for a `recording.json` → calls `core/render/E2ERenderer` → writes the `.spec.ts` next to the recording.
@@ -156,14 +156,14 @@ Goal: in-editor surface for two of the three capabilities (test generation in-fl
 
 ## M8 — Second LLM adapter + provider parity test
 
-Goal: prove the LLM-provider seam by adding a second adapter.
+Goal: prove the `LLMProvider` seam by adding a second adapter alongside `BedrockAdapter`. The specific second provider is decided at this milestone — candidates: a different Bedrock model family (e.g. a Sonnet variant for cheap default + an Opus variant for hard tasks), OpenAI direct (for OSS users without AWS), or another Bedrock-hosted model.
 
-- [ ] Implement `OpenAIAdapter`. Same `LLMProvider` interface. Same zod-validated outputs.
+- [ ] Implement the second adapter following the `BedrockAdapter` pattern. Same `LLMProvider` interface. Same zod-validated outputs.
 - [ ] Add a parity test: given the same fixture component and prompt, both adapters return a `TestPlan` with the same shape (structural assertion — case count, surface coverage — not exact text). Repeat the parity test for the E2E LLM-polish pass.
-- [ ] CLI flag + config option: `--provider anthropic|openai`.
+- [ ] CLI flag + config option: `--provider <id>` switching between adapters.
 - [ ] Document adding a third adapter in `docs/03-llm-provider-interface.md` (created in this milestone).
 
-**Done when:** `--provider openai` and `--provider anthropic` both produce passing generated tests for the M2 example components AND polished e2e specs for an M5 fixture recording; parity tests are green.
+**Done when:** both adapters produce passing generated tests for the M2 example components AND polished e2e specs for an M5 fixture recording; parity tests are green.
 
 ---
 
