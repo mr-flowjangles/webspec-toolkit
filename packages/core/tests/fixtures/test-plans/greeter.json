@@ -1,0 +1,50 @@
+{
+  "unit": {
+    "kind": "component",
+    "name": "GreeterComponent",
+    "filePath": "packages/core/tests/fixtures/components/greeter.component.ts"
+  },
+  "surface": {
+    "inputs": [
+      { "name": "name", "type": "string", "required": false, "isSignal": false },
+      {
+        "name": "tone",
+        "type": "\"formal\" | \"casual\"",
+        "required": true,
+        "isSignal": false
+      }
+    ],
+    "outputs": [{ "name": "dismissed", "emitsType": "void", "isSignalOutput": false }],
+    "publicMethods": [{ "name": "dismiss", "signature": "() => void" }],
+    "lifecycle": [],
+    "deps": []
+  },
+  "cases": [
+    {
+      "name": "renders the greeting with the default name",
+      "arrange": "component.tone = 'casual';",
+      "act": "fixture.detectChanges();",
+      "assert": "expect(element.textContent).toContain('Hello, World!');"
+    },
+    {
+      "name": "projects a custom name input",
+      "arrange": "component.name = 'Ada';\ncomponent.tone = 'formal';",
+      "act": "fixture.detectChanges();",
+      "assert": "expect(element.textContent).toContain('Hello, Ada!');"
+    },
+    {
+      "name": "emits dismissed when dismiss() is called",
+      "arrange": "component.tone = 'casual';\nconst spy = jest.fn();\ncomponent.dismissed.subscribe(spy);",
+      "act": "component.dismiss();",
+      "assert": "expect(spy).toHaveBeenCalledTimes(1);"
+    },
+    {
+      "name": "clicking the dismiss button emits dismissed",
+      "arrange": "component.tone = 'casual';\nconst spy = jest.fn();\ncomponent.dismissed.subscribe(spy);\nfixture.detectChanges();",
+      "act": "(element.querySelector('button') as HTMLButtonElement).click();",
+      "assert": "expect(spy).toHaveBeenCalledTimes(1);"
+    }
+  ],
+  "framework": "jest",
+  "styleHints": { "useStandalone": true, "useSignals": false, "useInject": false }
+}

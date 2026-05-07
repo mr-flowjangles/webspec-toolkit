@@ -14,3 +14,22 @@ export * from './types/analysis.js';
 export type { ChatMessage, CompletionRequest, LLMProvider, Role } from './llm/provider.js';
 export { LLMValidationError } from './llm/provider.js';
 export { BedrockAdapter, type BedrockAdapterOptions } from './llm/bedrock.js';
+
+// Phase 1 — TestPlan analyzer (source-driven Jest test generation).
+// Node-only: `./analyze/test-plan/parser.js` imports `ts-morph`. Browser
+// bundles must exclude this module too.
+export {
+  TestPlanAnalyzer,
+  NoComponentFoundError,
+  type AnalyzeOptions,
+} from './analyze/test-plan/analyzer.js';
+export {
+  parseComponentSurface,
+  parseComponentSurfaceFromText,
+  type ParsedComponentSurface,
+} from './analyze/test-plan/parser.js';
+export { SYSTEM_PROMPT, formatUserPrompt } from './analyze/test-plan/prompt.js';
+
+// Phase 2 — TestRenderer (TestPlan → Jest .spec.ts text). Pure function;
+// browser-safe (uses string ops, no Node `path`).
+export { renderTestPlan } from './render/test/renderer.js';
