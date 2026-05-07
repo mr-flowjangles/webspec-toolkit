@@ -2,11 +2,11 @@
 
 ## The spine
 
-Two phases with a typed contract artifact between them. **Phase 1 — Analyze** turns an input (Angular source file, URL, or static bundle) into a typed `Analysis`. **Phase 2 — Render** turns an `Analysis` into a deliverable (Jest `.spec.ts` text, a11y report markdown, or VS Code/Chrome UI panels). Every UI surface consumes the same `Analysis`; none of them re-analyzes.
+Two phases with a typed contract artifact between them. **Phase 1 — Analyze** turns an input (Angular source file, URL, static bundle, or live user workflow) into a typed `Analysis`. **Phase 2 — Render** turns an `Analysis` into a deliverable (Jest `.spec.ts`, a11y report, Playwright `.spec.ts`, or VS Code/Chrome UI panels). Every UI surface consumes the same `Analysis`; none of them re-analyzes.
 
 ```
    input ──▶ [ Phase 1: Analyze ] ──▶ Analysis (typed) ──▶ [ Phase 2: Render ] ──▶ deliverable
-                  (LLM or axe)                                  (deterministic)
+              (LLM, axe, recorder)                              (deterministic)
 ```
 
 ## Why this shape
@@ -21,12 +21,13 @@ Two phases with a typed contract artifact between them. **Phase 1 — Analyze** 
 
 ### Phase 1 — Analyze (`packages/core/src/analyze/`)
 
-Two analyzer kinds, both producing the same envelope shape:
+Three analyzer kinds, all producing the same envelope shape:
 
-- **TestPlanAnalyzer.** Parses Angular source with `ts-morph` (preferred over `@angular/compiler` for ergonomics). Extracts the typed surface: inputs, outputs, public methods, lifecycle hooks, injected deps, signal/computed declarations. Builds a prompt scoped to that surface, calls the LLM through the provider adapter, validates the response into a `TestPlan`.
-- **A11yAnalyzer.** Wraps `axe-core` with the rule set tagged `wcag21aa,section508`. Two run modes: against a running URL via Puppeteer (`@axe-core/puppeteer`) for headless dev/CI use, or against the live DOM via `axe-core/browser` for the Chrome extension. Outputs an `A11yReport`.
+- **TestPlanAnalyzer** _(Node-only)_. Parses Angular source with `ts-morph` (preferred over `@angular/compiler` for ergonomics). Extracts the typed surface: inputs, outputs, public methods, lifecycle hooks, injected deps, signal/computed declarations. Builds a prompt scoped to that surface, calls the LLM through the provider adapter, validates the response into a `TestPlan`.
+- **A11yAnalyzer** _(both flavors)_. Wraps `axe-core` with the rule set tagged `wcag21aa,section508`. Two run modes: against a running URL via Puppeteer (`@axe-core/puppeteer`) for headless dev/CI use, or against the live DOM via `axe-core/browser` for the Chrome extension. Outputs an `A11yReport`.
+- **WorkflowRecorder** _(browser-only)_. Lives in the Chrome-extension flavor of `core`. A content script captures DOM events (clicks, input, change, submit, navigation, key events) plus an outgoing-network-request log via `webRequest`. At each capture point it computes a hardened selector for the target (preference order: `data-testid` → `aria-label`/`role+name` → text content for buttons/links → CSS path as last resort). The output is a `WorkflowRecording` — a deterministic event trace with no LLM in the loop yet.
 
-Inputs: file path / URL / DOM handle, plus a resolved `Config`. Outputs: a discriminated `Analysis` envelope.
+Inputs: file path / URL / DOM handle / live tab session, plus a resolved `Config`. Outputs: a discriminated `Analysis` envelope.
 
 ### LLM provider adapter (`packages/core/src/llm/`)
 
@@ -34,14 +35,15 @@ A small interface — `LLMProvider` — with `complete(messages, schema): Promis
 
 ### Phase 2 — Render (`packages/core/src/render/`)
 
-- **TestRenderer.** Takes a `TestPlan`, emits Jest `.spec.ts` source. Pure function. Templating is plain TypeScript string assembly, not a templating library — keeps the bar for contributors low and renders trivially golden-testable.
+- **TestRenderer.** Takes a `TestPlan`, emits Jest `.spec.ts`. Pure function. Templating is plain TypeScript string assembly, not a templating library — keeps the bar for contributors low and renders trivially golden-testable.
 - **ReportRenderer.** Takes an `A11yReport`, emits Markdown and JSON variants for the CLI/CI. UI surfaces (VS Code panel, Chrome popup) render their own React/HTML view from the same typed report — they don't re-parse the markdown.
+- **E2ERenderer.** Takes a `WorkflowRecording`, emits Playwright `.spec.ts`. Two-pass: (1) deterministic translation — each captured event becomes a Playwright action; (2) **optional LLM polish** — given the action trace, the LLM names the test, inserts assertions inferred from observed state changes (e.g. "after submit, expect heading 'Success' to appear"), and proposes selector consolidations. The deterministic pass is sufficient on its own; the LLM pass is value-add and skipped if no provider is configured.
 
 ### Surfaces (separate packages)
 
-- `packages/cli/` — `commander`-based CLI. Wraps `core`. The first surface implemented; validates the contract.
-- `packages/vscode-extension/` — VS Code commands and sidebar. Wraps `core` directly (no IPC; runs in the extension host).
-- `packages/chrome-extension/` — Manifest V3. Bundles a subset of `core` (`A11yAnalyzer` browser mode + `ReportRenderer`); test generation is _not_ exposed in the Chrome surface (no filesystem access).
+- `packages/cli/` — `commander`-based CLI. Wraps `core`. The first surface implemented; validates the contract. Exposes `init`, `gen`, `audit`, and `record-to-spec <recording.json>` (renders a recording exported from the Chrome extension).
+- `packages/vscode-extension/` — VS Code commands and sidebar. Wraps `core` directly (no IPC; runs in the extension host). Exposes test generation + a11y; **does not** host the recorder (no live tab in the editor).
+- `packages/chrome-extension/` — Manifest V3. Bundles the browser flavor of `core`: `A11yAnalyzer` (browser mode), `WorkflowRecorder`, and `ReportRenderer`. **Does not** bundle `TestPlanAnalyzer` (no filesystem access) or `E2ERenderer` (recordings are exported as JSON; rendering happens in Node — CLI or VS Code — to avoid bundling the LLM SDK in the browser). Recordings transport from the Chrome ext to a Node renderer via download-as-JSON in v1.
 - `packages/config/` — shared config schema (`bellese-test.config.json`) with auto-detection logic for Angular projects.
 
 ## The contract artifact
@@ -53,13 +55,14 @@ The single typed shape that crosses the Phase 1 / Phase 2 seam. Every UI surface
 
 export type Analysis =
   | { kind: 'testPlan'; data: TestPlan; meta: AnalysisMeta }
-  | { kind: 'a11yReport'; data: A11yReport; meta: AnalysisMeta };
+  | { kind: 'a11yReport'; data: A11yReport; meta: AnalysisMeta }
+  | { kind: 'workflowRecording'; data: WorkflowRecording; meta: AnalysisMeta };
 
 export type AnalysisMeta = {
   schemaVersion: '1';
   toolVersion: string;
   createdAt: string; // ISO-8601
-  source: { kind: 'file' | 'url' | 'dom'; ref: string };
+  source: { kind: 'file' | 'url' | 'dom' | 'recordingSession'; ref: string };
   config: ResolvedConfig;
 };
 
@@ -84,6 +87,31 @@ export type A11yReport = {
   passCount: number;
   incompleteCount: number;
 };
+
+export type WorkflowRecording = {
+  startedAt: string; // ISO-8601
+  endedAt: string;
+  startUrl: string;
+  events: RecordedEvent[]; // ordered, monotonically timestamped
+  network: NetworkRequest[]; // request URLs + methods only in v1; no response bodies
+  framework: 'playwright';
+  // The recorder is deterministic; LLM polish happens during render, not capture.
+};
+
+export type RecordedEvent =
+  | { t: number; kind: 'click'; selector: HardenedSelector; targetText?: string }
+  | { t: number; kind: 'input'; selector: HardenedSelector; value: string; sensitive: boolean }
+  | { t: number; kind: 'change'; selector: HardenedSelector; value: string }
+  | { t: number; kind: 'submit'; selector: HardenedSelector }
+  | { t: number; kind: 'keydown'; key: string; selector?: HardenedSelector }
+  | { t: number; kind: 'navigate'; url: string }
+  | { t: number; kind: 'assertObserved'; observation: ObservedState }; // candidate assertions surfaced by recorder
+
+export type HardenedSelector = {
+  preferred: string; // best of: data-testid, role+name, text, css
+  strategy: 'testId' | 'role' | 'text' | 'css';
+  fallbacks: string[]; // in priority order
+};
 ```
 
 `schemaVersion` is part of the artifact from day one — every renderer version-checks. This is how we earn the right to evolve the IR without breaking surfaces in lockstep.
@@ -99,14 +127,17 @@ angular-automated-testing/
 ├── packages/
 │   ├── core/                       # Phase 1 + Phase 2 + LLM adapters
 │   │   ├── src/
-│   │   │   ├── analyze/            # TestPlanAnalyzer, A11yAnalyzer
+│   │   │   ├── analyze/
+│   │   │   │   ├── test-plan/      # TestPlanAnalyzer (Node)
+│   │   │   │   ├── a11y/           # A11yAnalyzer (Node + browser flavors)
+│   │   │   │   └── recorder/       # WorkflowRecorder (browser only)
 │   │   │   ├── llm/                # LLMProvider interface + adapters
-│   │   │   ├── render/             # TestRenderer, ReportRenderer
-│   │   │   └── types/              # Analysis, TestPlan, A11yReport
+│   │   │   ├── render/             # TestRenderer, ReportRenderer, E2ERenderer
+│   │   │   └── types/              # Analysis, TestPlan, A11yReport, WorkflowRecording
 │   │   └── tests/
 │   ├── cli/                        # bellese-test CLI
 │   ├── vscode-extension/           # VS Code surface
-│   ├── chrome-extension/           # Manifest V3 surface
+│   ├── chrome-extension/           # Manifest V3 surface (audit + recorder)
 │   └── config/                     # config schema + project auto-detection
 ├── pnpm-workspace.yaml
 ├── package.json                    # root workspace
@@ -116,16 +147,16 @@ angular-automated-testing/
 
 ## Subsystem responsibilities
 
-| Subsystem          | Owns                                                                    | Talks to                                  |
-| ------------------ | ----------------------------------------------------------------------- | ----------------------------------------- |
-| `core/analyze`     | Source parsing, axe orchestration, LLM prompt construction & validation | `core/llm`, axe-core, ts-morph, Puppeteer |
-| `core/llm`         | Provider abstraction; SDK imports live here only                        | Anthropic / OpenAI / future SDKs          |
-| `core/render`      | `Analysis` → text/markdown/JSON                                         | (pure)                                    |
-| `core/types`       | Discriminated `Analysis` and its sub-shapes                             | (consumed by everything)                  |
-| `cli`              | Argv parsing, exit codes, file I/O                                      | `core`, `config`                          |
-| `vscode-extension` | VS Code commands, panels, SecretStorage for keys                        | `core`, `config`, VS Code API             |
-| `chrome-extension` | Manifest V3 popup, content script DOM hand-off, chrome.storage for keys | `core` (subset), Chrome API               |
-| `config`           | Config schema + Angular project auto-detection                          | (consumed by surfaces)                    |
+| Subsystem          | Owns                                                                                           | Talks to                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `core/analyze`     | Source parsing, axe orchestration, recorder event capture, LLM prompt construction/validation  | `core/llm`, axe-core, ts-morph, Puppeteer, DOM APIs      |
+| `core/llm`         | Provider abstraction; SDK imports live here only                                               | Anthropic / OpenAI / future SDKs                         |
+| `core/render`      | `Analysis` → text / markdown / JSON / Playwright code                                          | `core/llm` (E2ERenderer LLM-polish pass), pure otherwise |
+| `core/types`       | Discriminated `Analysis` and its sub-shapes                                                    | (consumed by everything)                                 |
+| `cli`              | Argv parsing, exit codes, file I/O, recording-import                                           | `core`, `config`                                         |
+| `vscode-extension` | VS Code commands, panels, SecretStorage for keys                                               | `core`, `config`, VS Code API                            |
+| `chrome-extension` | Manifest V3 popup, content script DOM hand-off, recorder UI + capture, chrome.storage for keys | `core` (browser bundle: a11y + recorder), Chrome API     |
+| `config`           | Config schema + Angular project auto-detection                                                 | (consumed by surfaces)                                   |
 
 ## Non-goals for the architecture
 
@@ -133,4 +164,7 @@ angular-automated-testing/
 - **Server-side state.** No daemon, no shared cache. Each invocation is self-contained.
 - **Custom a11y rules.** axe-core's rule set is the contract; we do not extend it in v1.
 - **Hot-loading of LLM adapters.** Adapters are compiled in. Adding one is a code change, not a runtime plug-in.
-- **Sharing code between the Chrome extension and Node packages without a build seam.** Manifest V3 constraints (no `eval`, no Node built-ins) mean `core` is built in two flavors: a Node bundle and a browser bundle that excludes filesystem-touching analyzers.
+- **Sharing code between the Chrome extension and Node packages without a build seam.** Manifest V3 constraints (no `eval`, no Node built-ins) mean `core` is built in two flavors: a Node bundle (CLI, VS Code) including `TestPlanAnalyzer` and `E2ERenderer`, and a browser bundle (Chrome) including `A11yAnalyzer` and `WorkflowRecorder` only.
+- **In-extension recording playback.** v1 emits a Playwright `.spec.ts`; replay happens in the user's existing test runner. The Chrome ext does not become a test runner.
+- **Network-response capture.** v1 records request URLs + methods, not response bodies. Stubbing recorded responses is a post-v1 concern.
+- **Auto-named tests on the recorder critical path.** The deterministic recorder must work without an LLM. The LLM adds polish (test name, assertions, selector consolidation) at render time and is skipped if no provider key is configured.

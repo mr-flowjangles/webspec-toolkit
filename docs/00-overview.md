@@ -2,31 +2,39 @@
 
 ## What this tool does
 
-Generates Angular Jest unit tests from source, and runs Section 508 + WCAG 2.1 AA audits against Angular apps — through one shared core exposed as a VS Code extension, a Chrome extension, and a CLI. The LLM provider is pluggable; the user brings their own key.
+Three test-related capabilities behind one shared core:
+
+1. **Generates Angular Jest unit tests from source.**
+2. **Runs Section 508 + WCAG 2.1 AA audits** against Angular apps.
+3. **Records user workflows in Chrome and emits Playwright e2e tests.**
+
+Exposed as a VS Code extension, a Chrome extension, and a CLI. The LLM provider is pluggable; the user brings their own key. The recorder works without a key — the LLM polishes test names, assertions, and selector hardening.
 
 ## Who it's for
 
-Bellese engineers building Angular 19+ frontends for customers with Section 508 obligations, who need test coverage and accessibility checks to be cheap and fast enough to actually do, repeatedly, across multiple repos.
+Bellese engineers building Angular 19+ frontends for customers with Section 508 obligations, **and** the non-developers (QA, designers, 508 reviewers, PMs) who need to verify behavior without writing code. The recorder is the surface that admits the second audience — they navigate the app, hit "stop," and a runnable Playwright spec lands.
 
 ## v1 scope
 
 **In scope:**
 
-- Jest `.spec.ts` generation for Angular 19+ standalone components, services, directives, and pipes.
-- Mocking of injected dependencies with sensible defaults (HttpClient, Router, ActivatedRoute, common stores).
-- axe-core-powered audits with `wcag21aa` + `section508` rule tags, against running URLs and built static bundles.
-- Normalized `Analysis` artifact consumed by every UI surface (see `01-architecture.md`).
+- **Unit tests:** Jest `.spec.ts` generation for Angular 19+ standalone components, services, directives, and pipes; mocking of injected deps with sensible defaults (HttpClient, Router, ActivatedRoute, common stores).
+- **A11y:** axe-core-powered audits with `wcag21aa` + `section508` rule tags, against running URLs and built static bundles.
+- **E2E:** Chrome-extension recorder captures clicks / form fills / navigation / key events / network calls, hardens selectors (data-testid > role/aria > text > css), and the e2e renderer emits a Playwright `.spec.ts`. LLM names the test and inserts assertions.
+- Normalized `Analysis` artifact consumed by every UI surface (see `01-architecture.md`). Three variants: `TestPlan`, `A11yReport`, `WorkflowRecording`.
 - Pluggable LLM adapters: Anthropic, OpenAI in v1.
-- VS Code extension: right-click → "Generate Spec," sidebar a11y panel, BYOK settings.
-- Chrome extension: popup → "Run 508 / WCAG audit on this tab," findings list with severity + selector copy.
-- CLI: `bellese-test gen <path>` and `bellese-test audit <url>` for CI use.
+- VS Code extension: right-click → "Generate Spec," sidebar a11y panel, BYOK settings. (No recording UI in v1 — that's the Chrome ext.)
+- Chrome extension: popup with two modes — "Audit this tab" (a11y) and "Record" (e2e capture).
+- CLI: `bellese-test init`, `gen <path>`, `audit <url>`, and `record-to-spec <recording.json>` (renders a recording into Playwright code).
 - Drop-in config file (`bellese-test.config.json`) with auto-detected defaults.
 
 **Explicitly out of scope for v1:**
 
 - Karma + Jasmine emitter.
+- Cypress emitter (Playwright is the v1 target).
 - Angular ≤ 18.
-- E2E (Playwright / Cypress) test generation.
+- Replay of recordings inside the Chrome extension. Users run the emitted Playwright spec like any other test.
+- Network-response mocking. v1 captures requests but doesn't stub responses.
 - Manual-a11y workflow tooling (annotations, sign-off).
 - Bellese-managed LLM proxy / shared keys.
 - Telemetry, usage analytics, marketplace publishing automation.
@@ -34,23 +42,29 @@ Bellese engineers building Angular 19+ frontends for customers with Section 508 
 ## High-level flow
 
 ```
-                             ┌──────────────────────┐
-  Angular source file ─────▶ │                      │ ─▶ Jest .spec.ts
-                             │   core               │
-  Running URL / static       │   (Phase 1: Analyze, │
-  bundle                ───▶ │    Phase 2: Render)  │ ─▶ A11y report (JSON / Markdown)
-                             │                      │
-                             └──────────┬───────────┘
-                                        │
-            ┌───────────────────────────┼───────────────────────────┐
-            ▼                           ▼                           ▼
-    ┌────────────────┐         ┌────────────────┐         ┌────────────────┐
-    │ VS Code        │         │ Chrome         │         │ CLI            │
-    │ extension      │         │ extension      │         │ (CI / scripts) │
-    └────────────────┘         └────────────────┘         └────────────────┘
+                                 ┌──────────────────────────┐
+  Angular source file ─────────▶ │                          │ ─▶ Jest .spec.ts
+                                 │   core                   │
+  Running URL / static bundle ─▶ │   Phase 1: Analyze       │ ─▶ A11y report (JSON / MD)
+                                 │   Phase 2: Render        │
+  Recorded user workflow ──────▶ │                          │ ─▶ Playwright .spec.ts
+  (DOM + network event trace)    │                          │
+                                 └────────────┬─────────────┘
+                                              │
+              ┌───────────────────────────────┼───────────────────────────────┐
+              ▼                               ▼                               ▼
+      ┌────────────────┐             ┌────────────────┐             ┌────────────────┐
+      │ VS Code        │             │ Chrome         │             │ CLI            │
+      │ extension      │             │ extension      │             │ (CI / scripts) │
+      │ • gen          │             │ • audit        │             │ • init         │
+      │ • audit        │             │ • record       │             │ • gen          │
+      │                │             │                │             │ • audit        │
+      │                │             │                │             │ • record-to-   │
+      │                │             │                │             │   spec         │
+      └────────────────┘             └────────────────┘             └────────────────┘
 ```
 
-The contract between core and any UI surface is the typed `Analysis` artifact. Surfaces _render_ it; they don't re-analyze.
+The contract between core and any UI surface is the typed `Analysis` artifact (a discriminated union — `TestPlan` | `A11yReport` | `WorkflowRecording`). Surfaces _render_ it; they don't re-analyze.
 
 ## Reading order
 
@@ -58,11 +72,11 @@ The contract between core and any UI surface is the typed `Analysis` artifact. S
 
 1. **This doc** — the what and why.
 2. `01-architecture.md` — the spine: Phase 1 (Analyze) → `Analysis` artifact → Phase 2 (Render).
-3. _(subsystem deep-dives `02-` through `06-` to be added as the design firms up: contract spec, LLM provider interface, a11y engine wrapper, VS Code surface, Chrome surface.)_
+3. _(subsystem deep-dives `02-` through `06-` to be added as the design firms up: contract spec, LLM provider interface, a11y engine wrapper, recorder protocol, VS Code surface, Chrome surface.)_
 
 **Build (the how and when):**
 
-7. `07-build-plan.md` — milestones M0 → M7, ordered tasks, checkboxes.
+7. `07-build-plan.md` — milestones M0 → M8, ordered tasks, checkboxes.
 
 **Tracking:**
 
@@ -71,7 +85,10 @@ The contract between core and any UI surface is the typed `Analysis` artifact. S
 ## North-star direction (post-v1)
 
 - Karma + Jasmine emitter (M-future once active Bellese projects are inventoried).
-- Coverage feedback loop: re-run the suite and feed gaps back into the generator.
+- Cypress renderer alongside Playwright.
+- In-Chrome recording playback + visual diffing on each replay.
+- Network-response mocking captured at recording time and replayed deterministically.
+- Coverage feedback loop: re-run the suite and feed gaps back into the unit-test generator.
 - Dev-time a11y watcher: incremental audit on every save during `ng serve`.
 - GitHub Action surface: same `core`, run on PR, comment a diff of new violations.
 - Optional Bellese-managed LLM proxy for teams that want centralized billing and audit logs (see `99-open-questions.md`).

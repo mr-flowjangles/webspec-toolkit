@@ -2,7 +2,7 @@
 
 ## Mission
 
-Cut the time Bellese Angular teams spend writing `.spec.ts` boilerplate and hunting accessibility regressions. The tool reads a component, service, or running app and produces (a) a complete first-draft Jest test suite that exercises inputs/outputs/dependencies, and (b) a Section 508 + WCAG 2.1 AA audit report with actionable fixes. It ships in two surfaces — a **VS Code extension** (test generation + dev-time a11y scans) and a **Chrome extension** (runtime a11y scans of deployed apps) — both backed by one shared core so behavior stays consistent and the LLM stays pluggable.
+Cut the time Bellese teams spend on three recurring testing chores: writing Angular unit-test boilerplate, hunting accessibility regressions, and authoring end-to-end tests for the workflows the customer actually uses. The tool reads source files, scans running apps, and watches users perform real workflows — and produces (a) Jest unit tests, (b) Section 508 + WCAG 2.1 AA audit reports, and (c) Playwright e2e tests recorded from live browser interactions. It ships in two surfaces — a **VS Code extension** (in-flow authoring for devs) and a **Chrome extension** (a11y scans + workflow recording for everyone, including non-developers) — both backed by one shared core so behavior stays consistent and the LLM stays pluggable.
 
 ## Who this is for
 
@@ -14,11 +14,12 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 
 ## What the tool must do
 
-1. Read an Angular component, service, directive, or pipe (Angular 19+ standalone or NgModule) and emit a runnable Jest `.spec.ts` covering inputs, outputs, public methods, and injected dependencies (mocked).
-2. Run a WCAG 2.1 AA + Section 508 audit against either a static build artifact (file path) or a running URL, and produce a normalized report (rule, severity, selector, fix hint).
-3. Expose both capabilities through a **VS Code extension** (commands, sidebar) and a **Chrome extension** (popup against any tab) using one shared core.
-4. Let the user pick their LLM provider (Anthropic, OpenAI, others) and supply their own key — no Bellese-hosted LLM dependency.
-5. Drop into any Bellese Angular repo via a single `bellese-test.config.json`, with sensible auto-detected defaults when no config is present.
+1. **Generate unit tests from source.** Read an Angular component, service, directive, or pipe (Angular 19+ standalone or NgModule) and emit a runnable Jest `.spec.ts` covering inputs, outputs, public methods, and injected dependencies (mocked).
+2. **Audit accessibility.** Run a WCAG 2.1 AA + Section 508 audit against either a static build artifact (file path) or a running URL, and produce a normalized report (rule, severity, selector, fix hint).
+3. **Record workflows and emit e2e tests.** While a user (dev, QA, or non-technical reviewer) navigates a running app in Chrome, capture their interactions — clicks, form fills, navigation, key events — and emit a runnable Playwright `.spec.ts` that reproduces the flow with hardened selectors and LLM-named assertions.
+4. **Expose all three capabilities** through a **VS Code extension** (commands, sidebar) and a **Chrome extension** (popup with audit + recorder modes) using one shared core. The CLI exposes the same capabilities for CI use.
+5. Let the user pick their LLM provider (Anthropic, OpenAI, others) and supply their own key — no Bellese-hosted LLM dependency.
+6. Drop into any Bellese Angular repo via a single `bellese-test.config.json`, with sensible auto-detected defaults when no config is present.
 
 ## Hard constraints
 
@@ -31,9 +32,10 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 ## Decisions Bellese has already made
 
 - **Language:** TypeScript across all packages.
-- **Test framework target:** Jest (Angular 19+ standard direction). Karma + Jasmine deferred (see `99-open-questions.md`).
-- **Monorepo tooling:** pnpm workspaces. No Nx/Turbo for v1 — three packages don't need it.
-- **LLM provider model:** BYOK with pluggable adapters. v1 ships Anthropic + OpenAI adapters; the interface admits more.
+- **Unit-test framework target:** Jest (Angular 19+ standard direction). Karma + Jasmine deferred (see `99-open-questions.md`).
+- **E2E framework target:** Playwright. Cypress deferred (see `99-open-questions.md`).
+- **Monorepo tooling:** pnpm workspaces. No Nx/Turbo for v1.
+- **LLM provider model:** BYOK with pluggable adapters. v1 ships Anthropic + OpenAI adapters; the interface admits more. The LLM is value-add for the recorder (naming tests, generating assertions, hardening selectors), not load-bearing — recordings still work without a key.
 - **A11y engine:** axe-core with `wcag21aa` + `section508` tags. We do not roll our own ruleset.
 - **Deployment:** Docker image for the CLI/headless mode; AWS Terraform stub kept for future team-shared services.
 - **PR ownership:** Rob initiates PRs. Claude does not push branches or open PRs without explicit instruction.
@@ -41,8 +43,10 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 ## Scope explicitly _out_ of v1
 
 - Karma + Jasmine emitter (deferred — most active Bellese projects are on Jest or migrating).
+- Cypress emitter (deferred — Playwright is the v1 target; Cypress is a future renderer if a project requires it).
 - Angular 18 and earlier.
-- E2E test generation (Playwright / Cypress).
+- Replay of recorded workflows from inside the Chrome extension itself — v1 records and emits `.spec.ts`; users run replay via Playwright like any other test.
+- Network-response mocking captured during recording. v1 captures requests; mocking is deferred until usage shows it matters.
 - Manual a11y review workflow (annotation, sign-off, audit trail) — automated scanning only.
 - Bellese-managed LLM proxy or shared API key infrastructure.
 - Telemetry / usage analytics.
@@ -65,3 +69,6 @@ To keep the design space open for the design exercise itself:
 - Whether the Chrome extension talks to a local CLI/daemon for shared logic, ships its own bundle of `core`, or uses a hybrid.
 - How the LLM provider interface negotiates streaming vs batch responses across vendors.
 - Cache strategy for repeat LLM calls within a session.
+- Selector-hardening policy for the recorder (data-testid first? role-based fallbacks? text-based?). See `99-open-questions.md`.
+- How a recording is transported from the Chrome extension to a local file (download a JSON, paste into the CLI, post to a localhost daemon, etc.).
+- Secret/PII masking during recording (passwords, tokens, PHI in form fields).

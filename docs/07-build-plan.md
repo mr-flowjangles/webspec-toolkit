@@ -13,11 +13,12 @@ v1 ships when **all** of the following are true:
 - [ ] Docker image builds reproducibly (`make image`) and `bellese-test --help` works in the smoke test.
 - [ ] CLI: `bellese-test gen <component.ts>` produces a Jest `.spec.ts` that compiles and runs against a sample Angular 19+ app.
 - [ ] CLI: `bellese-test audit <url>` produces a normalized JSON + Markdown a11y report tagged `wcag21aa` + `section508`.
+- [ ] CLI: `bellese-test record-to-spec <recording.json>` produces a Playwright `.spec.ts` that runs end-to-end against the same app.
+- [ ] Chrome extension: popup has both modes — "Audit this tab" returns axe findings; "Record" captures a workflow and exports a `WorkflowRecording` JSON.
 - [ ] VS Code extension: right-click on a `.component.ts` → "Generate Spec" produces the same output as the CLI; sidebar a11y panel runs against `localhost:4200`.
-- [ ] Chrome extension: popup → "Run audit on this tab" returns a findings list and copies a fixed-format report to clipboard.
 - [ ] LLM provider switch is a config change. Both Anthropic and OpenAI adapters pass the same fixture-based contract test.
 - [ ] All milestones below are checked.
-- [ ] `README.md` has a quickstart that a new operator can follow end-to-end.
+- [ ] `README.md` has a quickstart that a new operator can follow end-to-end (gen + audit + record-to-spec).
 
 ---
 
@@ -42,13 +43,13 @@ Goal: project skeleton ready, dev environment wired, no feature code yet.
 
 ## M1 — Contract artifact + LLM provider seam
 
-Goal: lock the `Analysis` shape and the `LLMProvider` interface in code; ship one adapter; nothing else.
+Goal: lock the `Analysis` shape (all three variants: `TestPlan`, `A11yReport`, `WorkflowRecording`) and the `LLMProvider` interface in code; ship one adapter; nothing else.
 
-- [ ] Create `packages/core/src/types/analysis.ts` matching the sketch in `01-architecture.md`. Add zod schemas alongside.
+- [ ] Create `packages/core/src/types/analysis.ts` matching the sketch in `01-architecture.md`. Add zod schemas alongside (`TestPlan`, `A11yReport`, `WorkflowRecording`, `RecordedEvent`, `HardenedSelector`).
 - [ ] Create `packages/core/src/llm/provider.ts` defining `LLMProvider`. Document the contract.
 - [ ] Implement `AnthropicAdapter` (`packages/core/src/llm/anthropic.ts`) with structured-output validation via zod.
 - [ ] Add a fixture-based test that asserts: given a known prompt + recorded mock response, the adapter validates and returns a typed value.
-- [ ] Decision recorded in `02-contract-spec.md`: schemaVersion strategy and the rule for evolving the IR without breaking surfaces.
+- [ ] Decision recorded in `02-contract-spec.md`: schemaVersion strategy and the rule for evolving the IR without breaking surfaces. Include the rationale for `WorkflowRecording` being LLM-free at capture time and LLM-polished only at render time.
 
 **Done when:** `Analysis`, `LLMProvider`, and `AnthropicAdapter` exist; the contract test passes; `02-contract-spec.md` is written.
 
@@ -98,50 +99,81 @@ Goal: WCAG 2.1 AA + Section 508 audits running through the same `Analysis` contr
 
 ## M5 — Chrome extension (the flagship "easy to use" surface)
 
-Goal: runtime a11y on any page; popup shows findings + copy-as-Markdown. Front-loaded ahead of the VS Code extension because it's the only surface non-developers (508 reviewers, QA, designers) can use — that's our lowest "easy to use" floor.
+Goal: ship the only surface non-developers can use. Two modes — runtime a11y audit, and workflow recorder. Front-loaded ahead of the VS Code extension because it's the lowest "easy to use" floor (508 reviewers, QA, designers, PMs all use this).
 
-- [ ] Scaffold Manifest V3 extension; bundle the **browser flavor** of `core` (a11y + report renderer; no test generator, no Node imports).
+**Audit mode:**
+
+- [ ] Scaffold Manifest V3 extension; bundle the **browser flavor** of `core` (a11y + recorder + report renderer; no test generator, no Node imports).
 - [ ] Content script injects `axe-core` browser build; scans on demand from the popup.
 - [ ] Popup React UI renders the `A11yReport`; "Copy report" button copies the Markdown rendering.
-- [ ] BYOK settings page (chrome.storage). LLM key is required only if/when LLM-backed remediation suggestions are added — v1 of the Chrome extension does not call the LLM.
-- [ ] Verify on three deployed Bellese sites; confirm parity with CLI for the same URLs.
 
-**Done when:** unpacked extension installs in Chrome, popup audit returns the same findings the CLI does for the same URL, copy-as-Markdown works.
+**Recorder mode:**
+
+- [ ] Popup gains a "Record" button (start / stop / discard). Recording state survives popup close (chrome.storage.session).
+- [ ] Content script captures `click`, `input`, `change`, `submit`, `keydown`, navigation events. Each event is annotated with a `HardenedSelector` computed at capture time (data-testid > role+name > text > css fallback).
+- [ ] Background service worker captures outgoing requests via `webRequest` (URL + method only — no response bodies in v1).
+- [ ] Sensitive-input masking: any `<input type="password">` value is replaced with a marker; everything else captured raw with a "review before sharing" warning in the export UI.
+- [ ] Stop button → presents the trace summary in the popup → "Download recording.json" button writes a `WorkflowRecording` JSON to disk via `chrome.downloads`.
+- [ ] BYOK settings page (chrome.storage) — for future LLM-backed in-extension features. v1 Chrome ext does not call the LLM directly.
+
+**Verification:**
+
+- [ ] Verify on three deployed Bellese sites: audit parity with CLI; recorder produces a clean trace for each site's golden-path flow (login → primary action → confirmation).
+
+**Done when:** unpacked extension installs in Chrome, both modes work end-to-end on three sites, audit findings match the CLI for the same URLs, recordings export as JSON.
 
 ---
 
-## M6 — VS Code extension
+## M6 — E2E renderer (`WorkflowRecording` → Playwright `.spec.ts`)
 
-Goal: in-editor surface for both capabilities (test generation in-flow, dev-time a11y).
+Goal: turn a recording into a runnable Playwright test. Two-pass renderer; LLM polish optional.
+
+- [ ] Implement deterministic pass: each `RecordedEvent` maps to a Playwright action (`page.click(selector)`, `page.fill(selector, value)`, `page.goto(url)`, etc.). Selectors use the recording's hardened forms.
+- [ ] Implement LLM-polish pass: given the action trace + observed network calls, the LLM names the test (`describe`/`test` strings), inserts assertions (`expect(page.getByRole('heading', { name: 'Success' })).toBeVisible()`), and proposes selector consolidations where redundant. Polish is no-op if no provider key is configured.
+- [ ] Golden-test the deterministic pass with hand-written `WorkflowRecording` fixtures (no LLM in the loop).
+- [ ] CLI: implement `bellese-test record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`).
+- [ ] Integration test: capture a recording (use a fixture, not a live browser) → render → run the emitted Playwright spec against a sample Angular 20 app → spec passes.
+
+**Done when:** a recording exported from M5 produces a Playwright `.spec.ts` that compiles, runs, and passes against the same app the recording was made against.
+
+---
+
+## M7 — VS Code extension
+
+Goal: in-editor surface for two of the three capabilities (test generation in-flow, dev-time a11y). The recorder lives in the Chrome ext only — no live tab in VS Code.
 
 - [ ] Scaffold the extension with `yo code` (or equivalent); set up `vsce package`.
 - [ ] BYOK settings: provider selector + key in VS Code SecretStorage.
 - [ ] Command: `Bellese Test: Generate Spec for Active File` → calls `core` → writes `.spec.ts`.
 - [ ] Command: `Bellese Test: Run A11y Audit (URL)` → input box for URL → calls `core` → opens a webview panel rendering the `A11yReport`.
-- [ ] Sidebar panel: most-recent `Analysis` + "Re-run" button.
+- [ ] Command: `Bellese Test: Render Recording to Playwright Spec` → file picker for a `recording.json` → calls `core/render/E2ERenderer` → writes the `.spec.ts` next to the recording.
+- [ ] Sidebar panel: most-recent `Analysis` (any variant) + "Re-run" button.
 - [ ] Manual test against a sample Angular 20 project. Document the install (VSIX) flow in the project README.
 
-**Done when:** VSIX installs in VS Code, both commands work end-to-end, keys persist across reloads.
+**Done when:** VSIX installs in VS Code, all three commands work end-to-end, keys persist across reloads.
 
 ---
 
-## M7 — Second LLM adapter + provider parity test
+## M8 — Second LLM adapter + provider parity test
 
 Goal: prove the LLM-provider seam by adding a second adapter.
 
 - [ ] Implement `OpenAIAdapter`. Same `LLMProvider` interface. Same zod-validated outputs.
-- [ ] Add a parity test: given the same fixture component and prompt, both adapters return a `TestPlan` with the same shape (assertion is structural — case count, surface coverage — not exact text).
+- [ ] Add a parity test: given the same fixture component and prompt, both adapters return a `TestPlan` with the same shape (structural assertion — case count, surface coverage — not exact text). Repeat the parity test for the E2E LLM-polish pass.
 - [ ] CLI flag + config option: `--provider anthropic|openai`.
 - [ ] Document adding a third adapter in `docs/03-llm-provider-interface.md` (created in this milestone).
 
-**Done when:** `--provider openai` and `--provider anthropic` both produce passing generated tests for the M2 example components; parity test is green.
+**Done when:** `--provider openai` and `--provider anthropic` both produce passing generated tests for the M2 example components AND polished e2e specs for an M5 fixture recording; parity tests are green.
 
 ---
 
 <!--
 Future milestones to consider when v1 is real:
-- M8: Karma + Jasmine emitter (gated on a Bellese-project inventory — see 99-open-questions.md)
-- M9: Coverage feedback loop (re-run Jest, feed gaps to a second LLM pass)
-- M10: GitHub Action surface
-- M11: Optional Bellese LLM proxy
+- M9: Karma + Jasmine emitter (gated on a Bellese-project inventory — see 99-open-questions.md)
+- M10: Cypress renderer alongside Playwright
+- M11: In-extension recording playback + visual diffing
+- M12: Network-response capture and replay (recorded mocks)
+- M13: Coverage feedback loop (re-run Jest, feed gaps to a second LLM pass)
+- M14: GitHub Action surface
+- M15: Optional Bellese LLM proxy
 -->
