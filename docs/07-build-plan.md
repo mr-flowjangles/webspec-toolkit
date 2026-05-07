@@ -70,15 +70,16 @@ Goal: end-to-end test generation for one Angular component shape.
 
 ## M3 — CLI surface
 
-Goal: validate the contract through the simplest UI before tackling the IDE/browser surfaces.
+Goal: validate the contract through the simplest UI before tackling the IDE/browser surfaces. Make onboarding a single command.
 
 - [ ] `packages/cli/`: `bellese-test gen <path>` reads source, runs analysis, writes `.spec.ts` next to the source.
 - [ ] `bellese-test audit <url>` is stubbed (returns "M4 not yet implemented" — wired for the contract).
+- [ ] `bellese-test init` — onboarding wizard. Detects the Angular project (reads `angular.json` / `package.json`), drops a sane `bellese-test.config.json`, prompts once for LLM provider + key and stores it via OS keychain (`keytar` or equivalent), prints install URLs for the Chrome and VS Code extensions. Idempotent — re-running updates the config in place.
 - [ ] Implement `bellese-test.config.json` resolution + Angular-project auto-detection in `packages/config/`.
 - [ ] Exit codes: 0 success, 2 user error, 3 LLM/provider error, 4 internal error.
-- [ ] Integration test: run the CLI against a sample repo, verify file emitted + Jest passes.
+- [ ] Integration test: run the CLI against a sample repo, verify file emitted + Jest passes; separate test for `init` against a fresh Angular project fixture.
 
-**Done when:** `bellese-test gen` is usable end-to-end against a sample Angular repo from a fresh checkout.
+**Done when:** `bellese-test init && bellese-test gen <path>` works end-to-end against a sample Angular repo from a fresh checkout.
 
 ---
 
@@ -95,9 +96,23 @@ Goal: WCAG 2.1 AA + Section 508 audits running through the same `Analysis` contr
 
 ---
 
-## M5 — VS Code extension
+## M5 — Chrome extension (the flagship "easy to use" surface)
 
-Goal: in-editor surface for both capabilities.
+Goal: runtime a11y on any page; popup shows findings + copy-as-Markdown. Front-loaded ahead of the VS Code extension because it's the only surface non-developers (508 reviewers, QA, designers) can use — that's our lowest "easy to use" floor.
+
+- [ ] Scaffold Manifest V3 extension; bundle the **browser flavor** of `core` (a11y + report renderer; no test generator, no Node imports).
+- [ ] Content script injects `axe-core` browser build; scans on demand from the popup.
+- [ ] Popup React UI renders the `A11yReport`; "Copy report" button copies the Markdown rendering.
+- [ ] BYOK settings page (chrome.storage). LLM key is required only if/when LLM-backed remediation suggestions are added — v1 of the Chrome extension does not call the LLM.
+- [ ] Verify on three deployed Bellese sites; confirm parity with CLI for the same URLs.
+
+**Done when:** unpacked extension installs in Chrome, popup audit returns the same findings the CLI does for the same URL, copy-as-Markdown works.
+
+---
+
+## M6 — VS Code extension
+
+Goal: in-editor surface for both capabilities (test generation in-flow, dev-time a11y).
 
 - [ ] Scaffold the extension with `yo code` (or equivalent); set up `vsce package`.
 - [ ] BYOK settings: provider selector + key in VS Code SecretStorage.
@@ -107,20 +122,6 @@ Goal: in-editor surface for both capabilities.
 - [ ] Manual test against a sample Angular 20 project. Document the install (VSIX) flow in the project README.
 
 **Done when:** VSIX installs in VS Code, both commands work end-to-end, keys persist across reloads.
-
----
-
-## M6 — Chrome extension
-
-Goal: runtime a11y on any page; popup shows findings + copy-as-Markdown.
-
-- [ ] Scaffold Manifest V3 extension; bundle the **browser flavor** of `core` (a11y + report renderer; no test generator, no Node imports).
-- [ ] Content script injects `axe-core` browser build; scans on demand from the popup.
-- [ ] Popup React UI renders the `A11yReport`; "Copy report" button copies the Markdown rendering.
-- [ ] BYOK settings page (chrome.storage). LLM key is required only if/when LLM-backed remediation suggestions are added — v1 of the Chrome extension does not call the LLM.
-- [ ] Verify on three deployed Bellese sites; confirm parity with CLI for the same URLs.
-
-**Done when:** unpacked extension installs in Chrome, popup audit returns the same findings the CLI does for the same URL, copy-as-Markdown works.
 
 ---
 

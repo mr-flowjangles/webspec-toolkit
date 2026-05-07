@@ -58,5 +58,5 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 ## How will Manifest V3 service-worker constraints affect axe-core invocation in Chrome?
 
 **Status:** open
-**Resolution trigger:** M6 implementation. Specifically: whether axe needs to run in the page (content script) vs the worker, given V3's restrictions on `eval` and lack of `window` in the service worker.
-**Notes:** Current expectation is content-script injection of `axe-core/browser`, with the popup messaging the content script. Worth re-validating with a spike before M6 starts.
+**Resolution trigger:** M5 implementation. Specifically: whether axe needs to run in the page (content script) vs the worker, given V3's restrictions on `eval` and lack of `window` in the service worker.
+**Notes:** Current expectation is content-script injection of `axe-core/browser`, with the popup messaging the content script. Worth re-validating with a spike before M5 starts.
