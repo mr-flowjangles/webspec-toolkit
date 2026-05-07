@@ -26,11 +26,11 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 **Resolution trigger:** a Bellese project explicitly uses Cypress and the team won't migrate to Playwright.
 **Notes:** Playwright was picked for v1 because of its codegen pedigree (we mimic that flow), multi-browser support, and modern API. Adding Cypress is a new `E2ERenderer` flavor + a `framework: 'playwright' | 'cypress'` switch on `WorkflowRecording`. Bounded scope.
 
-## Should we ship a Bellese-managed LLM proxy?
+## Should we centralize Bedrock access (Bellese-shared AWS account / proxy)?
 
 **Status:** open
-**Resolution trigger:** a customer or team explicitly asks for centralized billing / audit logs / shared keys, OR procurement blocks individual API keys.
-**Notes:** v1 is BYOK to keep the architecture simple and avoid hosting infra. The `LLMProvider` interface admits a `BellesProxyAdapter` later without changing renderers. Terraform stub in `infra/terraform/` reserved for this case.
+**Resolution trigger:** a Bellese team explicitly asks for centralized billing / audit logs / shared model allocation, OR a customer's procurement blocks per-developer AWS access.
+**Notes:** v1 uses each developer's own AWS credentials (standard credential chain) calling Bedrock directly via `BedrockAdapter`. The `LLMProvider` interface admits a `BellesProxyAdapter` later — a thin HTTP service in front of a Bellese-owned AWS account that proxies Bedrock calls — without changing renderers. Terraform stub in `infra/terraform/` reserved for this case. Worth flagging: a proxy adds infra to maintain (deploys, secrets, observability, on-call) — the per-developer-AWS path is the simplest and most auditable until a concrete reason forces the change.
 
 ## How do we detect a project's testing conventions beyond framework?
 

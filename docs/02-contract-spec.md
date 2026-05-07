@@ -110,12 +110,12 @@ The cost is keeping our shapes in sync with what axe and Playwright actually pro
 
 ## What the contract test guarantees (M1)
 
-`packages/core/tests/llm/anthropic.test.ts` pins these properties of the seam:
+`packages/core/tests/llm/bedrock.test.ts` pins these properties of the seam:
 
 - The adapter always validates the LLM's response against the provided zod schema before returning. Invalid responses surface as `LLMValidationError` with the issue list, never as a malformed value.
 - `tool_choice` is always forced to the named schema. The adapter cannot return text that "happens to look like" the schema — it must come from a tool_use block.
 - The system prompt (when provided) is always wrapped with `cache_control: 'ephemeral'`. Any future provider must do the same in spirit (or document why caching isn't applicable).
-- `providerId` is stable per (provider, model) pair. Cache keys and telemetry depend on this.
+- `providerId` is stable per (provider, model) pair (e.g. `bedrock:us.anthropic.claude-opus-4-5-20251101-v1:0`). Cache keys and telemetry depend on this.
 - Transport errors propagate; only validation errors are wrapped.
 
-The OpenAI adapter (M8) and any future adapter must satisfy a structurally analogous test. The adapter source files differ; the contract is what's invariant.
+Any future adapter (a second Bedrock-hosted model, a direct API for OSS users, etc.) must satisfy a structurally analogous test. The adapter source files differ; the contract is what's invariant.

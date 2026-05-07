@@ -79,6 +79,6 @@ make version-M1                       # minor bump, title auto-resolved from doc
 - **Test framework target (the one we generate):** Jest. Karma + Jasmine deferred — see `docs/99-open-questions.md`.
 - **Angular baseline:** 19+ standalone components (Bellese projects are on Angular 20).
 - **A11y engine:** axe-core with `wcag21aa` + `section508` rule tags.
-- **LLM:** provider-agnostic via `LLMProvider` interface (`packages/core/src/llm/`). BYOK. v1 adapters: Anthropic, OpenAI. **No vendor SDK may be imported outside its adapter module.**
+- **LLM:** Anthropic models via **Amazon Bedrock** with the standard AWS credential chain (env / `~/.aws/credentials` / IAM role). Vendor-neutral `LLMProvider` interface in `packages/core/src/llm/`; v1 ships `BedrockAdapter`. **No vendor/cloud SDK may be imported outside its adapter module.**
 - **Surfaces:** CLI (`packages/cli`), VS Code extension (`packages/vscode-extension`), Chrome extension (`packages/chrome-extension`) — all on shared `core`.
 - **Deployment:** Docker image for the CLI; AWS via Terraform (`infra/terraform/`) reserved for future team-shared services (no v1 deployment).

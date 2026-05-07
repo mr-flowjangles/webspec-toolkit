@@ -31,7 +31,7 @@ Inputs: file path / URL / DOM handle / live tab session, plus a resolved `Config
 
 ### LLM provider adapter (`packages/core/src/llm/`)
 
-A small interface — `LLMProvider` — with `complete(messages, schema): Promise<Validated<T>>`. v1 implementations: `AnthropicAdapter`, `OpenAIAdapter`. The interface enforces structured-output validation (zod) at the seam so renderer code never branches on provider quirks. Provider selection and credential lookup is the only place the SDKs are imported.
+A small interface — `LLMProvider` — with `complete(messages, schema): Promise<Validated<T>>`. v1 ships `BedrockAdapter` (Anthropic models accessed via Amazon Bedrock with standard AWS credentials — see `docs/mission.md`); the interface admits future providers (other Bedrock models, direct API for OSS users, etc.) without renderer changes. The interface enforces structured-output validation (zod) at the seam so renderer code never branches on provider quirks. Provider selection and credential lookup is the only place vendor/cloud SDKs are imported.
 
 ### Phase 2 — Render (`packages/core/src/render/`)
 
@@ -147,16 +147,16 @@ angular-automated-testing/
 
 ## Subsystem responsibilities
 
-| Subsystem          | Owns                                                                                           | Talks to                                                 |
-| ------------------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `core/analyze`     | Source parsing, axe orchestration, recorder event capture, LLM prompt construction/validation  | `core/llm`, axe-core, ts-morph, Puppeteer, DOM APIs      |
-| `core/llm`         | Provider abstraction; SDK imports live here only                                               | Anthropic / OpenAI / future SDKs                         |
-| `core/render`      | `Analysis` → text / markdown / JSON / Playwright code                                          | `core/llm` (E2ERenderer LLM-polish pass), pure otherwise |
-| `core/types`       | Discriminated `Analysis` and its sub-shapes                                                    | (consumed by everything)                                 |
-| `cli`              | Argv parsing, exit codes, file I/O, recording-import                                           | `core`, `config`                                         |
-| `vscode-extension` | VS Code commands, panels, SecretStorage for keys                                               | `core`, `config`, VS Code API                            |
-| `chrome-extension` | Manifest V3 popup, content script DOM hand-off, recorder UI + capture, chrome.storage for keys | `core` (browser bundle: a11y + recorder), Chrome API     |
-| `config`           | Config schema + Angular project auto-detection                                                 | (consumed by surfaces)                                   |
+| Subsystem          | Owns                                                                                           | Talks to                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `core/analyze`     | Source parsing, axe orchestration, recorder event capture, LLM prompt construction/validation  | `core/llm`, axe-core, ts-morph, Puppeteer, DOM APIs       |
+| `core/llm`         | Provider abstraction; vendor/cloud SDK imports live here only                                  | `@anthropic-ai/bedrock-sdk` (BedrockAdapter); future SDKs |
+| `core/render`      | `Analysis` → text / markdown / JSON / Playwright code                                          | `core/llm` (E2ERenderer LLM-polish pass), pure otherwise  |
+| `core/types`       | Discriminated `Analysis` and its sub-shapes                                                    | (consumed by everything)                                  |
+| `cli`              | Argv parsing, exit codes, file I/O, recording-import                                           | `core`, `config`                                          |
+| `vscode-extension` | VS Code commands, panels, SecretStorage for keys                                               | `core`, `config`, VS Code API                             |
+| `chrome-extension` | Manifest V3 popup, content script DOM hand-off, recorder UI + capture, chrome.storage for keys | `core` (browser bundle: a11y + recorder), Chrome API      |
+| `config`           | Config schema + Angular project auto-detection                                                 | (consumed by surfaces)                                    |
 
 ## Non-goals for the architecture
 

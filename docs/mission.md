@@ -18,13 +18,13 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 2. **Audit accessibility.** Run a WCAG 2.1 AA + Section 508 audit against either a static build artifact (file path) or a running URL, and produce a normalized report (rule, severity, selector, fix hint).
 3. **Record workflows and emit e2e tests.** While a user (dev, QA, or non-technical reviewer) navigates a running app in Chrome, capture their interactions — clicks, form fills, navigation, key events — and emit a runnable Playwright `.spec.ts` that reproduces the flow with hardened selectors and LLM-named assertions.
 4. **Expose all three capabilities** through a **VS Code extension** (commands, sidebar) and a **Chrome extension** (popup with audit + recorder modes) using one shared core. The CLI exposes the same capabilities for CI use.
-5. Let the user pick their LLM provider (Anthropic, OpenAI, others) and supply their own key — no Bellese-hosted LLM dependency.
+5. Reach Anthropic models via AWS Bedrock using standard AWS credentials. The `LLMProvider` interface is provider-agnostic so future adapters (other Bedrock models, direct API, etc.) can be added without renderer changes.
 6. Drop into any Bellese Angular repo via a single `bellese-test.config.json`, with sensible auto-detected defaults when no config is present.
 
 ## Hard constraints
 
 - **Section 508 / WCAG 2.1 AA coverage is non-negotiable.** Reports must distinguish 508 vs WCAG-only findings so federal-compliance reviewers can scope.
-- **LLM-provider agnostic.** No file in the codebase may import a vendor SDK outside the corresponding adapter module. Switching providers must be a config change, not a code change.
+- **LLM-provider agnostic at the seam.** No file in the codebase may import a vendor/cloud SDK outside the corresponding adapter module. Switching providers (or adding new ones) must be a code change scoped to a new adapter file plus a config flip, never a renderer change.
 - **No code or credentials sent off-device without user consent.** LLM calls are opt-in per session; a11y scans run locally.
 - **Angular 19+ is the baseline.** Older versions are out of v1 scope.
 - **Reusability across Bellese projects.** No project-specific assumptions baked into core; everything project-specific is config.
@@ -35,7 +35,7 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 - **Unit-test framework target:** Jest (Angular 19+ standard direction). Karma + Jasmine deferred (see `99-open-questions.md`).
 - **E2E framework target:** Playwright. Cypress deferred (see `99-open-questions.md`).
 - **Monorepo tooling:** pnpm workspaces. No Nx/Turbo for v1.
-- **LLM provider model:** BYOK with pluggable adapters. v1 ships Anthropic + OpenAI adapters; the interface admits more. The LLM is value-add for the recorder (naming tests, generating assertions, hardening selectors), not load-bearing — recordings still work without a key.
+- **LLM access via AWS Bedrock.** Bellese's federal-customer work runs on AWS-resident infrastructure for compliance reasons; all Anthropic-model traffic goes through **Amazon Bedrock** with the standard AWS SDK default credential chain (env vars, `~/.aws/credentials`, IAM instance role) — never the direct Anthropic API. v1 ships a `BedrockAdapter`; the `LLMProvider` interface admits future providers (OpenAI on Bedrock or direct, etc.) but they're not v1 scope. The LLM is value-add for the recorder (naming tests, generating assertions, hardening selectors), not load-bearing — recordings still work without a configured provider.
 - **A11y engine:** axe-core with `wcag21aa` + `section508` tags. We do not roll our own ruleset.
 - **Deployment:** Docker image for the CLI/headless mode; AWS Terraform stub kept for future team-shared services.
 - **PR ownership:** Rob initiates PRs. Claude does not push branches or open PRs without explicit instruction.
@@ -48,7 +48,7 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 - Replay of recorded workflows from inside the Chrome extension itself — v1 records and emits `.spec.ts`; users run replay via Playwright like any other test.
 - Network-response mocking captured during recording. v1 captures requests; mocking is deferred until usage shows it matters.
 - Manual a11y review workflow (annotation, sign-off, audit trail) — automated scanning only.
-- Bellese-managed LLM proxy or shared API key infrastructure.
+- Bellese-managed LLM proxy or shared AWS account / shared Bedrock allocation infrastructure.
 - Telemetry / usage analytics.
 - Marketplace publishing automation. Internal install via VSIX and unpacked Chrome extension is enough for v1.
 
