@@ -1,8 +1,8 @@
 {
-  "name": "@bellese/test-vscode-extension",
+  "name": "@webspec/vscode-extension",
   "private": true,
   "version": "0.0.0",
-  "displayName": "Bellese Angular Test Tools",
+  "displayName": "webspec",
   "description": "Generate Jest specs and run WCAG/508 audits from VS Code.",
   "engines": {
     "vscode": "^1.85.0"
@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bellese/test-core": "workspace:*",
-    "@bellese/test-config": "workspace:*"
+    "@webspec/core": "workspace:*",
+    "@webspec/config": "workspace:*"
   }
 }

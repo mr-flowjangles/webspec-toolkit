@@ -1,8 +1,8 @@
 {
-  "name": "@bellese/test-config",
+  "name": "@webspec/config",
   "private": true,
   "version": "0.0.0",
-  "description": "Config schema + Angular project auto-detection for Angular Automated Testing.",
+  "description": "Config schema + Angular project auto-detection for webspec.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -52,10 +52,10 @@ ci: lint test ## Lint + test, suitable for CI gating
 # Docker image
 # ---------------------------------------------------------------------------
 image: ## Build the runtime Docker image
-	docker build -t bellese/angular-automated-testing:dev .
+	docker build -t webspec/angular-automated-testing:dev .
 
 smoke: ## Smoke-test the built image (override CMD as appropriate for your tool)
-	docker run --rm bellese/angular-automated-testing:dev --help
+	docker run --rm webspec/angular-automated-testing:dev --help
 
 # ---------------------------------------------------------------------------
 # Cleanup

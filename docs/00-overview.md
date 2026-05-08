@@ -25,8 +25,8 @@ Bellese engineers building Angular 19+ frontends for customers with Section 508 
 - Pluggable LLM adapters: Anthropic, OpenAI in v1.
 - VS Code extension: right-click → "Generate Spec," sidebar a11y panel, AWS region/profile settings. (No recording UI in v1 — that's the Chrome ext.)
 - Chrome extension: popup with two modes — "Audit this tab" (a11y) and "Record" (e2e capture).
-- CLI: `bellese-test init`, `gen <path>`, `audit <url>`, and `record-to-spec <recording.json>` (renders a recording into Playwright code).
-- Drop-in config file (`bellese-test.config.json`) with auto-detected defaults.
+- CLI: `webspec init`, `gen <path>`, `audit <url>`, and `record-to-spec <recording.json>` (renders a recording into Playwright code).
+- Drop-in config file (`webspec.config.json`) with auto-detected defaults.
 
 **Explicitly out of scope for v1:**
 

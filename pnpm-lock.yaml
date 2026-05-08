@@ -32,16 +32,16 @@ importers:
 
   packages/chrome-extension:
     dependencies:
-      '@bellese/test-core':
+      '@webspec/core':
         specifier: workspace:*
         version: link:../core
 
   packages/cli:
     dependencies:
-      '@bellese/test-config':
+      '@webspec/config':
         specifier: workspace:*
         version: link:../config
-      '@bellese/test-core':
+      '@webspec/core':
         specifier: workspace:*
         version: link:../core
 
@@ -61,10 +61,10 @@ importers:
 
   packages/vscode-extension:
     dependencies:
-      '@bellese/test-config':
+      '@webspec/config':
         specifier: workspace:*
         version: link:../config
-      '@bellese/test-core':
+      '@webspec/core':
         specifier: workspace:*
         version: link:../core
 

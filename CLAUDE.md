@@ -1,6 +1,6 @@
 # Angular Automated Testing
 
-An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / WCAG audits — shared core with VS Code and Chrome extensions on top, reusable across Bellese projects.
+**webspec** — an LLM-powered toolkit for testing webpages: generates Angular unit tests, runs Section 508 / WCAG audits, and renders recordings to Playwright e2e specs. Shared core with VS Code and Chrome extensions on top.
 
 ## Current state
 

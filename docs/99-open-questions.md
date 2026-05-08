@@ -54,7 +54,7 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 
 **Status:** open
 **Resolution trigger:** the first user reports re-running generation for an unchanged file and being charged twice.
-**Notes:** Hashing the prompt (file SHA + analyzer config + model + provider) and caching the validated `TestPlan` on disk under `.bellese-test/cache/` is the obvious move. Deferred until usage shows it matters.
+**Notes:** Hashing the prompt (file SHA + analyzer config + model + provider) and caching the validated `TestPlan` on disk under `.webspec/cache/` is the obvious move. Deferred until usage shows it matters.
 
 ## How does the Chrome extension share `core` code without an IPC daemon?
 
@@ -76,13 +76,13 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 ## M2 e2e: live Jest verification against a sample Angular 20 app
 
 **Status:** deferred to M3
-**Resolution trigger:** M3 CLI work needs an Angular fixture app for end-to-end testing (`bellese-test gen` → `.spec.ts` → Jest run → assert pass). That same harness verifies the M2 done-when criterion. No reason to build it twice.
+**Resolution trigger:** M3 CLI work needs an Angular fixture app for end-to-end testing (`webspec gen` → `.spec.ts` → Jest run → assert pass). That same harness verifies the M2 done-when criterion. No reason to build it twice.
 **Notes:** v0.3.0 (M2) shipped with parser + renderer + 3 hand-authored TestPlan fixtures. The renderer's output is verified by golden tests and integration assertions on idiom presence (e.g. `provideHttpClientTesting`, `imports: [Component]`, signal-aware `setInput`). What's NOT verified yet: that the rendered `.spec.ts` actually compiles + runs under Jest in a real Angular 20 app. To close that gap: bootstrap a minimal Angular 20 app under `tests/fixtures/angular-app/` with `jest-preset-angular`, run the rendered specs through Jest, assert pass. Best done as part of M3 since the CLI wants the same fixture for its own e2e.
 
 ## How does a recording get from the Chrome extension to a Node renderer?
 
 **Status:** leaning resolved (download `recording.json`, point CLI at it), confirm at M5
-**Resolution trigger:** users finding the download flow too clunky. Alternative: a localhost HTTP daemon spun up by `bellese-test serve`, or a "Send to VS Code" button with the VS Code URL handler.
+**Resolution trigger:** users finding the download flow too clunky. Alternative: a localhost HTTP daemon spun up by `webspec serve`, or a "Send to VS Code" button with the VS Code URL handler.
 **Notes:** v1 ships download-to-disk because it's the lowest-friction path that requires no extra Bellese services. The `Analysis` artifact is JSON anyway, so the file IS the recording — no special transport needed. If users complain, a localhost daemon is the natural next step.
 
 ## What gets masked during recording? PHI? PII? Free-text fields?

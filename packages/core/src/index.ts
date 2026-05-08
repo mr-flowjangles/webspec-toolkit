@@ -1,8 +1,8 @@
-// @bellese/test-core — shared analyzer + renderer + LLM provider seam.
+// @webspec/core — shared analyzer + renderer + LLM provider seam.
 // Phase 1 analyzers (test-plan, a11y, recorder) and Phase 2 renderers
 // (test, report, e2e) land in their respective milestones (M2, M4, M6).
 
-export const PACKAGE_NAME = '@bellese/test-core';
+export const PACKAGE_NAME = '@webspec/core';
 
 // Contract artifact — the typed shape every analyzer produces and every renderer consumes.
 export * from './types/analysis.js';

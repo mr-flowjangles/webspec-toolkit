@@ -57,10 +57,10 @@ Every variant carries:
 | Field           | Purpose                                                                                                                                               |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | Frozen string literal, currently `'1'`. **Bumped only via the rules below.**                                                                          |
-| `toolVersion`   | The semver of `@bellese/test-core` that produced the artifact. Diagnostic, not load-bearing.                                                          |
+| `toolVersion`   | The semver of `@webspec/core` that produced the artifact. Diagnostic, not load-bearing.                                                          |
 | `createdAt`     | ISO-8601. Diagnostic.                                                                                                                                 |
 | `source`        | `{kind, ref}` pointing at the input (file path, URL, recording-session ID).                                                                           |
-| `config`        | The resolved config at production time. Typed `unknown` in `core` to keep `core/types` free of a `@bellese/test-config` dependency; consumers narrow. |
+| `config`        | The resolved config at production time. Typed `unknown` in `core` to keep `core/types` free of a `@webspec/config` dependency; consumers narrow. |
 
 `schemaVersion` is the load-bearing field. It's the version every renderer checks before rendering, the version every cache key includes, and the version every release-notes entry must mention if it changed.
 

@@ -44,7 +44,7 @@ A small interface — `LLMProvider` — with `complete(messages, schema): Promis
 - `packages/cli/` — `commander`-based CLI. Wraps `core`. The first surface implemented; validates the contract. Exposes `init`, `gen`, `audit`, and `record-to-spec <recording.json>` (renders a recording exported from the Chrome extension).
 - `packages/vscode-extension/` — VS Code commands and sidebar. Wraps `core` directly (no IPC; runs in the extension host). Exposes test generation + a11y; **does not** host the recorder (no live tab in the editor).
 - `packages/chrome-extension/` — Manifest V3. Bundles the browser flavor of `core`: `A11yAnalyzer` (browser mode), `WorkflowRecorder`, and `ReportRenderer`. **Does not** bundle `TestPlanAnalyzer` (no filesystem access) or `E2ERenderer` (recordings are exported as JSON; rendering happens in Node — CLI or VS Code — to avoid bundling the LLM SDK in the browser). Recordings transport from the Chrome ext to a Node renderer via download-as-JSON in v1.
-- `packages/config/` — shared config schema (`bellese-test.config.json`) with auto-detection logic for Angular projects.
+- `packages/config/` — shared config schema (`webspec.config.json`) with auto-detection logic for Angular projects.
 
 ## The contract artifact
 
@@ -135,7 +135,7 @@ angular-automated-testing/
 │   │   │   ├── render/             # TestRenderer, ReportRenderer, E2ERenderer
 │   │   │   └── types/              # Analysis, TestPlan, A11yReport, WorkflowRecording
 │   │   └── tests/
-│   ├── cli/                        # bellese-test CLI
+│   ├── cli/                        # webspec CLI
 │   ├── vscode-extension/           # VS Code surface
 │   ├── chrome-extension/           # Manifest V3 surface (audit + recorder)
 │   └── config/                     # config schema + project auto-detection
