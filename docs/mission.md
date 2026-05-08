@@ -19,7 +19,7 @@ Bellese engineers and contractors building Angular 19+ frontends for federal and
 3. **Record workflows and emit e2e tests.** While a user (dev, QA, or non-technical reviewer) navigates a running app in Chrome, capture their interactions — clicks, form fills, navigation, key events — and emit a runnable Playwright `.spec.ts` that reproduces the flow with hardened selectors and LLM-named assertions.
 4. **Expose all three capabilities** through a **VS Code extension** (commands, sidebar) and a **Chrome extension** (popup with audit + recorder modes) using one shared core. The CLI exposes the same capabilities for CI use.
 5. Reach Anthropic models via AWS Bedrock using standard AWS credentials. The `LLMProvider` interface is provider-agnostic so future adapters (other Bedrock models, direct API, etc.) can be added without renderer changes.
-6. Drop into any Bellese Angular repo via a single `bellese-test.config.json`, with sensible auto-detected defaults when no config is present.
+6. Drop into any Angular repo via a single `webspec.config.json`, with sensible auto-detected defaults when no config is present.
 
 ## Hard constraints
 

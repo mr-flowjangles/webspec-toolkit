@@ -1,18 +1,18 @@
 {
-  "name": "@bellese/test-cli",
+  "name": "@webspec/cli",
   "private": true,
   "version": "0.0.0",
-  "description": "bellese-test CLI for Angular Automated Testing (gen / audit).",
+  "description": "webspec CLI — generate Jest specs, run WCAG/508 audits, and render Playwright specs from recordings.",
   "type": "module",
   "bin": {
-    "bellese-test": "./dist/index.js"
+    "webspec": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run"
   },
   "dependencies": {
-    "@bellese/test-core": "workspace:*",
-    "@bellese/test-config": "workspace:*"
+    "@webspec/core": "workspace:*",
+    "@webspec/config": "workspace:*"
   }
 }

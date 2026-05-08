@@ -1,8 +1,8 @@
 {
-  "name": "@bellese/test-core",
+  "name": "@webspec/core",
   "private": true,
   "version": "0.0.0",
-  "description": "Shared analyzer + renderer + LLM provider seam for Angular Automated Testing.",
+  "description": "Shared analyzer + renderer + LLM provider seam for webspec.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

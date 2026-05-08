@@ -3,7 +3,7 @@
 #   1. build stage installs deps, compiles the workspace with tsc -b
 #   2. runtime stage is slim: only Node + the built workspace + symlinked deps
 #
-# At M0 the CLI is a stub (`bellese-test --help` prints the roadmap). Real
+# At M0 the CLI is a stub (`webspec --help` prints the roadmap). Real
 # `gen` / `audit` commands wire up in M3 / M4.
 
 # ---- build stage --------------------------------------------------------
@@ -28,7 +28,7 @@ RUN pnpm build
 # ---- runtime stage ------------------------------------------------------
 FROM node:20-alpine
 LABEL org.opencontainers.image.title="Angular Automated Testing"
-LABEL org.opencontainers.image.description="An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / WCAG audits — shared core with VS Code and Chrome extensions on top, reusable across Bellese projects."
+LABEL org.opencontainers.image.description="An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / WCAG audits — shared core with VS Code and Chrome extensions on top."
 WORKDIR /app
 
 COPY --from=build /app/packages ./packages

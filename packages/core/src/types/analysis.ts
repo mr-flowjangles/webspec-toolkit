@@ -20,7 +20,7 @@ export const AnalysisMetaSchema = z.object({
     kind: z.enum(['file', 'url', 'dom', 'recordingSession']),
     ref: z.string(),
   }),
-  // ResolvedConfig is owned by @bellese/test-config; in core we accept any shape
+  // ResolvedConfig is owned by @webspec/config; in core we accept any shape
   // and let the consumer narrow it. Keeps core free of a config-package dependency.
   config: z.unknown(),
 });

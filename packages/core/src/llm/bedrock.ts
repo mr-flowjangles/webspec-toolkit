@@ -1,7 +1,7 @@
 /**
  * Amazon Bedrock adapter for the LLMProvider interface.
  *
- * The ONLY file in @bellese/test-core that imports from `@anthropic-ai/bedrock-sdk`.
+ * The ONLY file in @webspec/core that imports from `@anthropic-ai/bedrock-sdk`.
  * Browser bundles MUST exclude this module — see docs/01-architecture.md.
  *
  * Why Bedrock specifically: Bellese's federal-customer work runs on

@@ -10,10 +10,10 @@ The convention is `## M<N> — {Title}` so `make version-M<N>` can auto-resolve 
 
 v1 ships when **all** of the following are true:
 
-- [ ] Docker image builds reproducibly (`make image`) and `bellese-test --help` works in the smoke test.
-- [ ] CLI: `bellese-test gen <component.ts>` produces a Jest `.spec.ts` that compiles and runs against a sample Angular 19+ app.
-- [ ] CLI: `bellese-test audit <url>` produces a normalized JSON + Markdown a11y report tagged `wcag21aa` + `section508`.
-- [ ] CLI: `bellese-test record-to-spec <recording.json>` produces a Playwright `.spec.ts` that runs end-to-end against the same app.
+- [ ] Docker image builds reproducibly (`make image`) and `webspec --help` works in the smoke test.
+- [ ] CLI: `webspec gen <component.ts>` produces a Jest `.spec.ts` that compiles and runs against a sample Angular 19+ app.
+- [ ] CLI: `webspec audit <url>` produces a normalized JSON + Markdown a11y report tagged `wcag21aa` + `section508`.
+- [ ] CLI: `webspec record-to-spec <recording.json>` produces a Playwright `.spec.ts` that runs end-to-end against the same app.
 - [ ] Chrome extension: popup has both modes — "Audit this tab" returns axe findings; "Record" captures a workflow and exports a `WorkflowRecording` JSON.
 - [ ] VS Code extension: right-click on a `.component.ts` → "Generate Spec" produces the same output as the CLI; sidebar a11y panel runs against `localhost:4200`.
 - [ ] LLM access is via AWS Bedrock with standard AWS credentials. The `LLMProvider` interface is provider-agnostic — adding a second adapter (M8) is a code change scoped to one new file plus a config flip; no renderer or surface changes.
@@ -75,15 +75,15 @@ Goal: end-to-end test generation for one Angular component shape.
 
 Goal: validate the contract through the simplest UI before tackling the IDE/browser surfaces. Make onboarding a single command. Also closes the M2 e2e gap: bootstraps the Angular 20 fixture app the integration test runs against.
 
-- [ ] `packages/cli/`: `bellese-test gen <path>` reads source, runs analysis, writes `.spec.ts` next to the source.
-- [ ] `bellese-test audit <url>` is stubbed (returns "M4 not yet implemented" — wired for the contract).
-- [ ] `bellese-test init` — onboarding wizard. Detects the Angular project (reads `angular.json` / `package.json`), drops a sane `bellese-test.config.json`, prompts for AWS region (credentials come from the standard AWS chain), prints install URLs for the Chrome and VS Code extensions. Idempotent — re-running updates the config in place.
-- [ ] Implement `bellese-test.config.json` resolution + Angular-project auto-detection in `packages/config/`.
+- [ ] `packages/cli/`: `webspec gen <path>` reads source, runs analysis, writes `.spec.ts` next to the source.
+- [ ] `webspec audit <url>` is stubbed (returns "M4 not yet implemented" — wired for the contract).
+- [ ] `webspec init` — onboarding wizard. Detects the Angular project (reads `angular.json` / `package.json`), drops a sane `webspec.config.json`, prompts for AWS region (credentials come from the standard AWS chain), prints install URLs for the Chrome and VS Code extensions. Idempotent — re-running updates the config in place.
+- [ ] Implement `webspec.config.json` resolution + Angular-project auto-detection in `packages/config/`.
 - [ ] Exit codes: 0 success, 2 user error, 3 LLM/provider error, 4 internal error.
 - [ ] **Bootstrap the Angular 20 fixture app** under `tests/fixtures/angular-app/` (jest-preset-angular wired up; the three M2 fixture components live here). Closes the deferred M2 e2e verification.
 - [ ] Integration test: run the CLI against the fixture repo, verify file emitted + Jest passes (using a recorded TestPlan to keep CI offline) + a separate gated suite that calls live Bedrock when `BEDROCK_LIVE_E2E=true`. Separate test for `init` against a fresh Angular project fixture.
 
-**Done when:** `bellese-test init && bellese-test gen <path>` works end-to-end against the fixture Angular repo; `npx jest` against the rendered specs returns green.
+**Done when:** `webspec init && webspec gen <path>` works end-to-end against the fixture Angular repo; `npx jest` against the rendered specs returns green.
 
 ---
 
@@ -93,10 +93,10 @@ Goal: WCAG 2.1 AA + Section 508 audits running through the same `Analysis` contr
 
 - [ ] `A11yAnalyzer` (Node mode): wrap `@axe-core/puppeteer`, run with tags `['wcag21aa','section508']`, validate output into `A11yReport`.
 - [ ] `ReportRenderer`: emit JSON and Markdown (severity grouping, rule tag column, selector + fix-hint per finding).
-- [ ] CLI: implement `bellese-test audit <url>` end-to-end.
+- [ ] CLI: implement `webspec audit <url>` end-to-end.
 - [ ] Tests: snapshot-test the Markdown renderer against a recorded axe result.
 
-**Done when:** `bellese-test audit https://example.com` produces a clean Markdown report with each finding tagged 508 / WCAG / both.
+**Done when:** `webspec audit https://example.com` produces a clean Markdown report with each finding tagged 508 / WCAG / both.
 
 ---
 
@@ -134,7 +134,7 @@ Goal: turn a recording into a runnable Playwright test. Two-pass renderer; LLM p
 - [ ] Implement deterministic pass: each `RecordedEvent` maps to a Playwright action (`page.click(selector)`, `page.fill(selector, value)`, `page.goto(url)`, etc.). Selectors use the recording's hardened forms.
 - [ ] Implement LLM-polish pass: given the action trace + observed network calls, the LLM names the test (`describe`/`test` strings), inserts assertions (`expect(page.getByRole('heading', { name: 'Success' })).toBeVisible()`), and proposes selector consolidations where redundant. Polish is no-op if no provider key is configured.
 - [ ] Golden-test the deterministic pass with hand-written `WorkflowRecording` fixtures (no LLM in the loop).
-- [ ] CLI: implement `bellese-test record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`).
+- [ ] CLI: implement `webspec record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`).
 - [ ] Integration test: capture a recording (use a fixture, not a live browser) → render → run the emitted Playwright spec against a sample Angular 20 app → spec passes.
 
 **Done when:** a recording exported from M5 produces a Playwright `.spec.ts` that compiles, runs, and passes against the same app the recording was made against.
