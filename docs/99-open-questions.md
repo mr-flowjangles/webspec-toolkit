@@ -102,3 +102,27 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 **Status:** deferred to v2
 **Resolution trigger:** a Bellese e2e test fails flakily because the backend it depends on is unstable in CI.
 **Notes:** v1 records URLs + methods only. Recording response bodies and stubbing them on replay is the obvious next step but introduces meaningful storage + privacy concerns (response bodies often include PHI for our customers). Defer.
+
+---
+
+## (v0.3.2 pivot) Does M6 amplification route through `TestPlan` or render Playwright directly from `WorkflowRecording`?
+
+**Status:** open
+**Resolution trigger:** M6 implementation start.
+**Notes:** Two viable paths for "recording → Playwright with positive + negative scenarios":
+
+- **Path A — TestPlan as IR.** WorkflowRecording → LLM-amplifying analyzer → `TestPlan` (with `framework: 'playwright'` and `cases[]` carrying happy + negative scenarios) → deterministic E2ERenderer (TestPlan → Playwright source). Reuses M2's contract shape, gives a cacheable / replayable / goldenable intermediate. Requires widening `TestPlan.framework` from `'jest'` to `'jest' | 'playwright'` (Bucket A — additive).
+- **Path B — Direct render.** WorkflowRecording + LLM polish pass → Playwright source directly. Simpler, fewer pieces, but loses the goldenable intermediate and any caching upside.
+
+Leaning toward Path A because it reuses shipped work and matches the existing Phase 1 / Phase 2 split (Phase 1 = analyzer-with-LLM produces TestPlan; Phase 2 = deterministic renderer). Confirm at M6 kickoff.
+
+## (v0.3.2 pivot) Does the unit-test-from-source path return post-v1 as a save-time watcher?
+
+**Status:** open
+**Resolution trigger:** v1 ships and a developer asks "can this also generate unit tests as I save?" — or doesn't.
+**Notes:** M2 shipped (parser + renderer + golden tests + integration tests with hand-authored TestPlan fixtures). It was deferred from v1 active path at v0.3.2 because the v1 mission is shift-left + fail-fast on a live page, and a manual `webspec gen <component.ts>` CLI is productivity tooling, not a shift-left signal. A save-time watcher in an editor (regenerate the spec on save, surface immediately if the spec breaks) WOULD be a shift-left signal. If users want it post-v1, the foundation is intact: parser, renderer, and the M2 fixtures all live in `packages/core/src/analyze/test-plan/` and `packages/core/src/render/test/`.
+
+## (v0.3.2 pivot) Is the v1 CLI surface area smaller than originally scoped?
+
+**Status:** resolved
+**Resolution:** Yes. Original M3 scoped a unified CLI with `init`, `gen`, `audit`, `record-to-spec`. Post-pivot, v1 CLI is just `audit` (ships with M4) and `record-to-spec` (ships with M6). `gen` and `init` deferred. Documented in `07-build-plan.md` "Out of v1 active path."

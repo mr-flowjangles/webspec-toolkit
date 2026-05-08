@@ -41,10 +41,10 @@ A small interface — `LLMProvider` — with `complete(messages, schema): Promis
 
 ### Surfaces (separate packages)
 
-- `packages/cli/` — `commander`-based CLI. Wraps `core`. The first surface implemented; validates the contract. Exposes `init`, `gen`, `audit`, and `record-to-spec <recording.json>` (renders a recording exported from the Chrome extension).
-- `packages/vscode-extension/` — VS Code commands and sidebar. Wraps `core` directly (no IPC; runs in the extension host). Exposes test generation + a11y; **does not** host the recorder (no live tab in the editor).
-- `packages/chrome-extension/` — Manifest V3. Bundles the browser flavor of `core`: `A11yAnalyzer` (browser mode), `WorkflowRecorder`, and `ReportRenderer`. **Does not** bundle `TestPlanAnalyzer` (no filesystem access) or `E2ERenderer` (recordings are exported as JSON; rendering happens in Node — CLI or VS Code — to avoid bundling the LLM SDK in the browser). Recordings transport from the Chrome ext to a Node renderer via download-as-JSON in v1.
-- `packages/config/` — shared config schema (`webspec.config.json`) with auto-detection logic for Angular projects.
+- `packages/chrome-extension/` — **The v1 primary surface.** Manifest V3. Bundles the browser flavor of `core`: `A11yAnalyzer` (browser mode), `WorkflowRecorder`, and `ReportRenderer`. **Does not** bundle `TestPlanAnalyzer` (no filesystem access) or `E2ERenderer` (recordings are exported as JSON; rendering happens in Node — CLI — to avoid bundling the LLM SDK in the browser). Recordings transport from the Chrome ext to the Node renderer via download-as-JSON in v1.
+- `packages/cli/` — `commander`-based CLI. Wraps `core`. **v1 surface area reduced to CI-relevant commands:** `audit <url>` (M4) and `record-to-spec <recording.json>` (M6). The original `gen` (unit-test gen) and `init` (Angular auto-detection) commands are deferred — see `07-build-plan.md` "Out of v1 active path."
+- `packages/vscode-extension/` — **Deferred from v1.** Stub left in the workspace so M0 build coherence holds; real activation is post-v1. Browser-first means browser-only in v1.
+- `packages/config/` — config schema. **v1 surface area reduced** — without unit-test gen on the v1 path, config has no production consumer in v1; the package stays as a stub.
 
 ## The contract artifact
 

@@ -1,60 +1,59 @@
-# Angular Automated Testing — Mission Statement
+# webspec — Mission Statement
 
 ## Mission
 
-Cut the time Bellese teams spend on three recurring testing chores: writing Angular unit-test boilerplate, hunting accessibility regressions, and authoring end-to-end tests for the workflows the customer actually uses. The tool reads source files, scans running apps, and watches users perform real workflows — and produces (a) Jest unit tests, (b) Section 508 + WCAG 2.1 AA audit reports, and (c) Playwright e2e tests recorded from live browser interactions. It ships in two surfaces — a **VS Code extension** (in-flow authoring for devs) and a **Chrome extension** (a11y scans + workflow recording for everyone, including non-developers) — both backed by one shared core so behavior stays consistent and the LLM stays pluggable.
+**Shift left and fail faster on web app development.** webspec is a browser-based dev-time companion: a developer (or designer, or QA, or 508 reviewer) walks through a web app in Chrome, and the tool catches problems before they reach formal testing. Three things, all on a live page:
+
+1. **Watch a user move through a workflow** and capture exactly what they did — clicks, fills, navigation, network calls.
+2. **Turn that workflow into a test plan with positive AND negative scenarios** — the recorded happy path, plus LLM-amplified failure modes (invalid input, empty fields, error states, edge cases the user didn't think to try). Output is a runnable Playwright spec; the spec is also a fast-feedback report of "things that could go wrong here."
+3. **Audit the page for Section 508 + WCAG 2.1 AA issues** — at dev time, not at compliance review.
+
+The whole point is short feedback loops. The tool runs while you're building, not after.
 
 ## Who this is for
 
-Bellese engineers and contractors building Angular 19+ frontends for federal and federal-adjacent customers, where Section 508 compliance is a contractual obligation and unit-test coverage is a quality gate that consistently slips under deadline pressure. Audience attributes that shape design:
+Engineers building web frontends for federal and federal-adjacent customers, where Section 508 compliance is contractual and quality bugs caught late are expensive. Plus the non-developers (QA, designers, 508 reviewers, PMs) who can drive the recorder without writing code. The tool is **framework-agnostic by design** — it watches rendered pages and DOM events, not source files. Angular today, React/Vue/Svelte for free.
 
-- TypeScript fluent; Jest familiar; mixed comfort with a11y rulesets.
-- Working across multiple Bellese projects, not one — the tool must drop in without per-repo bespoke setup.
-- Procurement constraints vary: customers and teams may use Anthropic, OpenAI, or other LLM vendors — the tool must not lock to one.
+## What the tool must do (v1)
 
-## What the tool must do
-
-1. **Generate unit tests from source.** Read an Angular component, service, directive, or pipe (Angular 19+ standalone or NgModule) and emit a runnable Jest `.spec.ts` covering inputs, outputs, public methods, and injected dependencies (mocked).
-2. **Audit accessibility.** Run a WCAG 2.1 AA + Section 508 audit against either a static build artifact (file path) or a running URL, and produce a normalized report (rule, severity, selector, fix hint).
-3. **Record workflows and emit e2e tests.** While a user (dev, QA, or non-technical reviewer) navigates a running app in Chrome, capture their interactions — clicks, form fills, navigation, key events — and emit a runnable Playwright `.spec.ts` that reproduces the flow with hardened selectors and LLM-named assertions.
-4. **Expose all three capabilities** through a **VS Code extension** (commands, sidebar) and a **Chrome extension** (popup with audit + recorder modes) using one shared core. The CLI exposes the same capabilities for CI use.
-5. Reach Anthropic models via AWS Bedrock using standard AWS credentials. The `LLMProvider` interface is provider-agnostic so future adapters (other Bedrock models, direct API, etc.) can be added without renderer changes.
-6. Drop into any Angular repo via a single `webspec.config.json`, with sensible auto-detected defaults when no config is present.
+1. **Record workflows in Chrome.** Click "Record" in the popup, drive the app, click "Stop." The tool captures DOM events (clicks, input, change, submit, navigation, key events), outgoing network requests (URL + method, no response bodies in v1), and a hardened selector for every targeted element (`data-testid` → `aria-label`/`role+name` → text → CSS fallback).
+2. **Turn the recording into a test plan with positive + negative scenarios, then render it as Playwright.** Two passes: (a) deterministic translation of every recorded event into a Playwright action; (b) LLM amplification — given the recorded happy path + observed network calls + page state, the LLM names the test, inserts assertions, and **generates negative scenarios** (e.g. user filled a valid email → also test empty / malformed / 500-char / special-char input). Output is one or more runnable Playwright `.spec.ts` files. Skipped if no provider is configured — the deterministic happy-path spec still emits.
+3. **Audit a11y on the live page.** Run `axe-core` with the `wcag21aa` + `section508` tag set. Report distinguishes 508 vs WCAG-only findings so federal-compliance reviewers can scope.
+4. **Reach Anthropic models via AWS Bedrock** using the standard AWS credential chain. The `LLMProvider` interface stays provider-agnostic so adding adapters later is a code change scoped to one new file.
+5. **Run primarily in the browser.** The Chrome extension is the v1 surface. A thin CLI exists for CI integration (`webspec audit <url>`, `webspec record-to-spec <recording.json>`); VS Code integration is post-v1.
 
 ## Hard constraints
 
-- **Section 508 / WCAG 2.1 AA coverage is non-negotiable.** Reports must distinguish 508 vs WCAG-only findings so federal-compliance reviewers can scope.
-- **LLM-provider agnostic at the seam.** No file in the codebase may import a vendor/cloud SDK outside the corresponding adapter module. Switching providers (or adding new ones) must be a code change scoped to a new adapter file plus a config flip, never a renderer change.
-- **No code or credentials sent off-device without user consent.** LLM calls are opt-in per session; a11y scans run locally.
-- **Angular 19+ is the baseline.** Older versions are out of v1 scope.
-- **Reusability across Bellese projects.** No project-specific assumptions baked into core; everything project-specific is config.
+- **Section 508 / WCAG 2.1 AA coverage is non-negotiable.** Reports must distinguish 508 vs WCAG-only findings.
+- **Framework-agnostic at the seam.** No file in the codebase may assume Angular, React, etc. for the page-observing capabilities. axe and the recorder both work on rendered output, period.
+- **LLM-provider agnostic at the seam.** No file may import a vendor/cloud SDK outside the corresponding adapter module. Switching providers (or adding new ones) must be a code change scoped to a new adapter file plus a config flip, never a renderer change.
+- **No code or data sent off-device without user consent.** LLM calls are opt-in per session; a11y scans run locally; recordings stay local until the user chooses to render them with LLM polish.
+- **Recordings are LLM-free at capture.** Recordings can contain PHI/PII (federal customers). The LLM only enters Phase 2, when the user chooses to amplify a recording into a test plan. A recording can be exported, scrubbed, and only then rendered.
 
-## Decisions Bellese has already made
+## Decisions already made
 
 - **Language:** TypeScript across all packages.
-- **Unit-test framework target:** Jest (Angular 19+ standard direction). Karma + Jasmine deferred (see `99-open-questions.md`).
 - **E2E framework target:** Playwright. Cypress deferred (see `99-open-questions.md`).
-- **Monorepo tooling:** pnpm workspaces. No Nx/Turbo for v1.
-- **LLM access via AWS Bedrock.** Bellese's federal-customer work runs on AWS-resident infrastructure for compliance reasons; all Anthropic-model traffic goes through **Amazon Bedrock** with the standard AWS SDK default credential chain (env vars, `~/.aws/credentials`, IAM instance role) — never the direct Anthropic API. v1 ships a `BedrockAdapter`; the `LLMProvider` interface admits future providers (OpenAI on Bedrock or direct, etc.) but they're not v1 scope. The LLM is value-add for the recorder (naming tests, generating assertions, hardening selectors), not load-bearing — recordings still work without a configured provider.
 - **A11y engine:** axe-core with `wcag21aa` + `section508` tags. We do not roll our own ruleset.
-- **Deployment:** Docker image for the CLI/headless mode; AWS Terraform stub kept for future team-shared services.
+- **Monorepo tooling:** pnpm workspaces. No Nx/Turbo for v1.
+- **LLM access via AWS Bedrock.** Federal-customer work runs on AWS-resident infrastructure for compliance reasons; all Anthropic-model traffic goes through **Amazon Bedrock** with the standard AWS SDK default credential chain (env vars, `~/.aws/credentials`, IAM instance role) — never the direct Anthropic API. v1 ships a `BedrockAdapter`. The LLM is value-add for amplification (negative scenarios, test naming, assertion generation), not load-bearing — recordings still produce a runnable Playwright spec without a configured provider.
+- **Deployment:** Chrome extension installs unpacked / via Chrome Web Store; CLI ships as a Docker image; AWS Terraform stub kept for future team-shared services.
 - **PR ownership:** Rob initiates PRs. Claude does not push branches or open PRs without explicit instruction.
 
 ## Scope explicitly _out_ of v1
 
-- Karma + Jasmine emitter (deferred — most active Bellese projects are on Jest or migrating).
-- Cypress emitter (deferred — Playwright is the v1 target; Cypress is a future renderer if a project requires it).
-- Angular 18 and earlier.
-- Replay of recorded workflows from inside the Chrome extension itself — v1 records and emits `.spec.ts`; users run replay via Playwright like any other test.
-- Network-response mocking captured during recording. v1 captures requests; mocking is deferred until usage shows it matters.
-- Manual a11y review workflow (annotation, sign-off, audit trail) — automated scanning only.
-- Bellese-managed LLM proxy or shared AWS account / shared Bedrock allocation infrastructure.
-- Telemetry / usage analytics.
-- Marketplace publishing automation. Internal install via VSIX and unpacked Chrome extension is enough for v1.
+- **Unit-test generation from source files.** The Angular `.component.ts` → Jest `.spec.ts` capability that shipped in v0.3.0 (M2) stays in the codebase as foundation, but is not on the v1 active path. It's a productivity tool, not a shift-left signal — and the architecture decision was made that "look at the page" is what the tool does in v1. If unit-test-gen earns its way back (e.g. as a save-time watcher that triggers automatically), that's a post-v1 story.
+- **VS Code extension.** Browser-first means browser-only for v1. A VS Code surface adds friction without adding shift-left value when the dev is already in Chrome driving their app. Deferred to post-v1.
+- **In-extension recording playback.** v1 emits a Playwright `.spec.ts`; users run replay via Playwright like any other test.
+- **Network-response mocking.** v1 captures request URLs + methods; recording response bodies and stubbing them on replay is post-v1.
+- **Karma + Jasmine, Cypress.** Playwright is the v1 e2e target.
+- **Manual a11y review workflow** (annotation, sign-off, audit trail). Automated scanning only in v1.
+- **Telemetry / usage analytics, marketplace publishing automation.** Internal install via unpacked extension is enough for v1.
+- **Bellese-managed LLM proxy** or shared Bedrock allocation infrastructure — every developer uses their own AWS credentials in v1.
 
-## Working style at Bellese
+## Working style
 
-The team aligns on design before writing code. Decisions are recorded in version-controlled `docs/`. Deferred decisions are tracked explicitly with their resolution triggers. Unanticipated questions surfaced during implementation pause the work until the docs catch up — no silent decisions in code.
+The team aligns on design before writing code. Decisions are recorded in version-controlled `docs/`. Deferred decisions are tracked explicitly in `99-open-questions.md` with their resolution triggers. Unanticipated questions surfaced during implementation pause the work until the docs catch up — no silent decisions in code.
 
 Versions follow three-part semver, one PR per version. Release notes are cumulative under `Versions/v{major}/v{major}.{minor}.{patch}/`.
 
@@ -62,13 +61,10 @@ Versions follow three-part semver, one PR per version. Release notes are cumulat
 
 ## What this brief deliberately does NOT prescribe
 
-To keep the design space open for the design exercise itself:
+To keep design space open:
 
-- The exact shape of the contract artifact between Phase 1 (analysis) and Phase 2 (rendering) — see `01-architecture.md`.
-- How the test generator detects a project's testing conventions (heuristics? config schema? both?).
-- Whether the Chrome extension talks to a local CLI/daemon for shared logic, ships its own bundle of `core`, or uses a hybrid.
-- How the LLM provider interface negotiates streaming vs batch responses across vendors.
-- Cache strategy for repeat LLM calls within a session.
-- Selector-hardening policy for the recorder (data-testid first? role-based fallbacks? text-based?). See `99-open-questions.md`.
-- How a recording is transported from the Chrome extension to a local file (download a JSON, paste into the CLI, post to a localhost daemon, etc.).
-- Secret/PII masking during recording (passwords, tokens, PHI in form fields).
+- **The exact intermediate representation between recording and Playwright output.** The current shipped `WorkflowRecording` artifact may flow directly into the Playwright renderer, or it may be promoted into a richer `TestPlan` (the contract artifact already exists from M2) before rendering. Decide at M6 implementation. See `99-open-questions.md`.
+- **The exact prompt strategy for LLM amplification.** Which negative scenarios to generate, how aggressively, and how to constrain them to plausible cases — TBD at M6.
+- **Selector-hardening priority for the recorder** (data-testid first? role-based fallbacks? text?). Leaning resolved (data-testid > role+name > text > css), confirm at M5 spike. See `99-open-questions.md`.
+- **PHI/PII masking strategy beyond `<input type="password">`.** A richer policy is needed for federal-customer recordings; defer until we see what real recordings look like.
+- **How a recording transports from the Chrome extension to a Node renderer.** v1 leaning toward download-as-JSON; localhost daemon is a post-v1 alternative if the download flow proves clunky.

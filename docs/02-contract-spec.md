@@ -21,11 +21,13 @@ Each variant pairs a `data` payload with a shared `meta` envelope. Sub-shapes (`
 
 ### TestPlan — LLM-generated, structured for renderer consumption
 
-The LLM emits a `TestPlan`, not raw `.spec.ts` text. The render pass is deterministic — it turns the plan's `cases[]` (each with `name`, `arrange`, `act`, `assert`) into Jest source. This split exists because:
+The LLM emits a `TestPlan`, not raw spec text. The render pass is deterministic — it turns the plan's `cases[]` (each with `name`, `arrange`, `act`, `assert`) into source. This split exists because:
 
 1. **Goldenable rendering.** Hand-written `TestPlan` fixtures snapshot-test the renderer. The LLM is tested separately via the adapter contract test (M1) and the e2e component fixtures (M2).
-2. **Provider parity is structural, not textual.** The OpenAI adapter (M8) returning a different `cases[]` text for the same component is fine; returning a structurally different shape is not. We assert the shape, not the prose.
+2. **Provider parity is structural, not textual.** A future second adapter returning different `cases[]` text for the same input is fine; returning a structurally different shape is not. We assert the shape, not the prose.
 3. **No prompt-injection ladder.** The LLM never writes raw test code we then `eval`/import; it returns typed data, which the renderer formats. Zod validation at the seam is the gate.
+
+**Note on the v1 pivot:** TestPlan was originally introduced for the M2 Angular-source-→-Jest path (which shipped in v0.3.0). After the v0.3.2 pivot to a shift-left scope, that path is foundation-only — not on the v1 active path. **TestPlan as an IR is still relevant**, because the M6 LLM-amplification pass (recording → Playwright with positive + negative scenarios) needs the same `cases[]` shape. The `framework` field on TestPlan was `'jest'`-only at M2; M6 will widen it to admit `'playwright'` (Bucket A — additive, optional, backward-compatible — see "IR evolution rule" below). Whether M6 actually routes through TestPlan or renders Playwright directly from `WorkflowRecording` is an open question — see `99-open-questions.md`.
 
 ### A11yReport — axe-shaped, augmented with our rule-tag normalization
 
