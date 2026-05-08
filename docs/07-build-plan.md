@@ -137,7 +137,7 @@ Goal: turn a recording into a runnable Playwright spec **with multiple test case
   - **Generates negative scenarios** as additional `test()` blocks: empty input, invalid input, malformed input, error-state coverage. Constraints on which negatives to generate are encoded in the prompt — plausible variants only, not exhaustive fuzzing.
   - Proposes selector consolidations where redundant.
   - Skipped if no provider key is configured (deterministic spec emits alone).
-- [ ] **IR decision (open):** does amplification produce a `TestPlan` (using the M2 contract artifact's `cases[]` shape) and then render to Playwright, or does it produce Playwright source directly? See `99-open-questions.md`. The TestPlan-as-IR path reuses M2 work and gives us a cacheable / replayable intermediate shape.
+- [ ] **IR decision (resolved at v0.3.2 — Path C):** the LLM emits a typed structured `AmplifiedRecording` (`scenarios[]` with typed `actions` + `assertions`), zod-validated at the seam. A deterministic renderer formats that into Playwright source. Same architectural pattern as M2 (validated structured output → deterministic format). The LLM never writes shipped Playwright code directly. See `99-open-questions.md` for why C beats both "TestPlan reuse" and "LLM-writes-source-directly."
 - [ ] Golden-test the deterministic pass with hand-written `WorkflowRecording` fixtures (no LLM in the loop).
 - [ ] Golden-test the amplification pass against a recorded-LLM-response fixture (deterministic test of "given this recording + this LLM response, render this spec").
 - [ ] CLI: implement `webspec record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`).

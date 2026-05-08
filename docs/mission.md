@@ -2,7 +2,11 @@
 
 ## Mission
 
-**Shift left and fail faster on web app development.** webspec is a browser-based dev-time companion: a developer (or designer, or QA, or 508 reviewer) walks through a web app in Chrome, and the tool catches problems before they reach formal testing. Three things, all on a live page:
+**Shift left and fail faster on web app development.** webspec is a browser-based dev-time companion: a developer (or designer, or QA, or 508 reviewer) walks through a web app in Chrome, and the tool catches problems before they reach formal testing.
+
+**Success metric (sharper framing of the same idea):** save time and stop defects from reaching the test phase. Every defect that webspec surfaces during dev is one fewer round-trip through QA, one fewer compliance-review escalation, and one fewer bug filed by a customer.
+
+Three things, all on a live page:
 
 1. **Watch a user move through a workflow** and capture exactly what they did — clicks, fills, navigation, network calls.
 2. **Turn that workflow into a test plan with positive AND negative scenarios** — the recorded happy path, plus LLM-amplified failure modes (invalid input, empty fields, error states, edge cases the user didn't think to try). Output is a runnable Playwright spec; the spec is also a fast-feedback report of "things that could go wrong here."

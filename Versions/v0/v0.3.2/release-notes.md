@@ -21,7 +21,10 @@ Doc-only pivot. Reshape v1 around the shift-left mission:
   - M5 — Chrome extension (the v1 primary surface): audit + workflow recorder.
   - M6 — Recording → Playwright `.spec.ts` with **positive AND negative scenarios** (LLM-amplified). The spec contains the recorded happy path plus LLM-generated negative variants in additional `test()` blocks.
 - **v1 ships a thin CLI** for CI integration (`webspec audit`, `webspec record-to-spec`) — not a unified CLI surface.
-- **M2 stays as foundation** (the Angular `TestPlan` analyzer + Jest renderer shipped in v0.3.0). The contract artifact `TestPlan` with its `cases[]` shape is reusable for M6 amplification output.
+- **M2 stays as foundation** (the Angular `TestPlan` analyzer + Jest renderer shipped in v0.3.0). TestPlan stays unit-test-shaped; M6 introduces a separate e2e-shaped intermediate.
+- **M6 IR resolved (Path C):** LLM emits a typed structured `AmplifiedRecording` (`scenarios[]` with typed actions + assertions); a deterministic renderer formats it into Playwright source. Same architectural pattern as M2 — LLM never writes shipped code directly. Beats both "reuse TestPlan" (category mismatch) and "LLM emits Playwright source" (loses validation gate).
+- **Post-v1 unit-test-gen reactivation:** the path returns as a save-time editor watcher (which IS shift-left), not a manual CLI. M2 foundation stays in the codebase ready to pick up.
+- **Secondary success metric** added to `mission.md`: save time, stop defects from reaching the test phase. Sharper framing of shift-left + fail-fast.
 - **Deferred from v1 active path:**
   - M3 (CLI for unit-test gen). The `webspec gen` and `webspec init` commands go away in v1; reactivate post-v1 if there's demand.
   - M7 (VS Code extension). Browser-first means browser-only in v1.
