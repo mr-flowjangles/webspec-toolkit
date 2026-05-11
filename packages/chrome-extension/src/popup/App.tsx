@@ -189,7 +189,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v0.4.1 — recorder skeleton (clicks only)</p>
+        <p className="meta">v0.4.2 — report tab design polish</p>
       </footer>
     </main>
   );
@@ -245,12 +245,23 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 /**
  * Stash the report under a unique key in `chrome.storage.local` so the report
- * tab can read it back. Returns the key for the URL query string.
+ * tab can read it back. Wraps the report with `scannedAt` so the design can
+ * render a real timestamp — `A11yReport` itself doesn't carry one (that lives
+ * on `Analysis.meta.createdAt`, but the popup skips the Analysis envelope).
  */
 async function stashReport(report: A11yReport): Promise<string> {
   const key = `report:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
-  await chrome.storage.local.set({ [key]: report });
+  const stashed: StashedReport = {
+    scannedAt: new Date().toISOString(),
+    report,
+  };
+  await chrome.storage.local.set({ [key]: stashed });
   return key;
+}
+
+export interface StashedReport {
+  scannedAt: string;
+  report: A11yReport;
 }
 
 // ---------------------------------------------------------------------------
