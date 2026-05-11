@@ -40,13 +40,16 @@ One supporting plumbing change: the popup now stashes `{ scannedAt, report }` in
 ## Fixed
 
 - `report.css` previously rendered each finding selector as inline code with constrained width; long CSS selectors wrapped awkwardly. New `code.selector` block displays the selector in its own bordered box with horizontal scroll for overflow — much more readable for real-world selectors.
+- **Report tab was blank in v0.4.0 and v0.4.1.** The HTML in `web_accessible_resources` was copied through but its `<script src="./main.tsx">` referenced the source TSX, not a build output — Vite never treated the report HTML as an entry, so its TSX was never bundled. `vite.config.ts` now adds `src/report/index.html` to `rollupOptions.input` so the report bundle (`report-*.js` + `report-*.css`) is emitted and the built HTML references them correctly. Caught while smoke-testing the new design; the previous "placeholder report" never actually rendered live.
+- Popup footer label was stale (`v0.4.1 — recorder skeleton (clicks only)`); bumped to `v0.4.2 — report tab design polish`.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
 | `.gitignore` | Ignore `_tmp/` for local design mockups + smoke fixtures. |
-| `packages/chrome-extension/src/popup/App.tsx` | Wrap stashed report with `scannedAt` timestamp. |
+| `packages/chrome-extension/src/popup/App.tsx` | Wrap stashed report with `scannedAt` timestamp; refresh footer label. |
+| `packages/chrome-extension/vite.config.ts` | Add `src/report/index.html` to `rollupOptions.input` so the report bundle is emitted (fixes blank report tab shipped in v0.4.0/v0.4.1). |
 | `packages/chrome-extension/src/report/ReportPage.tsx` | Rewrite against the new design structure; same data model. |
 | `packages/chrome-extension/src/report/report.css` | Drop-in replacement with the design system (tokens, dark mode, print, severity, components). |
 | `Versions/v0/v0.4.2/release-notes.md` | This file. |

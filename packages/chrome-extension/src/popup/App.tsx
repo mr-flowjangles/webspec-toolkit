@@ -189,7 +189,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v0.4.1 — recorder skeleton (clicks only)</p>
+        <p className="meta">v0.4.2 — report tab design polish</p>
       </footer>
     </main>
   );
