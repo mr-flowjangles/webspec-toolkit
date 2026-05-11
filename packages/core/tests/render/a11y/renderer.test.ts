@@ -88,12 +88,14 @@ describe('renderA11yReportMarkdown — sample fixture', () => {
     expect(labelRow).toContain('WCAG 2.1 AA, Section 508');
   });
 
-  it('renders empty ruleSets as an em-dash', () => {
-    // best-practice-only finding sits in Minor. (It has a helpUrl in the
-    // fixture so the rule cell renders as a markdown link.)
+  it('renders best-practice as its own label (v0.5.0)', () => {
+    // best-practice-only finding sits in Minor. The fixture's only tag is
+    // `best-practice`, so the rule-set cell renders the new "Best practice"
+    // label introduced in v0.5.0. Pre-v0.5.0 this rendered as an em-dash
+    // because best-practice was dropped at the contract boundary.
     const minorSection = md.split('## Minor')[1]!;
     expect(minorSection).toContain('best-practice-only');
-    expect(minorSection).toContain('| — |');
+    expect(minorSection).toContain('| Best practice |');
   });
 
   it('wraps selectors in inline code', () => {

@@ -105,6 +105,11 @@ export const TestPlanSchema = z.object({
  * criteria, so the WCAG set covers four axe tags: `wcag2a`, `wcag2aa`, `wcag21a`,
  * `wcag21aa`. Renderers roll these up to a single "WCAG 2.1 AA" label for display
  * while the contract preserves the granular breakdown for downstream consumers.
+ *
+ * `best-practice` covers axe's curated hygiene rules (`landmark-one-main`,
+ * `region`, `page-has-heading-one`, `heading-order`, etc.). They aren't strict
+ * WCAG/508 failures, but JAWS-style human reviewers tend to flag the same
+ * issues — surfacing them broadens the automated coverage at no per-audit cost.
  */
 export const A11yRuleTagSchema = z.enum([
   'wcag2a',
@@ -112,6 +117,7 @@ export const A11yRuleTagSchema = z.enum([
   'wcag21a',
   'wcag21aa',
   'section508',
+  'best-practice',
 ]);
 
 export const A11ySeveritySchema = z.enum(['minor', 'moderate', 'serious', 'critical']);

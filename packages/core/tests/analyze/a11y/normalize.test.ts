@@ -27,7 +27,7 @@ describe('normalizeAxeResults', () => {
 
   it('records the axe engine version and the full surfaced-tag set', () => {
     expect(report.ruleSet).toEqual({
-      tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'section508'],
+      tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'section508', 'best-practice'],
       engineVersion: '4.10.3',
     });
   });
@@ -63,9 +63,13 @@ describe('normalizeAxeResults', () => {
       expect(label?.ruleSets).toEqual(['wcag2a', 'section508']);
     });
 
-    it('emits empty ruleSets when no surfaced tag is present', () => {
+    it('surfaces best-practice as its own ruleSet entry (v0.5.0)', () => {
+      // Pre-v0.5.0 axe's best-practice tag was dropped at the contract boundary
+      // and best-practice-only findings emitted an empty ruleSets array; v0.5.0
+      // promotes it to a first-class tag because human reviewers tend to flag
+      // the same hygiene rules.
       const bp = report.findings.find((f) => f.ruleId === 'best-practice-only');
-      expect(bp?.ruleSets).toEqual([]);
+      expect(bp?.ruleSets).toEqual(['best-practice']);
     });
   });
 
