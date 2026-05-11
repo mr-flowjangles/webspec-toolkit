@@ -45,3 +45,10 @@ export {
   type AnalyzePageOptions as A11yAnalyzePageOptions,
 } from './analyze/a11y/analyzer.js';
 export { normalizeAxeResults, type NormalizeTarget } from './analyze/a11y/normalize.js';
+
+// Phase 2 — A11y ReportRenderer (A11yReport → Markdown / JSON). Pure functions;
+// browser-safe (string ops + JSON.stringify, no Node deps).
+export {
+  renderA11yReportMarkdown,
+  renderA11yReportJson,
+} from './render/a11y/renderer.js';

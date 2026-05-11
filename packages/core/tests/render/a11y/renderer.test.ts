@@ -1,0 +1,219 @@
+/**
+ * Tests for renderA11yReportMarkdown + renderA11yReportJson.
+ *
+ * Pipes the shared axe fixture through `normalizeAxeResults` → renderer so
+ * we exercise the realistic Finding shape (severity bucketing, ruleSets
+ * filtering, helpUrl wiring) rather than constructing reports by hand. Edge
+ * cases (zero findings, missing helpUrl, empty ruleSets) get their own
+ * minimal inline fixtures.
+ */
+import { describe, it, expect } from 'vitest';
+import { normalizeAxeResults } from '../../../src/analyze/a11y/normalize.js';
+import {
+  renderA11yReportMarkdown,
+  renderA11yReportJson,
+} from '../../../src/render/a11y/renderer.js';
+import { A11yReportSchema, type A11yReport } from '../../../src/types/analysis.js';
+import { sampleAxeResults } from '../../fixtures/a11y/sample-axe-results.js';
+
+const sampleReport = normalizeAxeResults(sampleAxeResults, {
+  kind: 'url',
+  ref: 'https://example.com/',
+});
+
+describe('renderA11yReportMarkdown — sample fixture', () => {
+  const md = renderA11yReportMarkdown(sampleReport);
+
+  it('opens with the target ref in an H1', () => {
+    expect(md).toMatch(/^# A11y Report — https:\/\/example\.com\/\n/);
+  });
+
+  it('shows axe engine version and human-readable rule sets', () => {
+    expect(md).toContain('axe-core v4.10.3 · WCAG 2.1 AA + Section 508');
+  });
+
+  it('summarizes violation count + passes + incomplete', () => {
+    expect(md).toContain('**5 violations** · 3 passes · 1 incomplete.');
+  });
+
+  it('groups by severity in critical→serious→moderate→minor order', () => {
+    const idxCritical = md.indexOf('## Critical');
+    const idxSerious = md.indexOf('## Serious');
+    const idxModerate = md.indexOf('## Moderate');
+    const idxMinor = md.indexOf('## Minor');
+    expect(idxCritical).toBeGreaterThan(-1);
+    expect(idxSerious).toBeGreaterThan(idxCritical);
+    expect(idxModerate).toBeGreaterThan(idxSerious);
+    expect(idxMinor).toBeGreaterThan(idxModerate);
+  });
+
+  it('renders the section heading with a per-bucket count', () => {
+    expect(md).toContain('## Critical (2)');
+    expect(md).toContain('## Serious (1)');
+    expect(md).toContain('## Moderate (1)');
+    expect(md).toContain('## Minor (1)');
+  });
+
+  it('renders one row per finding, not per rule', () => {
+    // image-alt has 2 nodes in the fixture → 2 rows in the Critical section.
+    const criticalSection = md
+      .split('## Critical')[1]!
+      .split('## ')[0]!; // up to next section
+    const dataRows = criticalSection
+      .split('\n')
+      .filter((l) => l.startsWith('| ') && !l.startsWith('| Rule '));
+    expect(dataRows).toHaveLength(2);
+    expect(dataRows.every((l) => l.includes('image-alt'))).toBe(true);
+  });
+
+  it('links the rule id to helpUrl when present', () => {
+    expect(md).toContain(
+      '[image-alt](https://dequeuniversity.com/rules/axe/4.10/image-alt)',
+    );
+  });
+
+  it('renders ruleSets as humanized labels', () => {
+    expect(md).toContain('WCAG 2.1 AA, Section 508'); // image-alt row
+    expect(md).toContain('WCAG 2.1 AA |'); // color-contrast row (only wcag)
+    expect(md).toContain('Section 508 |'); // label row (only section508)
+  });
+
+  it('renders empty ruleSets as an em-dash', () => {
+    // best-practice-only finding sits in Minor. (It has a helpUrl in the
+    // fixture so the rule cell renders as a markdown link.)
+    const minorSection = md.split('## Minor')[1]!;
+    expect(minorSection).toContain('best-practice-only');
+    expect(minorSection).toContain('| — |');
+  });
+
+  it('wraps selectors in inline code', () => {
+    expect(md).toContain('`main > img.hero`');
+    expect(md).toContain('`button.cta`');
+    expect(md).toContain('`#search`');
+  });
+
+  it('ends with a trailing newline', () => {
+    expect(md.endsWith('\n')).toBe(true);
+  });
+});
+
+describe('renderA11yReportMarkdown — edge cases', () => {
+  it('emits a clean-report short-circuit when there are no findings', () => {
+    const clean: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://clean.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [],
+      passCount: 42,
+      incompleteCount: 0,
+    });
+    const md = renderA11yReportMarkdown(clean);
+    expect(md).toContain('**Clean — no violations.** 42 passes · 0 incomplete.');
+    expect(md).not.toContain('## Critical');
+    expect(md).not.toContain('## Serious');
+    expect(md).not.toContain('## Moderate');
+    expect(md).not.toContain('## Minor');
+  });
+
+  it('falls back to plain text rule id when helpUrl is missing', () => {
+    const report: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://no-help.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [
+        {
+          ruleId: 'mystery-rule',
+          ruleSets: ['wcag21aa'],
+          severity: 'moderate',
+          selector: 'body',
+          failureSummary: 'Something went wrong',
+        },
+      ],
+      passCount: 0,
+      incompleteCount: 0,
+    });
+    const md = renderA11yReportMarkdown(report);
+    expect(md).toContain('| mystery-rule |');
+    expect(md).not.toContain('](');
+  });
+
+  it('escapes pipe characters inside selectors and issue text', () => {
+    const report: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://pipey.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [
+        {
+          ruleId: 'pipey',
+          ruleSets: ['wcag21aa'],
+          severity: 'minor',
+          selector: 'a[href*="|"]',
+          failureSummary: 'Use a or b | not both',
+        },
+      ],
+      passCount: 0,
+      incompleteCount: 0,
+    });
+    const md = renderA11yReportMarkdown(report);
+    expect(md).toContain('`a[href*="\\|"]`');
+    expect(md).toContain('Use a or b \\| not both');
+  });
+
+  it('collapses multi-line failureSummary into one row line', () => {
+    const report: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://multiline.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [
+        {
+          ruleId: 'multiline',
+          ruleSets: ['wcag21aa'],
+          severity: 'serious',
+          selector: 'p',
+          failureSummary: 'Fix any of the following:\n  Element has no alt\n  Element is hidden',
+        },
+      ],
+      passCount: 0,
+      incompleteCount: 0,
+    });
+    const md = renderA11yReportMarkdown(report);
+    expect(md).toContain(
+      'Fix any of the following: Element has no alt Element is hidden',
+    );
+    // The single row must not contain a raw newline.
+    const seriousSection = md.split('## Serious')[1]!.split('## ')[0]!;
+    const rowLines = seriousSection.split('\n').filter((l) => l.startsWith('| multiline'));
+    expect(rowLines).toHaveLength(1);
+  });
+
+  it('singularizes "violation" when count is 1', () => {
+    const report: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://one.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [
+        {
+          ruleId: 'solo',
+          ruleSets: ['wcag21aa'],
+          severity: 'critical',
+          selector: 'main',
+          failureSummary: 'Something',
+        },
+      ],
+      passCount: 5,
+      incompleteCount: 0,
+    });
+    const md = renderA11yReportMarkdown(report);
+    expect(md).toContain('**1 violation** · 5 passes · 0 incomplete.');
+  });
+});
+
+describe('renderA11yReportJson', () => {
+  it('round-trips through JSON.parse to the original A11yReport', () => {
+    const json = renderA11yReportJson(sampleReport);
+    const parsed = JSON.parse(json);
+    expect(() => A11yReportSchema.parse(parsed)).not.toThrow();
+    expect(parsed).toEqual(sampleReport);
+  });
+
+  it('is pretty-printed with 2-space indent', () => {
+    const json = renderA11yReportJson(sampleReport);
+    expect(json).toContain('\n  "target":');
+    expect(json).toContain('\n  "ruleSet":');
+  });
+});
