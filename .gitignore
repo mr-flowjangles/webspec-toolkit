@@ -2,6 +2,9 @@
 .DS_Store
 Thumbs.db
 
+# Local scratch (design mockups, throwaway HTML, smoke fixtures)
+_tmp/
+
 # Editors
 .vscode/
 .idea/
