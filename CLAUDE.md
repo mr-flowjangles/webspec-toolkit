@@ -4,7 +4,7 @@
 
 ## Current state
 
-**M0–M2 complete; pivoted to a browser-first shift-left scope at v0.3.2.** Foundations (M0, v0.1.0), `Analysis` contract artifact + `LLMProvider` seam with `BedrockAdapter` (M1, v0.2.0), and the Angular `TestPlan` analyzer + Jest renderer (M2, v0.3.0) all shipped. **The unit-test-from-source path (M2) stays in the codebase as foundation but is deferred from the v1 active path** — the v1 mission is shift-left + fail-fast on a live page, not productivity tooling for hand-writing unit tests. v1 active path is now M4 (a11y) + M5 (Chrome extension) + M6 (recording → Playwright with positive/negative scenarios). M3 (CLI for unit-test gen) and M7 (VS Code) deferred from v1.
+**M0–M5 complete; M6 is the only remaining active milestone for v1.** Foundations (M0, v0.1.0), `Analysis` contract artifact + `LLMProvider` seam with `BedrockAdapter` (M1, v0.2.0), Angular `TestPlan` analyzer + Jest renderer (M2, v0.3.0), a11y analyzer + report renderer (M4, v0.3.3–v0.3.9), and the Chrome extension flagship surface — audit + recorder with hardened selectors, dedup, session persistence, navigation capture, and review-gated download (M5, v0.4.x–v0.6.0) — all shipped. **The unit-test-from-source path (M2) stays in the codebase as foundation but is deferred from the v1 active path** — the v1 mission is shift-left + fail-fast on a live page, not productivity tooling for hand-writing unit tests. **M6 (`WorkflowRecording` → Playwright renderer with LLM amplification) is what's left.** M3 (CLI for unit-test gen) and M7 (VS Code) deferred from v1.
 
 ## How to read this repo
 

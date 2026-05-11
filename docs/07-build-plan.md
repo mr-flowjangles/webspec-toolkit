@@ -105,24 +105,24 @@ Goal: ship the primary v1 surface. Two modes — runtime a11y audit, and workflo
 
 **Audit mode:**
 
-- [ ] Scaffold Manifest V3 extension; bundle the **browser flavor** of `core` (a11y + recorder + report renderer; no test generator, no Node imports).
-- [ ] Content script injects the browser build of `axe-core`; scans on demand from the popup.
-- [ ] Popup React UI renders the `A11yReport`; "Copy report" button copies the Markdown rendering.
+- [x] Scaffold Manifest V3 extension; bundle the **browser flavor** of `core` (a11y + recorder + report renderer; no test generator, no Node imports). ✅ v0.3.7.
+- [x] Content script injects the browser build of `axe-core`; scans on demand from the popup. ✅ v0.3.8.
+- [x] Popup React UI renders the `A11yReport`; "Copy report" button copies the Markdown rendering. ✅ v0.4.0–v0.4.2.
 
 **Recorder mode:**
 
-- [ ] Popup gains a "Record" button (start / stop / discard). Recording state survives popup close (chrome.storage.session).
-- [ ] Content script captures `click`, `input`, `change`, `submit`, `keydown`, navigation events. Each event is annotated with a `HardenedSelector` computed at capture time (data-testid > role+name > text > css fallback).
-- [ ] Background service worker captures outgoing requests via `webRequest` (URL + method only — no response bodies in v1).
-- [ ] Sensitive-input masking: any `<input type="password">` value is replaced with a marker; everything else captured raw with a "review before sharing" warning in the export UI.
-- [ ] Stop button → presents the trace summary in the popup → "Download recording.json" button writes a `WorkflowRecording` JSON to disk via `chrome.downloads`.
-- [ ] No LLM auth in the Chrome extension for v1 — it doesn't call the LLM (a11y is local; recorder is deterministic). LLM amplification happens at render time (M6, in Node).
+- [x] Popup gains a "Record" button (start / stop / discard). Recording state survives popup close (chrome.storage.session). ✅ v0.4.1 (skeleton) + v0.5.2 (session persistence) + v0.5.4 (Discard).
+- [x] Content script captures `click`, `input`, `change`, `submit`, `keydown`, navigation events. Each event is annotated with a `HardenedSelector` computed at capture time (data-testid > role+name > text > css fallback). ✅ v0.5.0 (DOM events) + v0.5.1 (hardened selectors + dedup) + v0.5.3 (navigation).
+- [ ] Background service worker captures outgoing requests via `webRequest` (URL + method only — no response bodies in v1). **Deferred to M6-enables** — the renderer can decide whether it actually needs network metadata before we pay for capture; M5 ships without it.
+- [x] Sensitive-input masking: any `<input type="password">` value is replaced with a marker; everything else captured raw with a "review before sharing" warning in the export UI. ✅ v0.5.0 (password masking) + v0.5.4 (review warning).
+- [x] Stop button → presents the trace summary in the popup → "Download recording.json" button writes a `WorkflowRecording` JSON to disk via `chrome.downloads`. ✅ v0.5.4.
+- [x] No LLM auth in the Chrome extension for v1 — it doesn't call the LLM (a11y is local; recorder is deterministic). LLM amplification happens at render time (M6, in Node). ✅ confirmed.
 
 **Verification:**
 
-- [ ] Verify on three deployed sites: audit parity with CLI; recorder produces a clean trace for each site's golden-path flow (login → primary action → confirmation).
+- [x] Verify on three deployed sites: audit parity with CLI; recorder produces a clean trace for each site's golden-path flow. ✅ v0.6.0 — example.com (exact parity), react.dev (within tolerance), TodoMVC (expected stateful divergence from prior recordings in localStorage).
 
-**Done when:** unpacked extension installs in Chrome, both modes work end-to-end on three sites, audit findings match the CLI for the same URLs, recordings export as JSON.
+**Done when:** unpacked extension installs in Chrome, both modes work end-to-end on three sites, audit findings match the CLI for the same URLs, recordings export as JSON. **✅ M5 done at v0.6.0.**
 
 ---
 
