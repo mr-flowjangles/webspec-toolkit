@@ -33,3 +33,15 @@ export { SYSTEM_PROMPT, formatUserPrompt } from './analyze/test-plan/prompt.js';
 // Phase 2 — TestRenderer (TestPlan → Jest .spec.ts text). Pure function;
 // browser-safe (uses string ops, no Node `path`).
 export { renderTestPlan } from './render/test/renderer.js';
+
+// Phase 1 — A11yAnalyzer. The Node-mode analyzer imports `puppeteer` +
+// `@axe-core/puppeteer`; browser bundles (Chrome extension) must exclude
+// `./analyze/a11y/analyzer.js` and call `normalizeAxeResults` directly with
+// their own `AxeResults`.
+export {
+  A11yAnalyzer,
+  DEFAULT_A11Y_TAGS,
+  type AnalyzeUrlOptions as A11yAnalyzeUrlOptions,
+  type AnalyzePageOptions as A11yAnalyzePageOptions,
+} from './analyze/a11y/analyzer.js';
+export { normalizeAxeResults, type NormalizeTarget } from './analyze/a11y/normalize.js';
