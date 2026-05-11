@@ -29,5 +29,11 @@ export default defineManifest({
       run_at: 'document_idle',
     },
   ],
-  permissions: ['activeTab'],
+  permissions: ['activeTab', 'storage'],
+  web_accessible_resources: [
+    {
+      resources: ['src/report/index.html'],
+      matches: ['<all_urls>'],
+    },
+  ],
 });

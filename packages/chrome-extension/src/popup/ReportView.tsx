@@ -20,9 +20,10 @@ const SEVERITY_LABELS: Readonly<Record<A11ySeverity, string>> = {
 interface ReportViewProps {
   report: A11yReport;
   onCopy: () => Promise<boolean>;
+  onOpenFullReport: () => Promise<void>;
 }
 
-export function ReportView({ report, onCopy }: ReportViewProps): JSX.Element {
+export function ReportView({ report, onCopy, onOpenFullReport }: ReportViewProps): JSX.Element {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   async function handleCopyClick(): Promise<void> {
@@ -37,9 +38,14 @@ export function ReportView({ report, onCopy }: ReportViewProps): JSX.Element {
     <section className="report" aria-label="Audit report">
       <div className="report-header">
         <p className="report-summary">{summaryLine(report)}</p>
-        <button type="button" className="copy-btn" onClick={handleCopyClick}>
-          {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Copy failed' : 'Copy as Markdown'}
-        </button>
+        <div className="report-actions">
+          <button type="button" className="open-report-btn" onClick={onOpenFullReport}>
+            Open full report ↗
+          </button>
+          <button type="button" className="copy-btn" onClick={handleCopyClick}>
+            {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Copy failed' : 'Copy as Markdown'}
+          </button>
+        </div>
       </div>
 
       {report.findings.length === 0 ? (

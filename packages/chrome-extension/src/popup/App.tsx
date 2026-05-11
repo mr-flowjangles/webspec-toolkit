@@ -8,7 +8,7 @@ type Status =
   | { kind: 'idle' }
   | { kind: 'running' }
   | { kind: 'error'; message: string }
-  | { kind: 'report'; report: A11yReport };
+  | { kind: 'report'; report: A11yReport; storageKey: string };
 
 export function App(): JSX.Element {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -17,13 +17,19 @@ export function App(): JSX.Element {
     setStatus({ kind: 'running' });
     try {
       const report = await runAuditOnActiveTab();
-      setStatus({ kind: 'report', report });
+      const storageKey = await stashReport(report);
+      setStatus({ kind: 'report', report, storageKey });
     } catch (err) {
       setStatus({
         kind: 'error',
         message: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  async function handleOpenReportClick(storageKey: string): Promise<void> {
+    const url = chrome.runtime.getURL(`src/report/index.html?id=${encodeURIComponent(storageKey)}`);
+    await chrome.tabs.create({ url });
   }
 
   return (
@@ -56,6 +62,7 @@ export function App(): JSX.Element {
         <ReportView
           report={status.report}
           onCopy={() => copyToClipboard(renderA11yReportMarkdown(status.report))}
+          onOpenFullReport={() => handleOpenReportClick(status.storageKey)}
         />
       )}
 
@@ -103,4 +110,14 @@ async function copyToClipboard(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Stash the report under a unique key in `chrome.storage.local` so the report
+ * tab can read it back. Returns the key for the URL query string.
+ */
+async function stashReport(report: A11yReport): Promise<string> {
+  const key = `report:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+  await chrome.storage.local.set({ [key]: report });
+  return key;
 }

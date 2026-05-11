@@ -72,8 +72,7 @@ body {
 
 .report-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 8px;
 }
 
@@ -83,8 +82,22 @@ body {
   font-weight: 500;
 }
 
+.report-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.open-report-btn {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
 .copy-btn {
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-size: 12px;
   border-radius: 4px;
   cursor: pointer;
