@@ -8,7 +8,13 @@
  *
  * No file I/O. No external deps. Mirrors the `renderTestPlan` convention from M2.
  */
-import type { A11yReport, A11ySeverity, Finding } from '../../types/analysis.js';
+import type {
+  A11yReport,
+  A11yRuleStatus,
+  A11ySeverity,
+  Finding,
+  RuleCheck,
+} from '../../types/analysis.js';
 
 /** Highest-impact-first ordering. Drives section order in the markdown output. */
 const SEVERITY_ORDER: readonly A11ySeverity[] = ['critical', 'serious', 'moderate', 'minor'];
@@ -36,21 +42,61 @@ export function renderA11yReportMarkdown(report: A11yReport): string {
   lines.push(formatSummaryLine(report));
   lines.push('');
 
-  if (report.findings.length === 0) {
-    return lines.join('\n').trimEnd() + '\n';
+  if (report.findings.length > 0) {
+    const grouped = groupBySeverity(report.findings);
+    for (const severity of SEVERITY_ORDER) {
+      const bucket = grouped[severity];
+      if (bucket.length === 0) continue;
+      lines.push(`## ${SEVERITY_HEADINGS[severity]} (${bucket.length})`);
+      lines.push('');
+      lines.push(...renderFindingsTable(bucket));
+      lines.push('');
+    }
   }
 
-  const grouped = groupBySeverity(report.findings);
-  for (const severity of SEVERITY_ORDER) {
-    const bucket = grouped[severity];
-    if (bucket.length === 0) continue;
-    lines.push(`## ${SEVERITY_HEADINGS[severity]} (${bucket.length})`);
+  if (report.rulesChecked.length > 0) {
+    const tested = report.rulesChecked.filter((r) => r.status !== 'inapplicable');
+    const inapplicable = report.rulesChecked.filter((r) => r.status === 'inapplicable');
+
+    lines.push(`## Rules checked (${report.rulesChecked.length})`);
     lines.push('');
-    lines.push(...renderFindingsTable(bucket));
+    lines.push(
+      `Every axe rule that ran against this page. If a screen-reader or manual review surfaces an issue not in this list, the audit didn't cover that rule.`,
+    );
     lines.push('');
+
+    if (tested.length > 0) {
+      const reasons = buildFailReasonIndex(report.findings);
+      lines.push(`### Tested (${tested.length})`);
+      lines.push('');
+      lines.push(...renderTestedTable(tested, reasons));
+      lines.push('');
+    }
+
+    if (inapplicable.length > 0) {
+      lines.push(`### Not applicable (${inapplicable.length})`);
+      lines.push('');
+      lines.push(
+        'These rules ran but found no matching elements on the page. Nothing to test.',
+      );
+      lines.push('');
+      lines.push(inapplicable.map((r) => `\`${r.ruleId}\``).join(', '));
+      lines.push('');
+    }
   }
 
   return lines.join('\n').trimEnd() + '\n';
+}
+
+function buildFailReasonIndex(findings: readonly Finding[]): Map<string, string> {
+  const reasons = new Map<string, string>();
+  for (const f of findings) {
+    if (!reasons.has(f.ruleId)) {
+      // Collapse the per-node failureSummary the same way the row renderer does.
+      reasons.set(f.ruleId, f.failureSummary.replace(/\s*\n\s*/g, ' ').trim());
+    }
+  }
+  return reasons;
 }
 
 /**
@@ -123,4 +169,29 @@ function renderSelectorCell(selector: string): string {
 function renderIssueCell(summary: string): string {
   // Collapse newlines (axe failureSummary is multi-line) and escape pipes.
   return summary.replace(/\s*\n\s*/g, ' ').replace(/\|/g, '\\|').trim();
+}
+
+const RULE_STATUS_LABELS: Readonly<Record<A11yRuleStatus, string>> = {
+  fail: 'Fail',
+  pass: 'Pass',
+  incomplete: 'Needs review',
+  inapplicable: 'Not applicable',
+};
+
+function renderTestedTable(
+  checks: readonly RuleCheck[],
+  reasons: ReadonlyMap<string, string>,
+): string[] {
+  const rows: string[] = ['| Rule | Status | Reason |', '|------|--------|--------|'];
+  for (const c of checks) {
+    const reason = c.status === 'fail' ? (reasons.get(c.ruleId) ?? '') : '';
+    rows.push(
+      `| ${c.ruleId} | ${RULE_STATUS_LABELS[c.status]} | ${escapeTableCell(reason) || '—'} |`,
+    );
+  }
+  return rows;
+}
+
+function escapeTableCell(s: string): string {
+  return s.replace(/\|/g, '\\|');
 }

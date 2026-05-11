@@ -126,6 +126,23 @@ export const FindingSchema = z.object({
   helpUrl: z.url().optional(),
 });
 
+/**
+ * Status of an individual axe rule against the audited page.
+ *
+ * Axe reports four buckets per scan: violations (`fail`), passes (`pass`),
+ * incomplete (`incomplete` — axe couldn't determine, needs human review),
+ * and inapplicable (`inapplicable` — no matching elements on the page).
+ * We carry all four in `A11yReport.rulesChecked` so consumers can answer
+ * "did the audit actually test for this?" — important when a screen-reader
+ * or manual check surfaces something the report didn't.
+ */
+export const A11yRuleStatusSchema = z.enum(['pass', 'fail', 'incomplete', 'inapplicable']);
+
+export const RuleCheckSchema = z.object({
+  ruleId: z.string(),
+  status: A11yRuleStatusSchema,
+});
+
 export const A11yReportSchema = z.object({
   target: z.object({
     kind: z.enum(['url', 'dom', 'staticBundle']),
@@ -136,6 +153,13 @@ export const A11yReportSchema = z.object({
     engineVersion: z.string(),
   }),
   findings: z.array(FindingSchema),
+  /**
+   * Every axe rule that ran against the page, with its outcome. Sorted by
+   * `ruleId` for deterministic rendering. Includes the rule IDs behind
+   * `findings` (with `status: 'fail'`), so this is the canonical "what did
+   * the audit cover" list.
+   */
+  rulesChecked: z.array(RuleCheckSchema),
   passCount: z.number().int().nonnegative(),
   incompleteCount: z.number().int().nonnegative(),
 });
@@ -253,7 +277,9 @@ export type TestCase = z.infer<typeof TestCaseSchema>;
 export type TestPlan = z.infer<typeof TestPlanSchema>;
 export type A11yRuleTag = z.infer<typeof A11yRuleTagSchema>;
 export type A11ySeverity = z.infer<typeof A11ySeveritySchema>;
+export type A11yRuleStatus = z.infer<typeof A11yRuleStatusSchema>;
 export type Finding = z.infer<typeof FindingSchema>;
+export type RuleCheck = z.infer<typeof RuleCheckSchema>;
 export type A11yReport = z.infer<typeof A11yReportSchema>;
 export type HardenedSelector = z.infer<typeof HardenedSelectorSchema>;
 export type ObservedState = z.infer<typeof ObservedStateSchema>;
