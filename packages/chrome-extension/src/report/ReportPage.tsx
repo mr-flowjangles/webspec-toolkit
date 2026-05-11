@@ -480,6 +480,7 @@ function humanizeRuleSetsList(tags: readonly string[]): string[] {
   const labels: string[] = [];
   if (tags.some((t) => t.startsWith('wcag'))) labels.push('WCAG 2.1 AA');
   if (tags.includes('section508')) labels.push('Section 508');
+  if (tags.includes('best-practice')) labels.push('Best practice');
   return labels;
 }
 

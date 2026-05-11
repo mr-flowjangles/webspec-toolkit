@@ -112,6 +112,7 @@ function humanizeRuleSets(tags: readonly string[]): string[] {
   const out: string[] = [];
   if (tags.some((t) => t.startsWith('wcag'))) out.push('WCAG 2.1 AA');
   if (tags.includes('section508')) out.push('Section 508');
+  if (tags.includes('best-practice')) out.push('Best practice');
   return out;
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { normalizeAxeResults, renderA11yReportMarkdown } from '@webspec/core/browser';
 import type { A11yReport, WorkflowRecording } from '@webspec/core/browser';
 import type {
@@ -6,6 +6,8 @@ import type {
   AuditResponse,
   RecorderStartRequest,
   RecorderStartResponse,
+  RecorderStatusRequest,
+  RecorderStatusResponse,
   RecorderStopRequest,
   RecorderStopResponse,
 } from '../shared/messages.js';
@@ -33,6 +35,13 @@ type RecorderStatus =
 export function App(): JSX.Element {
   const [audit, setAudit] = useState<AuditStatus>({ kind: 'idle' });
   const [recorder, setRecorder] = useState<RecorderStatus>({ kind: 'idle' });
+
+  // Chrome popups are transient: every close-then-reopen mounts a fresh App
+  // with `recorder: idle`, even though the content-script recorder may still
+  // be running. Ask the content script for ground truth on mount.
+  useEffect(() => {
+    void hydrateRecorderStatus(setRecorder);
+  }, []);
 
   const auditRunning = audit.kind === 'running';
   const recording = recorder.kind === 'recording';
@@ -189,7 +198,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v0.4.2 — report tab design polish</p>
+        <p className="meta">v0.5.0 — recorder events + best-practice rules</p>
       </footer>
     </main>
   );
@@ -198,6 +207,37 @@ export function App(): JSX.Element {
 // ---------------------------------------------------------------------------
 // Active tab helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Ask the active tab's content script whether a recording is already in
+ * progress, and hydrate React state from the answer. Best-effort — if the
+ * tab isn't http(s), or the content script hasn't loaded yet (no Receiving
+ * end), we silently stay in `idle`. The user will see a friendly messaging
+ * error when they next try to start/stop a recording on such a tab anyway.
+ */
+async function hydrateRecorderStatus(
+  setRecorder: (status: RecorderStatus) => void,
+): Promise<void> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url || !/^https?:/i.test(tab.url)) return;
+    const request: RecorderStatusRequest = { type: 'recorder:status' };
+    const response = await chrome.tabs.sendMessage<RecorderStatusRequest, RecorderStatusResponse>(
+      tab.id,
+      request,
+    );
+    if (response.ok && response.recording) {
+      setRecorder({
+        kind: 'recording',
+        startedAt: response.startedAt,
+        startUrl: response.startUrl,
+        tabId: tab.id,
+      });
+    }
+  } catch {
+    // Content script not loaded or messaging blocked; stay idle.
+  }
+}
 
 async function activeHttpTab(): Promise<{ tabId: number; url: string }> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

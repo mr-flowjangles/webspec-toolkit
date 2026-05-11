@@ -128,6 +128,18 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 **Status:** resolved
 **Resolution:** Yes. Original M3 scoped a unified CLI with `init`, `gen`, `audit`, `record-to-spec`. Post-pivot, v1 CLI is just `audit` (ships with M4) and `record-to-spec` (ships with M6). `gen` and `init` deferred. Documented in `07-build-plan.md` "Out of v1 active path."
 
+## (v0.5.0 deferred) LLM-amplified a11y checks — vision-based alt-text quality, link-text quality, heading-outline coherence
+
+**Status:** deferred to post-v1 (Pro tier)
+**Resolution trigger:** the first paying customer asks for "judgment" coverage beyond what static rules can see, OR we hit a competitive gap against Deque/Stark and need parity.
+**Notes:** axe-core checks alt is *present*; it can't judge whether the alt is *good*. Multimodal vision LLMs can: send the image bytes + current alt to a Claude vision model, classify as `good | weak | misleading | decorative-but-marked-content | content-but-marked-decorative`, and produce a suggested alt. Same shape for link-text quality (flag "click here" / "read more") and heading-outline coherence (does the H-hierarchy actually make sense given the content). All three plug into the existing `LLMProvider` seam + `BedrockAdapter` (no new infrastructure).
+
+**Why deferred:** real cost per audit (~$0.05–0.50 for image-heavy pages) eats the pricing flexibility of a free baseline. v1 keeps audits zero-marginal-cost so we can choose the pricing model later (freemium, audit-credits, Pro tier) without rearchitecting. Also: alt-text vision is a parity feature, not the webspec differentiator — the differentiator is shift-left record-and-replay → Playwright with negative scenarios.
+
+**When it activates:** a Pro tier feature, gated by a `webspec.altTextCheck.enabled` (and similar) flag, defaulting off. v0.5.0 already widened axe's tag set to include `best-practice`, which gets us the cheap automated coverage (`landmark-one-main`, `region`, `heading-order`, etc.) without any LLM cost — the obvious next step before turning on paid LLM checks.
+
+---
+
 ## (v0.3.5 surface) Should the a11y rule-set tag filter include `wcag2a` (Level A) too?
 
 **Status:** resolved (v0.3.6)

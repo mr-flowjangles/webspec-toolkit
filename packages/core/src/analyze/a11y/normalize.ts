@@ -18,11 +18,11 @@ import {
 
 /**
  * Axe tags we surface as `ruleSets` on a Finding. Covers WCAG 2.1 AA (both
- * Level A and Level AA criteria across WCAG 2.0 and 2.1) plus Section 508.
- * Everything else axe tags (e.g. `best-practice`, `cat.*`, EN-301-549) is
- * dropped at the contract boundary. Renderers roll the WCAG group into a
- * single "WCAG 2.1 AA" label for display while the contract keeps the
- * granular breakdown for downstream consumers.
+ * Level A and Level AA criteria across WCAG 2.0 and 2.1), Section 508, and
+ * axe's curated best-practice rules (v0.5.0). Other axe categorizations
+ * (`cat.*`, EN-301-549) are dropped at the contract boundary. Renderers
+ * roll the WCAG group into a single "WCAG 2.1 AA" label for display while
+ * the contract keeps the granular breakdown for downstream consumers.
  */
 const SURFACED_TAGS: readonly A11yRuleTag[] = [
   'wcag2a',
@@ -30,6 +30,7 @@ const SURFACED_TAGS: readonly A11yRuleTag[] = [
   'wcag21a',
   'wcag21aa',
   'section508',
+  'best-practice',
 ];
 
 /**

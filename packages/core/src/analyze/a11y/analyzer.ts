@@ -13,10 +13,12 @@ import type { A11yRuleTag, Analysis } from '../../types/analysis.js';
 import { normalizeAxeResults } from './normalize.js';
 
 /**
- * Tags passed to axe-core. Matches the v1 a11y scope: WCAG 2.1 AA + Section 508.
- * Includes Level A tags because "WCAG 2.1 AA compliance" by W3C convention
- * requires meeting Level A criteria too — axe tags rules by the specific
- * criterion (so `image-alt` is `wcag2a`, not `wcag21aa`).
+ * Tags passed to axe-core. Matches the v1 a11y scope: WCAG 2.1 AA + Section 508 +
+ * axe's curated best-practice rules. Level A tags are included because "WCAG 2.1
+ * AA compliance" requires meeting Level A criteria too (axe tags rules by the
+ * specific criterion, so `image-alt` is `wcag2a`, not `wcag21aa`). The
+ * `best-practice` set (v0.5.0) adds ~30 hygiene rules like `landmark-one-main`,
+ * `region`, and `heading-order` that human a11y reviewers tend to flag too.
  */
 export const DEFAULT_A11Y_TAGS: readonly A11yRuleTag[] = [
   'wcag2a',
@@ -24,6 +26,7 @@ export const DEFAULT_A11Y_TAGS: readonly A11yRuleTag[] = [
   'wcag21a',
   'wcag21aa',
   'section508',
+  'best-practice',
 ];
 
 export interface AnalyzeUrlOptions {
