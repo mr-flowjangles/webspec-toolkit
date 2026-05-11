@@ -1,10 +1,10 @@
-# Angular Automated Testing
+# webspec
 
-An LLM-powered toolkit that generates Angular unit tests and runs Section 508 / WCAG audits — shared core with VS Code and Chrome extensions on top, reusable across Bellese projects.
+A browser-based shift-left companion for web app development. The Chrome extension records a user's workflow, audits the page for Section 508 / WCAG issues, and renders the recording into a runnable Playwright spec with positive AND negative scenarios (LLM-amplified). Short feedback loops — catch problems while you're building, not after.
 
 ## Status
 
-**M0 complete (Foundations).** Monorepo scaffold + toolchain wired (pnpm, tsc -b, ESLint, Prettier, Vitest, Docker). CLI `--help` stub builds and ships in the image. **M1 — Contract artifact + LLM provider seam — is next.** See `docs/07-build-plan.md` for the milestone sequence.
+**M5 done at v0.6.0 — Chrome extension flagship surface shipped.** Audit mode (axe-core, WCAG 2.1 AA + Section 508 + best-practice) and recorder mode (hardened selectors, dedup, session persistence, navigation capture, review-then-download) both verified end-to-end on three real public sites. CLI `webspec audit` ships and is at parity with the extension on the same tag set. **M6 — `WorkflowRecording` → Playwright renderer with LLM amplification — is next.** See `docs/07-build-plan.md` for the milestone sequence.
 
 ## Quickstart
 
@@ -31,7 +31,7 @@ make image && make smoke
 ├── Makefile                  # `make help` for available targets
 ├── Dockerfile                # ship target
 ├── docs/                     # design + build plan
-├── packages/                 # monorepo: core, cli, vscode-extension, chrome-extension, config
+├── packages/                 # monorepo: core, cli, chrome-extension, vscode-extension (post-v1), config
 ├── scripts/                  # ceremony scripts (versioning, vendor fetch, etc.)
 ├── infra/terraform/          # AWS deployment (defined when deployment is real)
 └── Versions/                 # one folder per version, with release-notes.md

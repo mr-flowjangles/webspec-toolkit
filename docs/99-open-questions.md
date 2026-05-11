@@ -63,15 +63,13 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 
 ## How will Manifest V3 service-worker constraints affect axe-core invocation in Chrome?
 
-**Status:** open
-**Resolution trigger:** M5 implementation. Specifically: whether axe needs to run in the page (content script) vs the worker, given V3's restrictions on `eval` and lack of `window` in the service worker.
-**Notes:** Current expectation is content-script injection of `axe-core/browser`, with the popup messaging the content script. Worth re-validating with a spike before M5 starts.
+**Status:** resolved (v0.3.8)
+**Resolution:** axe runs in the content script (where the live DOM lives), with the popup messaging the content script. The service worker stays out of the audit hot path; v0.5.2 added it as the chrome.storage.session broker for recorder state, and v0.5.3 added webNavigation listeners — both legitimate service-worker concerns that don't fight the no-`eval`/no-`window` constraints.
 
 ## What's the selector-hardening priority for the recorder?
 
-**Status:** leaning resolved (data-testid > role+name > text > css), confirm at M5 spike
-**Resolution trigger:** M5 spike against three real Bellese sites — if too many elements lack `data-testid` and `aria-label` and the text-based fallback produces brittle selectors, we revisit.
-**Notes:** Playwright's own codegen orders: `getByRole`, `getByLabel`, `getByPlaceholder`, `getByText`, then css. We're prioritizing `data-testid` first because Bellese projects can be coached to add them; the `data-testid` opt-in produces the most stable tests. If a site has no `data-testid` coverage, we fall back to Playwright's order. Document the policy in `04-recorder-protocol.md` once written.
+**Status:** resolved (v0.5.1)
+**Resolution:** `data-testid` (+ `data-test-id`/`data-test`/`data-cy`/`data-qa`) > ARIA role + accessible name > visible text > basic CSS. Each `HardenedSelector` carries `preferred`, `strategy`, and a `fallbacks[]` array. Non-unique selectors (e.g. TodoMVC's three "Toggle Todo" checkboxes) get a Playwright `>> nth=N` disambiguator appended at capture time; the text strategy skips disambiguation because text bubbles through ancestors. Verified end-to-end at v0.6.0 across example.com, react.dev, and TodoMVC.
 
 ## M2 e2e: live Jest verification against a sample Angular 20 app
 
@@ -81,9 +79,8 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 
 ## How does a recording get from the Chrome extension to a Node renderer?
 
-**Status:** leaning resolved (download `recording.json`, point CLI at it), confirm at M5
-**Resolution trigger:** users finding the download flow too clunky. Alternative: a localhost HTTP daemon spun up by `webspec serve`, or a "Send to VS Code" button with the VS Code URL handler.
-**Notes:** v1 ships download-to-disk because it's the lowest-friction path that requires no extra Bellese services. The `Analysis` artifact is JSON anyway, so the file IS the recording — no special transport needed. If users complain, a localhost daemon is the natural next step.
+**Status:** resolved (v0.5.4)
+**Resolution:** Download-to-disk via `chrome.downloads`. Stop button opens a review panel showing duration / event counts / URL trail / sensitive-input warning; the user clicks **Download** to write the `recording.json` or **Discard** to drop it without writing. The file IS the artifact — `webspec record-to-spec <recording.json>` (M6) reads it directly, no special transport. The review-then-download gate addresses the "lowest-friction" concern while giving the user an out for sensitive captures. Localhost daemon / "Send to VS Code" alternatives remain available if user friction emerges in the wild.
 
 ## What gets masked during recording? PHI? PII? Free-text fields?
 

@@ -102,7 +102,8 @@ Usage:
   webspec --help
 
 Commands:
-  audit <url>      Run a WCAG 2.1 AA + Section 508 audit against a live page.
+  audit <url>      Run a WCAG 2.1 AA + Section 508 + best-practice audit
+                   against a live page (matches the extension's tag set).
 
 Options:
   --format md|json   Output format. Defaults to md.

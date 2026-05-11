@@ -8,6 +8,7 @@
 import { writeFile } from 'node:fs/promises';
 import {
   A11yAnalyzer,
+  DEFAULT_A11Y_TAGS,
   renderA11yReportJson,
   renderA11yReportMarkdown,
   type Analysis,
@@ -27,7 +28,10 @@ export async function runAudit(cmd: AuditCommand): Promise<AuditResult> {
   const analysis = await analyzer.analyzeUrl({
     url: cmd.url,
     toolVersion: CLI_VERSION,
-    config: { tags: ['wcag21aa', 'section508'] },
+    // Mirror the actual axe tag set into Analysis.meta.config so reports
+    // truthfully document what was checked. Matches the extension's audit
+    // mode at parity (both rely on DEFAULT_A11Y_TAGS).
+    config: { tags: [...DEFAULT_A11Y_TAGS] },
   });
 
   const rendered = renderAnalysis(analysis, cmd.format);
