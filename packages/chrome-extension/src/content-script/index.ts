@@ -6,7 +6,7 @@
  *   - Recorder: between `recorder:start` and `recorder:stop`, capture DOM
  *     events into a module-scope buffer; return the buffer on stop.
  *
- * v0.5.1 recorder scope:
+ * v0.5.2 recorder scope:
  *   - Captures `click`, `input`, `change`, `submit`, `keydown` events.
  *   - `<input type="password">` is masked: value not captured, sensitive=true.
  *   - `keydown` only captures "significant" keys (Enter/Tab/Escape/Arrows/
@@ -19,7 +19,11 @@
  *     `click` is dropped so one user action yields one event.
  *   - Selectors are hardened at capture time (`data-testid` > role+name >
  *     text > css). See `selectors.ts`.
- *   - State doesn't survive page reload — chrome.storage.session move pending.
+ *   - State persists across page reloads: on each event we push the recording
+ *     snapshot to the service worker, which keeps it in `chrome.storage.session`
+ *     keyed by tab id. On (re)load, we read it back and resume recording. Event
+ *     timestamps are wall-clock-relative so they survive the reset of
+ *     `performance.now()` that comes with a fresh document.
  */
 import axe from 'axe-core';
 import type { RecordedEvent } from '@webspec/core/browser';
@@ -29,6 +33,13 @@ import {
   isRecorderStatusRequest,
   isRecorderStopRequest,
   type AuditResponse,
+  type RecorderSessionClearRequest,
+  type RecorderSessionClearResponse,
+  type RecorderSessionGetRequest,
+  type RecorderSessionGetResponse,
+  type RecorderSessionPutRequest,
+  type RecorderSessionPutResponse,
+  type RecorderSessionState,
   type RecorderStartResponse,
   type RecorderStatusResponse,
   type RecorderStopResponse,
@@ -67,25 +78,59 @@ const SIGNIFICANT_KEYS = new Set([
 console.log('[webspec] content script loaded:', location.href);
 
 // ---------------------------------------------------------------------------
-// Recorder state — module-scope. Lives only while the tab + content script
-// stays alive; state-persistence across page navigations is deferred.
+// Recorder state — module-scope, but mirrored to `chrome.storage.session` via
+// the service worker so it survives a content-script restart (page reload,
+// in-page navigation that re-runs the document). Timestamps are wall-clock
+// relative to `recorderStartMs` so they remain coherent across that restart;
+// `performance.now()` resets to 0 on a new document and is unsafe here.
 // ---------------------------------------------------------------------------
 
 let recorderActive = false;
 let recordedEvents: RecordedEvent[] = [];
-let recorderStartTime = 0;
-// Wall-clock ISO + URL captured at start so the popup can rehydrate its UI
-// after closing and reopening — the popup's React state doesn't survive that
-// but the content script does, so the truth lives here.
+let recorderStartMs = 0;
 let recorderStartedAtIso: string | null = null;
 let recorderStartUrl: string | null = null;
 
 function timestamp(): number {
-  return performance.now() - recorderStartTime;
+  return Date.now() - recorderStartMs;
 }
 
 function selectorFor(target: Element): HardenedSelector {
   return buildHardenedSelector(target);
+}
+
+/**
+ * Push the current recording snapshot to the service worker, which writes it
+ * to `chrome.storage.session` keyed by this tab's id. Fire-and-forget: a
+ * later event will overwrite the snapshot, so a dropped persist is recovered
+ * automatically; awaiting it in an event handler would just slow capture.
+ */
+function persistSession(): void {
+  if (!recorderActive || recorderStartedAtIso === null || recorderStartUrl === null) return;
+  const state: RecorderSessionState = {
+    startedAtIso: recorderStartedAtIso,
+    startUrl: recorderStartUrl,
+    startedAtMs: recorderStartMs,
+    events: recordedEvents,
+  };
+  const request: RecorderSessionPutRequest = { type: 'recorder:session:put', state };
+  void chrome.runtime.sendMessage<RecorderSessionPutRequest, RecorderSessionPutResponse>(request);
+}
+
+function addRecorderListeners(): void {
+  document.addEventListener('click', handleClick, { capture: true });
+  document.addEventListener('input', handleInput, { capture: true });
+  document.addEventListener('change', handleChange, { capture: true });
+  document.addEventListener('submit', handleSubmit, { capture: true });
+  document.addEventListener('keydown', handleKeydown, { capture: true });
+}
+
+function removeRecorderListeners(): void {
+  document.removeEventListener('click', handleClick, { capture: true });
+  document.removeEventListener('input', handleInput, { capture: true });
+  document.removeEventListener('change', handleChange, { capture: true });
+  document.removeEventListener('submit', handleSubmit, { capture: true });
+  document.removeEventListener('keydown', handleKeydown, { capture: true });
 }
 
 function handleClick(ev: MouseEvent): void {
@@ -99,6 +144,7 @@ function handleClick(ev: MouseEvent): void {
     selector: selectorFor(target),
     ...(target.textContent ? { targetText: target.textContent.trim().slice(0, 80) } : {}),
   });
+  persistSession();
 }
 
 function handleInput(ev: Event): void {
@@ -124,6 +170,7 @@ function handleInput(ev: Event): void {
     last.t = timestamp();
     last.value = value;
     last.sensitive = sensitive;
+    persistSession();
     return;
   }
   // A click that just focused this field is redundant once typing follows —
@@ -140,6 +187,7 @@ function handleInput(ev: Event): void {
     value,
     sensitive,
   });
+  persistSession();
 }
 
 function handleChange(ev: Event): void {
@@ -163,6 +211,7 @@ function handleChange(ev: Event): void {
         selector,
         value: String(target.checked),
       });
+      persistSession();
     }
     return;
   }
@@ -173,6 +222,7 @@ function handleChange(ev: Event): void {
       selector: selectorFor(target),
       value: target.value,
     });
+    persistSession();
   }
 }
 
@@ -186,6 +236,7 @@ function handleSubmit(ev: SubmitEvent): void {
     kind: 'submit',
     selector: selectorFor(target),
   });
+  persistSession();
 }
 
 function handleKeydown(ev: KeyboardEvent): void {
@@ -200,6 +251,7 @@ function handleKeydown(ev: KeyboardEvent): void {
     key: ev.key,
     ...(selector ? { selector } : {}),
   });
+  persistSession();
 }
 
 function startRecorder(): RecorderStartResponse {
@@ -207,15 +259,12 @@ function startRecorder(): RecorderStartResponse {
     return { ok: false, error: 'Recorder already running in this tab.' };
   }
   recordedEvents = [];
-  recorderStartTime = performance.now();
-  recorderStartedAtIso = new Date().toISOString();
+  recorderStartMs = Date.now();
+  recorderStartedAtIso = new Date(recorderStartMs).toISOString();
   recorderStartUrl = location.href;
   recorderActive = true;
-  document.addEventListener('click', handleClick, { capture: true });
-  document.addEventListener('input', handleInput, { capture: true });
-  document.addEventListener('change', handleChange, { capture: true });
-  document.addEventListener('submit', handleSubmit, { capture: true });
-  document.addEventListener('keydown', handleKeydown, { capture: true });
+  addRecorderListeners();
+  persistSession();
   return { ok: true, startedAt: recorderStartedAtIso, startUrl: recorderStartUrl };
 }
 
@@ -226,15 +275,64 @@ function stopRecorder(): RecorderStopResponse {
   recorderActive = false;
   recorderStartedAtIso = null;
   recorderStartUrl = null;
-  document.removeEventListener('click', handleClick, { capture: true });
-  document.removeEventListener('input', handleInput, { capture: true });
-  document.removeEventListener('change', handleChange, { capture: true });
-  document.removeEventListener('submit', handleSubmit, { capture: true });
-  document.removeEventListener('keydown', handleKeydown, { capture: true });
+  removeRecorderListeners();
   const events = recordedEvents;
   recordedEvents = [];
+  const clearRequest: RecorderSessionClearRequest = { type: 'recorder:session:clear' };
+  void chrome.runtime.sendMessage<RecorderSessionClearRequest, RecorderSessionClearResponse>(
+    clearRequest,
+  );
   return { ok: true, endedAt: new Date().toISOString(), events };
 }
+
+/**
+ * On every content-script load, check whether the service worker has a
+ * persisted recording for this tab. If so, restore in-memory state and
+ * rebind event listeners so capture continues seamlessly. Resolves when
+ * the bootstrap is complete; the message router awaits this before
+ * answering popup queries to avoid a race where a status query lands
+ * during the async restore.
+ *
+ * Retries: the service worker can be idle-terminated between reloads, and
+ * Chrome occasionally drops the first message that arrives during cold
+ * start. We retry up to three times with backoff before giving up.
+ */
+async function bootstrapRecorder(): Promise<void> {
+  const request: RecorderSessionGetRequest = { type: 'recorder:session:get' };
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await chrome.runtime.sendMessage<
+        RecorderSessionGetRequest,
+        RecorderSessionGetResponse
+      >(request);
+      if (!response.ok) {
+        console.warn(`[webspec] bootstrap attempt ${attempt} returned error:`, response.error);
+        await sleep(50 * attempt);
+        continue;
+      }
+      if (response.state === null) return;
+      const state = response.state;
+      recordedEvents = state.events;
+      recorderStartMs = state.startedAtMs;
+      recorderStartedAtIso = state.startedAtIso;
+      recorderStartUrl = state.startUrl;
+      recorderActive = true;
+      addRecorderListeners();
+      console.log('[webspec] recorder resumed:', state.events.length, 'events buffered');
+      return;
+    } catch (err) {
+      console.warn(`[webspec] bootstrap attempt ${attempt} rejected:`, err);
+      await sleep(50 * attempt);
+    }
+  }
+  console.error('[webspec] bootstrap failed after 3 attempts; recording state lost');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const bootstrapPromise = bootstrapRecorder();
 
 function getRecorderStatus(): RecorderStatusResponse {
   if (!recorderActive || recorderStartedAtIso === null || recorderStartUrl === null) {
@@ -272,19 +370,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true; // async response
   }
 
+  // Recorder messages wait on bootstrap so a popup query that lands during
+  // the async restore on page reload still sees the resumed state.
   if (isRecorderStartRequest(message)) {
-    sendResponse(startRecorder());
-    return false;
+    void bootstrapPromise.then(() => sendResponse(startRecorder()));
+    return true;
   }
 
   if (isRecorderStopRequest(message)) {
-    sendResponse(stopRecorder());
-    return false;
+    void bootstrapPromise.then(() => sendResponse(stopRecorder()));
+    return true;
   }
 
   if (isRecorderStatusRequest(message)) {
-    sendResponse(getRecorderStatus());
-    return false;
+    void bootstrapPromise.then(() => sendResponse(getRecorderStatus()));
+    return true;
   }
 
   return false;

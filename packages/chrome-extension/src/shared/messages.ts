@@ -4,12 +4,16 @@
  * Kept in `src/shared/` so both entry points import the same definition —
  * no risk of the popup and content script drifting on the wire format.
  *
- * Two flows today:
+ * Three flows today:
  *   - audit: popup → content script, single round-trip with AxeResults back.
  *   - recorder: popup → content script start, content script captures events
  *     into module-scope state, popup → content script stop returns the array.
- *     v0.5.0 captures click + input + change + submit + keydown; hardened
- *     selectors, navigation tracking, and network capture are still pending.
+ *     v0.5.0 captures click + input + change + submit + keydown; v0.5.1 adds
+ *     hardened selectors + event dedup.
+ *   - recorder session: content script ↔ service worker. The service worker
+ *     persists the in-flight recording in `chrome.storage.session` keyed by
+ *     `sender.tab.id`, so a page reload (or any other content-script restart)
+ *     doesn't drop the recording. v0.5.2.
  */
 import type { AxeResults } from 'axe-core';
 import type { RecordedEvent } from '@webspec/core/browser';
@@ -76,6 +80,60 @@ export function isRecorderStopRequest(value: unknown): value is RecorderStopRequ
 
 export function isRecorderStatusRequest(value: unknown): value is RecorderStatusRequest {
   return isObjectWithType(value, 'recorder:status');
+}
+
+// ---------------------------------------------------------------------------
+// Recorder session persistence (v0.5.2 — content script ↔ service worker)
+//
+// The service worker reads/writes `chrome.storage.session` keyed by
+// `sender.tab.id` so the content script doesn't need to know its own tabId
+// (Chrome doesn't expose `chrome.tabs.getCurrent()` to content scripts).
+// One key per tab; one recording at a time per tab.
+// ---------------------------------------------------------------------------
+
+/**
+ * Snapshot persisted between content-script restarts. `startedAtMs` is a
+ * wall-clock `Date.now()` value; event timestamps are recomputed relative
+ * to it so a page reload doesn't reset the recording timeline.
+ */
+export interface RecorderSessionState {
+  startedAtIso: string;
+  startUrl: string;
+  startedAtMs: number;
+  events: RecordedEvent[];
+}
+
+export interface RecorderSessionGetRequest {
+  type: 'recorder:session:get';
+}
+
+export interface RecorderSessionPutRequest {
+  type: 'recorder:session:put';
+  state: RecorderSessionState;
+}
+
+export interface RecorderSessionClearRequest {
+  type: 'recorder:session:clear';
+}
+
+export type RecorderSessionGetResponse =
+  | { ok: true; state: RecorderSessionState | null }
+  | { ok: false; error: string };
+
+export type RecorderSessionPutResponse = { ok: true } | { ok: false; error: string };
+
+export type RecorderSessionClearResponse = { ok: true } | { ok: false; error: string };
+
+export function isRecorderSessionGetRequest(value: unknown): value is RecorderSessionGetRequest {
+  return isObjectWithType(value, 'recorder:session:get');
+}
+
+export function isRecorderSessionPutRequest(value: unknown): value is RecorderSessionPutRequest {
+  return isObjectWithType(value, 'recorder:session:put');
+}
+
+export function isRecorderSessionClearRequest(value: unknown): value is RecorderSessionClearRequest {
+  return isObjectWithType(value, 'recorder:session:clear');
 }
 
 // ---------------------------------------------------------------------------
