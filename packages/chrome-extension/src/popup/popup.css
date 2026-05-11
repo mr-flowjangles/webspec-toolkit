@@ -97,6 +97,174 @@ body {
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
+/* Post-stop review panel ----------------------------------------------- */
+
+.trace-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.trace-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.trace-panel-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trace-duration {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.trace-stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+
+.trace-stats dt {
+  opacity: 0.7;
+}
+
+.trace-stats dd {
+  margin: 0;
+}
+
+.trace-stats strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.trace-kinds {
+  opacity: 0.72;
+  font-size: 11px;
+}
+
+.trace-urls > summary {
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.trace-urls > summary::-webkit-details-marker {
+  display: none;
+}
+
+.trace-urls > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 12px;
+  font-size: 10px;
+  transition: transform 100ms ease;
+}
+
+.trace-urls[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.trace-urls .count {
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.trace-url-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+}
+
+.trace-url-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.trace-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.trace-url-reason {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.trace-url-reload {
+  background: color-mix(in srgb, #d35400 16%, transparent);
+  color: #d35400;
+}
+
+.trace-url-navigate {
+  background: color-mix(in srgb, #2980b9 16%, transparent);
+  color: #2980b9;
+}
+
+.trace-warning {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 6px;
+  background: color-mix(in srgb, #b7950b 12%, transparent);
+  border-left: 3px solid #b7950b;
+}
+
+.trace-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.trace-download-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.trace-download-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.trace-discard-btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.78;
+}
+
 .report {
   display: flex;
   flex-direction: column;
