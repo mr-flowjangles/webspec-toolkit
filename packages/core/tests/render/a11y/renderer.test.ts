@@ -231,11 +231,31 @@ describe('renderA11yReportMarkdown — Rules checked appendix', () => {
     );
   });
 
-  it('lists each rule with its humanized status', () => {
-    expect(md).toContain('| image-alt | Fail |');
-    expect(md).toContain('| document-title | Pass |');
-    expect(md).toContain('| aria-allowed-attr | Needs review |');
-    expect(md).toContain('| audio-caption | Not applicable |');
+  it('splits into Tested and Not applicable subsections with per-bucket counts', () => {
+    // 8 applicable rules (4 fail + 3 pass + 1 incomplete) + 1 inapplicable.
+    expect(md).toContain('### Tested (8)');
+    expect(md).toContain('### Not applicable (1)');
+  });
+
+  it('Tested subsection has rule + status + reason columns', () => {
+    expect(md).toContain('| Rule | Status | Reason |');
+    expect(md).toContain('| document-title | Pass | — |'); // pass row, em-dash for no reason
+    expect(md).toContain('| aria-allowed-attr | Needs review | — |'); // incomplete, no reason
+  });
+
+  it('includes a failure reason on Fail rows, drawn from the matching finding', () => {
+    expect(md).toMatch(/\| image-alt \| Fail \| Fix any of the following: Element does not have an alt attribute \|/);
+    expect(md).toMatch(/\| color-contrast \| Fail \| Fix any of the following: contrast 2\.1:1 is below 4\.5:1 \|/);
+  });
+
+  it('renders Not applicable as a comma-separated rule list (not a table)', () => {
+    const notApplicableSection = md.split('### Not applicable')[1] ?? '';
+    expect(notApplicableSection).toContain('`audio-caption`');
+    expect(notApplicableSection).not.toContain('| Rule | Status |');
+  });
+
+  it('explains the Not applicable subsection so readers know it is not a coverage gap', () => {
+    expect(md).toContain('These rules ran but found no matching elements on the page.');
   });
 
   it('omits the appendix when rulesChecked is empty', () => {
@@ -264,7 +284,23 @@ describe('renderA11yReportMarkdown — Rules checked appendix', () => {
     });
     const out = renderA11yReportMarkdown(clean);
     expect(out).toContain('## Rules checked (2)');
+    expect(out).toContain('### Tested (2)');
     expect(out).toContain('| document-title | Pass |');
+    expect(out).not.toContain('### Not applicable');
+  });
+
+  it('skips the Tested subsection when only inapplicable rules ran', () => {
+    const onlyInapplicable: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://void.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [],
+      rulesChecked: [{ ruleId: 'audio-caption', status: 'inapplicable' }],
+      passCount: 0,
+      incompleteCount: 0,
+    });
+    const out = renderA11yReportMarkdown(onlyInapplicable);
+    expect(out).toContain('### Not applicable (1)');
+    expect(out).not.toContain('### Tested');
   });
 });
 

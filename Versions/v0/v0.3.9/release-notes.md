@@ -12,8 +12,14 @@ Carry the granular per-rule outcome through the contract artifact and surface it
 
 - **Contract extension.** `A11yReport` now carries `rulesChecked: { ruleId, status }[]`. Status is one of `fail | pass | incomplete | inapplicable` (axe's four buckets per scan). Sorted by `ruleId` for deterministic rendering. Inclusive — every rule axe ran is in the list, with the rule IDs behind `findings` showing as `status: 'fail'`.
 - **`normalizeAxeResults`** flattens axe's `violations + passes + incomplete + inapplicable` buckets into the single sorted list. Dedupes defensively even though axe already puts each rule in exactly one bucket per scan.
-- **Markdown renderer** gets a `## Rules checked (N)` appendix after the violation sections, with a one-line explainer ("If a screen-reader or manual review surfaces an issue not in this list, the audit didn't cover that rule.") and a two-column table (`rule | status`). The appendix emits on clean-but-still-scanned reports too — that's the most valuable case, since "clean" + an enumerated rule list lets a reviewer confirm scope.
-- **Popup** gets a collapsible `<details>` panel labeled "Rules checked (N)" below the findings. Default collapsed so it doesn't bury violations. Each row: rule ID + color-coded status pill (red Fail / green Pass / orange Needs review / muted N/A). Default-collapsed; user expands when they want to verify scope.
+- **Markdown renderer** gets a `## Rules checked (N)` appendix after the violation sections, with an explainer and **two subsections** so signal isn't drowned by noise:
+  - `### Tested (N)` — rules that ran with a meaningful outcome (pass / fail / incomplete). Table columns: `rule | status | reason`. The reason column carries the per-finding `failureSummary` for fail rows; em-dash for pass/incomplete.
+  - `### Not applicable (M)` — rules that ran but found no matching elements on the page. Rendered as a comma-separated rule list (not a table) since "N/A" status is implicit. Includes an explainer ("These rules ran but found no matching elements on the page. Nothing to test.") so readers don't mistake this for a coverage gap.
+  The appendix emits on clean-but-still-scanned reports too — "clean" + an enumerated rule list lets a reviewer confirm scope.
+- **Popup** gets a `<details>` panel split the same way:
+  - **Tested** panel (default open) — each rule on its own row with a color-coded status pill (red Fail / green Pass / orange Needs review). Fail rows include a quoted reason line styled with a red accent.
+  - **Not applicable** panel (default collapsed) — comma-separated list of rule IDs with a one-line explainer.
+  Default state lets the user see scope at a glance without scrolling past 47 inapplicable rules to find the meaningful ones.
 
 When something bites the user that wasn't in the report, they now open this panel, look up the rule, and have one of two honest answers:
 1. **The rule was checked and passed/incomplete/inapplicable** → axe's check was wrong or too narrow; flag upstream or augment.
@@ -26,8 +32,8 @@ Either way, the audit's coverage is no longer a black box.
 - `A11yRuleStatusSchema` + `RuleCheckSchema` in the contract (`packages/core/src/types/analysis.ts`).
 - `rulesChecked` field on `A11yReport`.
 - `collectRuleChecks` helper in `normalizeAxeResults`.
-- `RulesCheckedPanel` React component in the extension popup.
-- 11 new tests across normalize (`rulesChecked` bucket flattening + dedup + sort) and renderer (appendix emission, status labels, omit-when-empty, emit-on-clean-with-rules).
+- `RulesCheckedPanels` React component in the extension popup — two collapsible `<details>` panels (Tested + Not applicable).
+- 16 new tests across normalize (`rulesChecked` bucket flattening + dedup + sort) and renderer (split-subsection structure, reason column on Fail rows, comma-list inapplicable rendering, skip-empty-subsection cases).
 - Sample fixture: one `inapplicable` rule added so all four status buckets are exercised.
 
 ## Changed
@@ -55,7 +61,7 @@ Either way, the audit's coverage is no longer a black box.
 
 ## Verification
 
-`make ci` green: lint clean, **121/121 tests pass** (11 new), library build clean, extension Vite bundle clean.
+`make ci` green: lint clean, **126/126 tests pass** (16 new), library build clean, extension Vite bundle clean.
 
 ### Live smoke
 
@@ -63,5 +69,5 @@ Either way, the audit's coverage is no longer a black box.
 2. `chrome://extensions` → reload the webspec card.
 3. **CLI side:** `node packages/cli/dist/index.js audit https://example.com` — output now ends with a `## Rules checked (16)` table listing every rule axe ran. Useful to confirm CLI/popup parity.
 4. **Extension side:** open `https://example.com`, click webspec, **Audit this tab**.
-   - **Expected:** "Clean — N passes · M incomplete." summary, **Copy as Markdown** button, then a collapsed `▸ Rules checked (16)` panel. Click it → expanded list of rule IDs with green Pass / muted N/A pills. The explainer line reminds the reader the list is the audit's scope of coverage.
-5. Click **Copy as Markdown** → paste — output now includes the appendix; matches what the CLI emits.
+   - **Expected:** "Clean — N passes · M incomplete." summary, **Copy as Markdown** button, then an explainer line and two `<details>` panels: **Tested (M)** open by default with green Pass pills + (if any) red Fail pills with quoted reasons, and **Not applicable (K)** collapsed showing the comma-separated rule list when expanded.
+5. Click **Copy as Markdown** → paste — output now includes the appendix split into `### Tested` and `### Not applicable` subsections; matches what the CLI emits.

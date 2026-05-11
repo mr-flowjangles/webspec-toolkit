@@ -63,7 +63,9 @@ export function ReportView({ report, onCopy }: ReportViewProps): JSX.Element {
         })
       )}
 
-      {report.rulesChecked.length > 0 && <RulesCheckedPanel rules={report.rulesChecked} />}
+      {report.rulesChecked.length > 0 && (
+        <RulesCheckedPanels rules={report.rulesChecked} findings={report.findings} />
+      )}
     </section>
   );
 }
@@ -75,26 +77,77 @@ const STATUS_LABELS: Readonly<Record<A11yRuleStatus, string>> = {
   inapplicable: 'N/A',
 };
 
-function RulesCheckedPanel({ rules }: { rules: readonly RuleCheck[] }): JSX.Element {
+interface RulesPanelsProps {
+  rules: readonly RuleCheck[];
+  findings: readonly Finding[];
+}
+
+function RulesCheckedPanels({ rules, findings }: RulesPanelsProps): JSX.Element {
+  const tested = rules.filter((r) => r.status !== 'inapplicable');
+  const inapplicable = rules.filter((r) => r.status === 'inapplicable');
+  const reasonByRule = buildFailReasonIndex(findings);
+
   return (
-    <details className="rules-checked">
-      <summary>
-        Rules checked <span className="count">({rules.length})</span>
-      </summary>
+    <div className="rules-checked-group">
       <p className="rules-checked-hint">
         Every axe rule that ran against this page. If a screen-reader or manual review surfaces
         something not in this list, the audit didn&apos;t cover that rule.
       </p>
-      <ul className="rules-list">
-        {rules.map((r) => (
-          <li key={r.ruleId} className={`rule rule-${r.status}`}>
-            <code>{r.ruleId}</code>
-            <span className="rule-status">{STATUS_LABELS[r.status]}</span>
-          </li>
-        ))}
-      </ul>
-    </details>
+
+      {tested.length > 0 && (
+        <details className="rules-checked" open>
+          <summary>
+            Tested <span className="count">({tested.length})</span>
+          </summary>
+          <ul className="rules-list">
+            {tested.map((r) => (
+              <li key={r.ruleId} className={`rule rule-${r.status}`}>
+                <div className="rule-row">
+                  <code>{r.ruleId}</code>
+                  <span className="rule-status">{STATUS_LABELS[r.status]}</span>
+                </div>
+                {r.status === 'fail' && reasonByRule.has(r.ruleId) && (
+                  <p className="rule-reason">{reasonByRule.get(r.ruleId)}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {inapplicable.length > 0 && (
+        <details className="rules-checked">
+          <summary>
+            Not applicable <span className="count">({inapplicable.length})</span>
+          </summary>
+          <p className="rules-checked-hint inapplicable-hint">
+            These rules ran but found no matching elements on the page. Nothing to test.
+          </p>
+          <p className="inapplicable-list">
+            {inapplicable.map((r, i) => (
+              <span key={r.ruleId}>
+                <code>{r.ruleId}</code>
+                {i < inapplicable.length - 1 ? ', ' : ''}
+              </span>
+            ))}
+          </p>
+        </details>
+      )}
+    </div>
   );
+}
+
+/**
+ * Build a ruleId → first-failureSummary map so each fail row in the "Tested"
+ * panel can show why the rule failed. axe's failureSummary is per-node; we
+ * surface the first node's reason since they're usually the same family.
+ */
+function buildFailReasonIndex(findings: readonly Finding[]): Map<string, string> {
+  const reasons = new Map<string, string>();
+  for (const f of findings) {
+    if (!reasons.has(f.ruleId)) reasons.set(f.ruleId, collapseWhitespace(f.failureSummary));
+  }
+  return reasons;
 }
 
 function FindingItem({ finding }: { finding: Finding }): JSX.Element {

@@ -55,17 +55,48 @@ export function renderA11yReportMarkdown(report: A11yReport): string {
   }
 
   if (report.rulesChecked.length > 0) {
+    const tested = report.rulesChecked.filter((r) => r.status !== 'inapplicable');
+    const inapplicable = report.rulesChecked.filter((r) => r.status === 'inapplicable');
+
     lines.push(`## Rules checked (${report.rulesChecked.length})`);
     lines.push('');
     lines.push(
-      `Every axe rule that ran against this page, with its outcome. If a screen-reader or manual review surfaces an issue not in this list, the audit didn't cover that rule.`,
+      `Every axe rule that ran against this page. If a screen-reader or manual review surfaces an issue not in this list, the audit didn't cover that rule.`,
     );
     lines.push('');
-    lines.push(...renderRuleCheckTable(report.rulesChecked));
-    lines.push('');
+
+    if (tested.length > 0) {
+      const reasons = buildFailReasonIndex(report.findings);
+      lines.push(`### Tested (${tested.length})`);
+      lines.push('');
+      lines.push(...renderTestedTable(tested, reasons));
+      lines.push('');
+    }
+
+    if (inapplicable.length > 0) {
+      lines.push(`### Not applicable (${inapplicable.length})`);
+      lines.push('');
+      lines.push(
+        'These rules ran but found no matching elements on the page. Nothing to test.',
+      );
+      lines.push('');
+      lines.push(inapplicable.map((r) => `\`${r.ruleId}\``).join(', '));
+      lines.push('');
+    }
   }
 
   return lines.join('\n').trimEnd() + '\n';
+}
+
+function buildFailReasonIndex(findings: readonly Finding[]): Map<string, string> {
+  const reasons = new Map<string, string>();
+  for (const f of findings) {
+    if (!reasons.has(f.ruleId)) {
+      // Collapse the per-node failureSummary the same way the row renderer does.
+      reasons.set(f.ruleId, f.failureSummary.replace(/\s*\n\s*/g, ' ').trim());
+    }
+  }
+  return reasons;
 }
 
 /**
@@ -147,10 +178,20 @@ const RULE_STATUS_LABELS: Readonly<Record<A11yRuleStatus, string>> = {
   inapplicable: 'Not applicable',
 };
 
-function renderRuleCheckTable(checks: readonly RuleCheck[]): string[] {
-  const rows: string[] = ['| Rule | Status |', '|------|--------|'];
+function renderTestedTable(
+  checks: readonly RuleCheck[],
+  reasons: ReadonlyMap<string, string>,
+): string[] {
+  const rows: string[] = ['| Rule | Status | Reason |', '|------|--------|--------|'];
   for (const c of checks) {
-    rows.push(`| ${c.ruleId} | ${RULE_STATUS_LABELS[c.status]} |`);
+    const reason = c.status === 'fail' ? (reasons.get(c.ruleId) ?? '') : '';
+    rows.push(
+      `| ${c.ruleId} | ${RULE_STATUS_LABELS[c.status]} | ${escapeTableCell(reason) || '—'} |`,
+    );
   }
   return rows;
+}
+
+function escapeTableCell(s: string): string {
+  return s.replace(/\|/g, '\\|');
 }
