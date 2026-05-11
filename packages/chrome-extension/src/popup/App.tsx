@@ -12,6 +12,7 @@ import type {
   RecorderStopResponse,
 } from '../shared/messages.js';
 import { ReportView } from './ReportView.js';
+import { RecordingSummaryPanel } from './RecordingSummaryPanel.js';
 
 type AuditStatus =
   | { kind: 'idle' }
@@ -30,7 +31,9 @@ type RecorderStatus =
     }
   | { kind: 'stopping' }
   | { kind: 'error'; message: string }
-  | { kind: 'recorded'; filename: string; events: number };
+  | { kind: 'review'; recording: WorkflowRecording }
+  | { kind: 'saved'; filename: string; events: number }
+  | { kind: 'discarded' };
 
 export function App(): JSX.Element {
   const [audit, setAudit] = useState<AuditStatus>({ kind: 'idle' });
@@ -69,7 +72,7 @@ export function App(): JSX.Element {
 
   async function handleRecordToggle(): Promise<void> {
     if (recording) {
-      await stopAndExportRecording(recorder.tabId, recorder.startedAt, recorder.startUrl);
+      await stopAndReviewRecording(recorder.tabId, recorder.startedAt, recorder.startUrl);
       return;
     }
     await startRecording();
@@ -99,7 +102,7 @@ export function App(): JSX.Element {
     }
   }
 
-  async function stopAndExportRecording(
+  async function stopAndReviewRecording(
     tabId: number,
     startedAt: string,
     startUrl: string,
@@ -122,15 +125,30 @@ export function App(): JSX.Element {
         framework: 'playwright',
       };
 
-      const filename = `recording-${stamp(startedAt)}.json`;
-      await downloadJson(recording, filename);
-      setRecorder({ kind: 'recorded', filename, events: response.events.length });
+      setRecorder({ kind: 'review', recording });
     } catch (err) {
       setRecorder({
         kind: 'error',
         message: friendlyMessagingError(err),
       });
     }
+  }
+
+  async function handleDownloadRecording(recording: WorkflowRecording): Promise<void> {
+    const filename = `recording-${stamp(recording.startedAt)}.json`;
+    try {
+      await downloadJson(recording, filename);
+      setRecorder({ kind: 'saved', filename, events: recording.events.length });
+    } catch (err) {
+      setRecorder({
+        kind: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  function handleDiscardRecording(): void {
+    setRecorder({ kind: 'discarded' });
   }
 
   return (
@@ -182,10 +200,24 @@ export function App(): JSX.Element {
         </p>
       )}
 
-      {recorder.kind === 'recorded' && (
+      {recorder.kind === 'review' && (
+        <RecordingSummaryPanel
+          recording={recorder.recording}
+          onDownload={() => handleDownloadRecording(recorder.recording)}
+          onDiscard={handleDiscardRecording}
+        />
+      )}
+
+      {recorder.kind === 'saved' && (
         <p className="recorder-success" role="status">
           Saved <code>{recorder.filename}</code> ({recorder.events}{' '}
           event{recorder.events === 1 ? '' : 's'}).
+        </p>
+      )}
+
+      {recorder.kind === 'discarded' && (
+        <p className="recorder-banner" role="status">
+          Recording discarded — nothing saved.
         </p>
       )}
 
@@ -198,7 +230,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v0.5.1 — hardened recorder selectors</p>
+        <p className="meta">v0.5.4 — trace preview + share warning</p>
       </footer>
     </main>
   );
