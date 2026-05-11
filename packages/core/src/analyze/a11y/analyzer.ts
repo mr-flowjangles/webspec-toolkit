@@ -12,8 +12,19 @@ import puppeteer, { type Browser, type Page } from 'puppeteer';
 import type { A11yRuleTag, Analysis } from '../../types/analysis.js';
 import { normalizeAxeResults } from './normalize.js';
 
-/** Tags passed to axe-core. Matches the v1 a11y scope: WCAG 2.1 AA + Section 508. */
-export const DEFAULT_A11Y_TAGS: readonly A11yRuleTag[] = ['wcag21aa', 'section508'];
+/**
+ * Tags passed to axe-core. Matches the v1 a11y scope: WCAG 2.1 AA + Section 508.
+ * Includes Level A tags because "WCAG 2.1 AA compliance" by W3C convention
+ * requires meeting Level A criteria too — axe tags rules by the specific
+ * criterion (so `image-alt` is `wcag2a`, not `wcag21aa`).
+ */
+export const DEFAULT_A11Y_TAGS: readonly A11yRuleTag[] = [
+  'wcag2a',
+  'wcag2aa',
+  'wcag21a',
+  'wcag21aa',
+  'section508',
+];
 
 export interface AnalyzeUrlOptions {
   url: string;

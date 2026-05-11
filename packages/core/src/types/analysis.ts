@@ -98,7 +98,21 @@ export const TestPlanSchema = z.object({
 // Variant 2 — A11yReport (axe-core findings, WCAG 2.1 AA + Section 508)
 // ---------------------------------------------------------------------------
 
-export const A11yRuleTagSchema = z.enum(['wcag21aa', 'section508']);
+/**
+ * Rule-set tags surfaced on each `Finding.ruleSets` and on `A11yReport.ruleSet.tags`.
+ *
+ * "WCAG 2.1 AA compliance" per W3C convention means meeting Level A + Level AA
+ * criteria, so the WCAG set covers four axe tags: `wcag2a`, `wcag2aa`, `wcag21a`,
+ * `wcag21aa`. Renderers roll these up to a single "WCAG 2.1 AA" label for display
+ * while the contract preserves the granular breakdown for downstream consumers.
+ */
+export const A11yRuleTagSchema = z.enum([
+  'wcag2a',
+  'wcag2aa',
+  'wcag21a',
+  'wcag21aa',
+  'section508',
+]);
 
 export const A11ySeveritySchema = z.enum(['minor', 'moderate', 'serious', 'critical']);
 

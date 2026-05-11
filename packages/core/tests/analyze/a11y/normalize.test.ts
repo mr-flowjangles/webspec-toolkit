@@ -25,9 +25,9 @@ describe('normalizeAxeResults', () => {
     expect(report.target).toEqual({ kind: 'url', ref: 'https://example.com/' });
   });
 
-  it('records the axe engine version and the surfaced rule tags', () => {
+  it('records the axe engine version and the full surfaced-tag set', () => {
     expect(report.ruleSet).toEqual({
-      tags: ['wcag21aa', 'section508'],
+      tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'section508'],
       engineVersion: '4.10.3',
     });
   });
@@ -44,22 +44,26 @@ describe('normalizeAxeResults', () => {
   });
 
   describe('ruleSets filtering', () => {
-    it('keeps both surfaced tags when axe tags include both', () => {
+    it('surfaces every matching WCAG level + Section 508 when axe tags include them', () => {
+      // image-alt fixture is tagged wcag2a + wcag21aa + section508.
       const imageAlt = report.findings.find((f) => f.ruleId === 'image-alt');
-      expect(imageAlt?.ruleSets).toEqual(['wcag21aa', 'section508']);
+      expect(imageAlt?.ruleSets).toEqual(['wcag2a', 'wcag21aa', 'section508']);
     });
 
-    it('keeps only wcag21aa when axe tags lack section508', () => {
+    it('preserves multiple WCAG-only tags without section508', () => {
+      // color-contrast is tagged wcag2aa + wcag21aa (Level AA on both lines).
       const contrast = report.findings.find((f) => f.ruleId === 'color-contrast');
-      expect(contrast?.ruleSets).toEqual(['wcag21aa']);
+      expect(contrast?.ruleSets).toEqual(['wcag2aa', 'wcag21aa']);
     });
 
-    it('keeps only section508 when axe tags lack wcag21aa', () => {
+    it('surfaces Level A WCAG tags alongside section508 (the v0.3.6 fix)', () => {
+      // label is tagged wcag2a + section508. Pre-v0.3.6 this surfaced as
+      // ['section508'] only, which underreported the WCAG side of the audit.
       const label = report.findings.find((f) => f.ruleId === 'label');
-      expect(label?.ruleSets).toEqual(['section508']);
+      expect(label?.ruleSets).toEqual(['wcag2a', 'section508']);
     });
 
-    it('emits empty ruleSets when neither surfaced tag is present', () => {
+    it('emits empty ruleSets when no surfaced tag is present', () => {
       const bp = report.findings.find((f) => f.ruleId === 'best-practice-only');
       expect(bp?.ruleSets).toEqual([]);
     });
