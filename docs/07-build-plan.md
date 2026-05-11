@@ -89,13 +89,13 @@ If an external user post-v1 wants a unified CLI surface (`webspec gen`, `webspec
 
 Goal: WCAG 2.1 AA + Section 508 audits on a live page, available both in the Chrome extension and as a CLI command for CI gating.
 
-- [ ] `A11yAnalyzer` (Node mode): wrap `@axe-core/puppeteer`, run with tags `['wcag21aa','section508']`, validate output into `A11yReport`.
-- [ ] `A11yAnalyzer` (browser mode): inject `axe-core/browser` from the Chrome extension content script; same `A11yReport` shape out.
-- [ ] `ReportRenderer`: emit JSON and Markdown (severity grouping, rule tag column, selector + fix-hint per finding). The Chrome popup renders its own React/HTML view from the same typed report.
-- [ ] CLI: implement `webspec audit <url>` end-to-end (Node-mode analyzer + Markdown renderer to stdout/file).
-- [ ] Tests: snapshot-test the Markdown renderer against a recorded axe result; snapshot-test the typed `A11yReport` round-trip.
+- [x] `A11yAnalyzer` (Node mode): wrap `@axe-core/puppeteer`, run with tags `['wcag21aa','section508']`, validate output into `A11yReport`. ✅ v0.3.3.
+- [ ] `A11yAnalyzer` (browser mode): inject `axe-core/browser` from the Chrome extension content script; same `A11yReport` shape out. **Folded into M5** — the browser-mode wrapper has no callsite outside the extension; ships as the second M5 PR alongside content-script injection.
+- [x] `ReportRenderer`: emit JSON and Markdown (severity grouping, rule tag column, selector + fix-hint per finding). The Chrome popup renders its own React/HTML view from the same typed report. ✅ v0.3.4.
+- [x] CLI: implement `webspec audit <url>` end-to-end (Node-mode analyzer + Markdown renderer to stdout/file). ✅ v0.3.5.
+- [x] Tests: snapshot-test the Markdown renderer against a recorded axe result; snapshot-test the typed `A11yReport` round-trip. ✅ v0.3.4 (renderer) + v0.3.3 (round-trip).
 
-**Done when:** `webspec audit https://example.com` produces a clean Markdown report with each finding tagged 508 / WCAG / both, AND the same analyzer can be loaded into the Chrome extension's browser bundle for M5.
+**Done when:** `webspec audit https://example.com` produces a clean Markdown report with each finding tagged 508 / WCAG / both, AND the same analyzer can be loaded into the Chrome extension's browser bundle for M5. ✅ CLI side complete in v0.3.5; browser-mode loading verified during M5. Bonus fix: v0.3.6 widened the WCAG tag filter end-to-end so Level A failures aren't underreported.
 
 ---
 

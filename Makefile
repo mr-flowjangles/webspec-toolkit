@@ -4,7 +4,7 @@
 # Targets that produce no files are .PHONY so make doesn't try to track them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup build test lint format format-check ci image smoke clean version version-minor version-major
+.PHONY: help setup build ext-build test lint format format-check ci image smoke clean version version-minor version-major
 
 # ---------------------------------------------------------------------------
 # Help
@@ -28,8 +28,11 @@ help: ## Show this help (default target)
 setup: ## Install dependencies across the workspace
 	pnpm install
 
-build: ## Build all packages (tsc -b with project references)
+build: ## Build all library packages (tsc -b with project references — excludes chrome-extension)
 	pnpm build
+
+ext-build: ## Bundle the Chrome extension via Vite into packages/chrome-extension/dist
+	pnpm --filter @webspec/chrome-extension build
 
 # ---------------------------------------------------------------------------
 # Quality
@@ -46,7 +49,7 @@ format: ## Apply prettier across the workspace
 format-check: ## Check formatting without writing (CI use)
 	pnpm format:check
 
-ci: lint test ## Lint + test, suitable for CI gating
+ci: lint test build ext-build ## Lint + test + library build + extension bundle, suitable for CI gating
 
 # ---------------------------------------------------------------------------
 # Docker image
