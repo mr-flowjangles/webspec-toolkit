@@ -29,10 +29,12 @@ import axe from 'axe-core';
 import type { RecordedEvent } from '@webspec/core/browser';
 import {
   isAuditRequest,
+  isRecorderAppendEventRequest,
   isRecorderStartRequest,
   isRecorderStatusRequest,
   isRecorderStopRequest,
   type AuditResponse,
+  type RecorderAppendEventResponse,
   type RecorderSessionClearRequest,
   type RecorderSessionClearResponse,
   type RecorderSessionGetRequest,
@@ -384,6 +386,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (isRecorderStatusRequest(message)) {
     void bootstrapPromise.then(() => sendResponse(getRecorderStatus()));
+    return true;
+  }
+
+  // Navigation events pushed by the service worker land here. Absorb into
+  // the live buffer only if a recording is in flight; otherwise tell the SW
+  // we didn't take it so it can fall back to a direct storage write.
+  if (isRecorderAppendEventRequest(message)) {
+    void bootstrapPromise.then(() => {
+      if (!recorderActive) {
+        const response: RecorderAppendEventResponse = { ok: true, absorbed: false };
+        sendResponse(response);
+        return;
+      }
+      recordedEvents.push(message.event);
+      persistSession();
+      const response: RecorderAppendEventResponse = { ok: true, absorbed: true };
+      sendResponse(response);
+    });
     return true;
   }
 

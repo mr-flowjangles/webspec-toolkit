@@ -230,6 +230,16 @@ export const RecordedEventSchema = z.discriminatedUnion('kind', [
     t: z.number(),
     kind: z.literal('navigate'),
     url: z.string(),
+    /**
+     * What kind of navigation Chrome reported, so a renderer can decide
+     * whether to emit `waitForURL` (cross-document), `waitForLoadState`
+     * (reload), or just assert state after an SPA route change.
+     *   - 'navigate' — cross-document load (link click, form submit, etc.)
+     *   - 'reload'   — same URL, document refreshed
+     *   - 'history'  — pushState / replaceState (SPA routing)
+     *   - 'hash'     — fragment-only change
+     */
+    reason: z.enum(['navigate', 'reload', 'history', 'hash']),
   }),
   z.object({
     t: z.number(),

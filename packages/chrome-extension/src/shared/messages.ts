@@ -137,6 +137,31 @@ export function isRecorderSessionClearRequest(value: unknown): value is Recorder
 }
 
 // ---------------------------------------------------------------------------
+// Service worker → content script: append a captured event (v0.5.3)
+//
+// The service worker captures navigations via `chrome.webNavigation` and
+// pushes them to the content script so they land in the same in-memory
+// buffer as DOM events, in t-order. For cross-document navigations the
+// content script may already be torn down — see service-worker/index.ts
+// for the storage-write fallback path.
+// ---------------------------------------------------------------------------
+
+export interface RecorderAppendEventRequest {
+  type: 'recorder:append-event';
+  event: RecordedEvent;
+}
+
+export type RecorderAppendEventResponse =
+  | { ok: true; absorbed: boolean }
+  | { ok: false; error: string };
+
+export function isRecorderAppendEventRequest(
+  value: unknown,
+): value is RecorderAppendEventRequest {
+  return isObjectWithType(value, 'recorder:append-event');
+}
+
+// ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 

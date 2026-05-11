@@ -29,7 +29,7 @@ export default defineManifest({
       run_at: 'document_idle',
     },
   ],
-  permissions: ['activeTab', 'storage', 'downloads'],
+  permissions: ['activeTab', 'storage', 'downloads', 'webNavigation'],
   web_accessible_resources: [
     {
       resources: ['src/report/index.html'],
