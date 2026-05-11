@@ -10,5 +10,5 @@
     "moduleResolution": "Bundler",
     "types": ["chrome", "vite/client"]
   },
-  "include": ["src/**/*", "manifest.config.ts", "vite.config.ts"]
+  "include": ["src/**/*", "tests/**/*", "manifest.config.ts", "vite.config.ts"]
 }

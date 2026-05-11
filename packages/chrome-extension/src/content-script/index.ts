@@ -6,13 +6,20 @@
  *   - Recorder: between `recorder:start` and `recorder:stop`, capture DOM
  *     events into a module-scope buffer; return the buffer on stop.
  *
- * v0.5.0 recorder scope:
+ * v0.5.1 recorder scope:
  *   - Captures `click`, `input`, `change`, `submit`, `keydown` events.
  *   - `<input type="password">` is masked: value not captured, sensitive=true.
  *   - `keydown` only captures "significant" keys (Enter/Tab/Escape/Arrows/
  *     PageUp-Down/Home/End). Character typing flows through `input` instead.
- *   - Selectors are still basic CSS (`tag#id.class`); hardened selectors land
- *     in a later PR. State doesn't survive popup close — also deferred.
+ *   - Contiguous `input` events on the same field are coalesced into one
+ *     event holding the final value — one sentence, not one event per key.
+ *   - A focusing `click` immediately followed by an `input` on the same
+ *     field is dropped — `fill()` focuses on its own.
+ *   - A checkbox/radio click fires both `click` and `change`; the preceding
+ *     `click` is dropped so one user action yields one event.
+ *   - Selectors are hardened at capture time (`data-testid` > role+name >
+ *     text > css). See `selectors.ts`.
+ *   - State doesn't survive page reload — chrome.storage.session move pending.
  */
 import axe from 'axe-core';
 import type { RecordedEvent } from '@webspec/core/browser';
@@ -26,7 +33,8 @@ import {
   type RecorderStatusResponse,
   type RecorderStopResponse,
 } from '../shared/messages.js';
-import { buildBasicSelector } from './selectors.js';
+import { buildHardenedSelector } from './selectors.js';
+import type { HardenedSelector } from '@webspec/core/browser';
 
 /** Mirror of `DEFAULT_A11Y_TAGS` in `@webspec/core` — see audit-mode rationale. */
 const A11Y_TAGS = [
@@ -76,8 +84,8 @@ function timestamp(): number {
   return performance.now() - recorderStartTime;
 }
 
-function selectorFor(target: Element): { preferred: string; strategy: 'css'; fallbacks: string[] } {
-  return { preferred: buildBasicSelector(target), strategy: 'css', fallbacks: [] };
+function selectorFor(target: Element): HardenedSelector {
+  return buildHardenedSelector(target);
 }
 
 function handleClick(ev: MouseEvent): void {
@@ -105,11 +113,31 @@ function handleInput(ev: Event): void {
   }
 
   const sensitive = target instanceof HTMLInputElement && target.type === 'password';
+  const selector = selectorFor(target);
+  const value = sensitive ? '' : target.value;
+
+  // Coalesce contiguous keystrokes in the same field into a single event:
+  // the user sees one sentence typed, the renderer emits one fill(). Any
+  // intervening event (Enter, Tab, click elsewhere) breaks the run.
+  const last = recordedEvents[recordedEvents.length - 1];
+  if (last && last.kind === 'input' && last.selector.preferred === selector.preferred) {
+    last.t = timestamp();
+    last.value = value;
+    last.sensitive = sensitive;
+    return;
+  }
+  // A click that just focused this field is redundant once typing follows —
+  // Playwright's fill() focuses on its own. Drop it so the recording is a
+  // single input event, not click-then-input.
+  if (last && last.kind === 'click' && last.selector.preferred === selector.preferred) {
+    recordedEvents.pop();
+  }
+
   recordedEvents.push({
     t: timestamp(),
     kind: 'input',
-    selector: selectorFor(target),
-    value: sensitive ? '' : target.value,
+    selector,
+    value,
     sensitive,
   });
 }
@@ -121,10 +149,18 @@ function handleChange(ev: Event): void {
     // For checkbox/radio, the meaningful value is checked state, surfaced as
     // 'true' | 'false'. For everything else `input` already captured it.
     if (target.type === 'checkbox' || target.type === 'radio') {
+      const selector = selectorFor(target);
+      // A checkbox/radio click fires both `click` and `change` on the same
+      // element within milliseconds — same physical action, two events. The
+      // `change` carries the new state, so drop the preceding `click`.
+      const last = recordedEvents[recordedEvents.length - 1];
+      if (last && last.kind === 'click' && last.selector.preferred === selector.preferred) {
+        recordedEvents.pop();
+      }
       recordedEvents.push({
         t: timestamp(),
         kind: 'change',
-        selector: selectorFor(target),
+        selector,
         value: String(target.checked),
       });
     }

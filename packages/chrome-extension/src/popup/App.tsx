@@ -198,7 +198,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v0.5.0 — recorder events + best-practice rules</p>
+        <p className="meta">v0.5.1 — hardened recorder selectors</p>
       </footer>
     </main>
   );
