@@ -98,4 +98,39 @@ describe('normalizeAxeResults', () => {
       expect(imageAlt?.helpUrl).toBe('https://dequeuniversity.com/rules/axe/4.10/image-alt');
     });
   });
+
+  describe('rulesChecked', () => {
+    it('flattens all four axe buckets (violations + passes + incomplete + inapplicable)', () => {
+      // Fixture: 4 violation rules + 3 passes + 1 incomplete + 1 inapplicable = 9 unique rules.
+      expect(report.rulesChecked).toHaveLength(9);
+    });
+
+    it('maps violations to status "fail", deduping across multi-node rules', () => {
+      // image-alt has 2 violating nodes but should appear once in rulesChecked.
+      const imageAlt = report.rulesChecked.filter((c) => c.ruleId === 'image-alt');
+      expect(imageAlt).toHaveLength(1);
+      expect(imageAlt[0]?.status).toBe('fail');
+    });
+
+    it('maps passes to status "pass"', () => {
+      expect(report.rulesChecked.find((c) => c.ruleId === 'document-title')?.status).toBe('pass');
+    });
+
+    it('maps incomplete to status "incomplete"', () => {
+      expect(report.rulesChecked.find((c) => c.ruleId === 'aria-allowed-attr')?.status).toBe(
+        'incomplete',
+      );
+    });
+
+    it('maps inapplicable to status "inapplicable"', () => {
+      expect(report.rulesChecked.find((c) => c.ruleId === 'audio-caption')?.status).toBe(
+        'inapplicable',
+      );
+    });
+
+    it('sorts the list deterministically by ruleId', () => {
+      const ids = report.rulesChecked.map((c) => c.ruleId);
+      expect(ids).toEqual([...ids].sort());
+    });
+  });
 });

@@ -9,9 +9,11 @@ import type { AxeResults, ImpactValue, Result, NodeResult } from 'axe-core';
 import {
   A11yReportSchema,
   type A11yReport,
+  type A11yRuleStatus,
   type A11yRuleTag,
   type A11ySeverity,
   type Finding,
+  type RuleCheck,
 } from '../../types/analysis.js';
 
 /**
@@ -81,9 +83,26 @@ export function normalizeAxeResults(axe: AxeResults, target: NormalizeTarget): A
       engineVersion: axe.testEngine.version,
     },
     findings,
+    rulesChecked: collectRuleChecks(axe),
     passCount: axe.passes.length,
     incompleteCount: axe.incomplete.length,
   };
 
   return A11yReportSchema.parse(report);
+}
+
+/**
+ * Flatten axe's four result buckets into a single sorted list. Duplicate
+ * rule IDs across buckets shouldn't happen (axe puts each rule in exactly
+ * one bucket per scan), but dedupe defensively just in case.
+ */
+function collectRuleChecks(axe: AxeResults): RuleCheck[] {
+  const checks = new Map<string, A11yRuleStatus>();
+  for (const r of axe.violations) checks.set(r.id, 'fail');
+  for (const r of axe.passes) checks.set(r.id, 'pass');
+  for (const r of axe.incomplete) checks.set(r.id, 'incomplete');
+  for (const r of axe.inapplicable) checks.set(r.id, 'inapplicable');
+  return [...checks.entries()]
+    .map(([ruleId, status]) => ({ ruleId, status }))
+    .sort((a, b) => a.ruleId.localeCompare(b.ruleId));
 }

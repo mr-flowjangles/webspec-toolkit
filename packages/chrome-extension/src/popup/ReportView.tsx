@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import type { A11yReport, A11ySeverity, Finding } from '@webspec/core/browser';
+import type {
+  A11yReport,
+  A11yRuleStatus,
+  A11ySeverity,
+  Finding,
+  RuleCheck,
+} from '@webspec/core/browser';
 
 /** Highest-impact-first ordering. Mirrors the markdown renderer. */
 const SEVERITY_ORDER: readonly A11ySeverity[] = ['critical', 'serious', 'moderate', 'minor'];
@@ -56,7 +62,38 @@ export function ReportView({ report, onCopy }: ReportViewProps): JSX.Element {
           );
         })
       )}
+
+      {report.rulesChecked.length > 0 && <RulesCheckedPanel rules={report.rulesChecked} />}
     </section>
+  );
+}
+
+const STATUS_LABELS: Readonly<Record<A11yRuleStatus, string>> = {
+  fail: 'Fail',
+  pass: 'Pass',
+  incomplete: 'Needs review',
+  inapplicable: 'N/A',
+};
+
+function RulesCheckedPanel({ rules }: { rules: readonly RuleCheck[] }): JSX.Element {
+  return (
+    <details className="rules-checked">
+      <summary>
+        Rules checked <span className="count">({rules.length})</span>
+      </summary>
+      <p className="rules-checked-hint">
+        Every axe rule that ran against this page. If a screen-reader or manual review surfaces
+        something not in this list, the audit didn&apos;t cover that rule.
+      </p>
+      <ul className="rules-list">
+        {rules.map((r) => (
+          <li key={r.ruleId} className={`rule rule-${r.status}`}>
+            <code>{r.ruleId}</code>
+            <span className="rule-status">{STATUS_LABELS[r.status]}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

@@ -187,3 +187,95 @@ body {
 footer {
   margin-top: auto;
 }
+
+.rules-checked {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.rules-checked > summary {
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.rules-checked > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rules-checked > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 12px;
+  font-size: 10px;
+  transition: transform 100ms ease;
+}
+
+.rules-checked[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.rules-checked .count {
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.rules-checked-hint {
+  margin: 8px 0;
+  font-size: 11px;
+  opacity: 0.7;
+  line-height: 1.4;
+}
+
+.rules-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rule {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.rule code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.rule-status {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  white-space: nowrap;
+}
+
+.rule-fail .rule-status {
+  background: color-mix(in srgb, #c0392b 20%, transparent);
+  color: #c0392b;
+}
+
+.rule-pass .rule-status {
+  background: color-mix(in srgb, #27ae60 18%, transparent);
+  color: #1e8449;
+}
+
+.rule-incomplete .rule-status {
+  background: color-mix(in srgb, #d35400 20%, transparent);
+  color: #d35400;
+}
+
+.rule-inapplicable .rule-status {
+  opacity: 0.55;
+}

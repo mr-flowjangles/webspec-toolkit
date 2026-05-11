@@ -113,7 +113,8 @@ describe('renderA11yReportMarkdown — edge cases', () => {
       target: { kind: 'url', ref: 'https://clean.example/' },
       ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
       findings: [],
-      passCount: 42,
+      rulesChecked: [],
+      passCount:42,
       incompleteCount: 0,
     });
     const md = renderA11yReportMarkdown(clean);
@@ -137,7 +138,8 @@ describe('renderA11yReportMarkdown — edge cases', () => {
           failureSummary: 'Something went wrong',
         },
       ],
-      passCount: 0,
+      rulesChecked: [],
+      passCount:0,
       incompleteCount: 0,
     });
     const md = renderA11yReportMarkdown(report);
@@ -158,7 +160,8 @@ describe('renderA11yReportMarkdown — edge cases', () => {
           failureSummary: 'Use a or b | not both',
         },
       ],
-      passCount: 0,
+      rulesChecked: [],
+      passCount:0,
       incompleteCount: 0,
     });
     const md = renderA11yReportMarkdown(report);
@@ -179,7 +182,8 @@ describe('renderA11yReportMarkdown — edge cases', () => {
           failureSummary: 'Fix any of the following:\n  Element has no alt\n  Element is hidden',
         },
       ],
-      passCount: 0,
+      rulesChecked: [],
+      passCount:0,
       incompleteCount: 0,
     });
     const md = renderA11yReportMarkdown(report);
@@ -205,11 +209,62 @@ describe('renderA11yReportMarkdown — edge cases', () => {
           failureSummary: 'Something',
         },
       ],
-      passCount: 5,
+      rulesChecked: [],
+      passCount:5,
       incompleteCount: 0,
     });
     const md = renderA11yReportMarkdown(report);
     expect(md).toContain('**1 violation** · 5 passes · 0 incomplete.');
+  });
+});
+
+describe('renderA11yReportMarkdown — Rules checked appendix', () => {
+  const md = renderA11yReportMarkdown(sampleReport);
+
+  it('emits an H2 heading with the rule count', () => {
+    expect(md).toContain('## Rules checked (9)');
+  });
+
+  it('explains the section purpose for readers seeing a clean-but-still-broken page', () => {
+    expect(md).toContain(
+      "If a screen-reader or manual review surfaces an issue not in this list, the audit didn't cover that rule.",
+    );
+  });
+
+  it('lists each rule with its humanized status', () => {
+    expect(md).toContain('| image-alt | Fail |');
+    expect(md).toContain('| document-title | Pass |');
+    expect(md).toContain('| aria-allowed-attr | Needs review |');
+    expect(md).toContain('| audio-caption | Not applicable |');
+  });
+
+  it('omits the appendix when rulesChecked is empty', () => {
+    const empty: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://nothing.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [],
+      rulesChecked: [],
+      passCount: 0,
+      incompleteCount: 0,
+    });
+    expect(renderA11yReportMarkdown(empty)).not.toContain('## Rules checked');
+  });
+
+  it('still emits the appendix on otherwise-clean reports (zero findings)', () => {
+    const clean: A11yReport = A11yReportSchema.parse({
+      target: { kind: 'url', ref: 'https://clean.example/' },
+      ruleSet: { tags: ['wcag21aa', 'section508'], engineVersion: '4.10.3' },
+      findings: [],
+      rulesChecked: [
+        { ruleId: 'document-title', status: 'pass' },
+        { ruleId: 'html-has-lang', status: 'pass' },
+      ],
+      passCount: 2,
+      incompleteCount: 0,
+    });
+    const out = renderA11yReportMarkdown(clean);
+    expect(out).toContain('## Rules checked (2)');
+    expect(out).toContain('| document-title | Pass |');
   });
 });
 

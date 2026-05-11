@@ -117,5 +117,7 @@ export const sampleAxeResults: AxeResults = {
   incomplete: [
     { id: 'aria-allowed-attr', impact: null, tags: ['wcag2a'], description: '', help: '', helpUrl: '', nodes: [] },
   ],
-  inapplicable: [],
+  inapplicable: [
+    { id: 'audio-caption', impact: null, tags: ['wcag2a'], description: '', help: '', helpUrl: '', nodes: [] },
+  ],
 };
