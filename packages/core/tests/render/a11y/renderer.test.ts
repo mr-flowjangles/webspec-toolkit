@@ -72,10 +72,20 @@ describe('renderA11yReportMarkdown — sample fixture', () => {
     );
   });
 
-  it('renders ruleSets as humanized labels', () => {
-    expect(md).toContain('WCAG 2.1 AA, Section 508'); // image-alt row
-    expect(md).toContain('WCAG 2.1 AA |'); // color-contrast row (only wcag)
-    expect(md).toContain('Section 508 |'); // label row (only section508)
+  it('rolls all WCAG levels up to a single "WCAG 2.1 AA" label', () => {
+    // image-alt is tagged wcag2a + wcag21aa + section508 → both labels.
+    expect(md).toContain('WCAG 2.1 AA, Section 508');
+    // color-contrast is tagged wcag2aa + wcag21aa → single WCAG label, no Section 508.
+    const contrastRow = md.split('\n').find((l) => l.includes('color-contrast'))!;
+    expect(contrastRow).toContain('| WCAG 2.1 AA |');
+    expect(contrastRow).not.toContain('Section 508');
+  });
+
+  it('treats Level A wcag tags as a WCAG label, not a Section-508-only finding', () => {
+    // The v0.3.6 fix: label was tagged wcag2a + section508; pre-fix it
+    // rendered as Section 508 only, which underreported WCAG.
+    const labelRow = md.split('\n').find((l) => l.startsWith('| ') && l.includes('label'))!;
+    expect(labelRow).toContain('WCAG 2.1 AA, Section 508');
   });
 
   it('renders empty ruleSets as an em-dash', () => {

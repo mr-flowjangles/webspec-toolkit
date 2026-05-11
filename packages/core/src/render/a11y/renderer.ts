@@ -53,9 +53,24 @@ export function renderA11yReportMarkdown(report: A11yReport): string {
   return lines.join('\n').trimEnd() + '\n';
 }
 
+/**
+ * Roll fine-grained tags up to display labels.
+ *
+ * The contract carries four WCAG tags (`wcag2a`, `wcag2aa`, `wcag21a`,
+ * `wcag21aa`) because axe tags rules by the specific criterion. For display
+ * we collapse them to a single "WCAG 2.1 AA" — that's the question the user
+ * cares about ("am I WCAG 2.1 AA compliant?"). The granular tags stay
+ * available on `A11yReport.findings[].ruleSets` for downstream consumers.
+ */
+function humanizeRuleSets(tags: readonly string[]): string[] {
+  const out: string[] = [];
+  if (tags.some((t) => t.startsWith('wcag'))) out.push('WCAG 2.1 AA');
+  if (tags.includes('section508')) out.push('Section 508');
+  return out;
+}
+
 function formatRuleSetTags(tags: readonly string[]): string {
-  // The contract surfaces 'wcag21aa' and 'section508'; format them for humans.
-  return tags.map((t) => (t === 'wcag21aa' ? 'WCAG 2.1 AA' : 'Section 508')).join(' + ');
+  return humanizeRuleSets(tags).join(' + ');
 }
 
 function formatSummaryLine(report: A11yReport): string {
@@ -95,10 +110,8 @@ function renderRuleCell(f: Finding): string {
 }
 
 function renderSetsCell(sets: readonly string[]): string {
-  if (sets.length === 0) return '—';
-  return sets
-    .map((s) => (s === 'wcag21aa' ? 'WCAG 2.1 AA' : s === 'section508' ? 'Section 508' : s))
-    .join(', ');
+  const labels = humanizeRuleSets(sets);
+  return labels.length === 0 ? '—' : labels.join(', ');
 }
 
 function renderSelectorCell(selector: string): string {

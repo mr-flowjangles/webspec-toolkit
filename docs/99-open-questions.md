@@ -130,13 +130,7 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 
 ## (v0.3.5 surface) Should the a11y rule-set tag filter include `wcag2a` (Level A) too?
 
-**Status:** open — current behavior is strictly `['wcag21aa', 'section508']`
-**Resolution trigger:** the first user reports that a "WCAG 2.1 AA" audit underreports because Level A failures (e.g. `image-alt`, `label`) get tagged Section 508 only or not at all.
-**Notes:** Live smoke-testing v0.3.5 against deliberate-broken HTML surfaced this. axe-core tags rules by the specific WCAG criterion they cover: `image-alt` (1.1.1) and `label` (1.3.1, 3.3.2) are Level A, so they carry the `wcag2a` tag but not `wcag21aa`. Our normalizer surfaces only `wcag21aa` + `section508`, so those findings render with `Section 508` in the ruleSets column and no WCAG label — even though "WCAG 2.1 AA compliance" by W3C convention requires meeting *Level A and Level AA* combined.
+**Status:** resolved (v0.3.6)
+**Resolution:** Option 1 — widened `A11yRuleTagSchema` to `['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'section508']`. Both `SURFACED_TAGS` (output filter) and `DEFAULT_A11Y_TAGS` (axe input filter) updated. The renderer's humanizer rolls any `wcag*` tag up to a single "WCAG 2.1 AA" label for display while the contract preserves the granular breakdown.
 
-Three plausible answers:
-1. **Expand the filter** to `['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'section508']` and humanize as a single `WCAG 2.1 AA` label on output. Most accurate to common usage.
-2. **Split the column** into two labels (`WCAG Level A` / `WCAG Level AA`). Honest but noisier.
-3. **Status quo.** Strict literal interpretation — Level AA only. Underreports.
-
-Lean: option 1. It's a small change (the surfaced-tag list in `normalize.ts` + the humanizer in `renderer.ts`); the contract's `A11yRuleTagSchema` would need to widen too. Deferring to a separate PR so the v0.3.5 CLI ships with documented current behavior and the broader filter is a single-purpose change. Touches: `packages/core/src/types/analysis.ts`, `packages/core/src/analyze/a11y/normalize.ts`, `packages/core/src/render/a11y/renderer.ts`, plus tests for all three.
+**Verification:** the same deliberately-broken HTML used to surface the bug now reports 4 violations instead of 2: `image-alt` and `label` (both Level A) gain the `WCAG 2.1 AA` label they were missing, and `color-contrast` (Level AA on `wcag2aa`) + `html-has-lang` (Level A on `wcag2a`) now appear at all — pre-v0.3.6 axe wasn't even running them because we only requested `wcag21aa` + `section508` as input tags.
