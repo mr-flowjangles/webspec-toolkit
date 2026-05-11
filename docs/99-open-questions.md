@@ -127,3 +127,16 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 
 **Status:** resolved
 **Resolution:** Yes. Original M3 scoped a unified CLI with `init`, `gen`, `audit`, `record-to-spec`. Post-pivot, v1 CLI is just `audit` (ships with M4) and `record-to-spec` (ships with M6). `gen` and `init` deferred. Documented in `07-build-plan.md` "Out of v1 active path."
+
+## (v0.3.5 surface) Should the a11y rule-set tag filter include `wcag2a` (Level A) too?
+
+**Status:** open — current behavior is strictly `['wcag21aa', 'section508']`
+**Resolution trigger:** the first user reports that a "WCAG 2.1 AA" audit underreports because Level A failures (e.g. `image-alt`, `label`) get tagged Section 508 only or not at all.
+**Notes:** Live smoke-testing v0.3.5 against deliberate-broken HTML surfaced this. axe-core tags rules by the specific WCAG criterion they cover: `image-alt` (1.1.1) and `label` (1.3.1, 3.3.2) are Level A, so they carry the `wcag2a` tag but not `wcag21aa`. Our normalizer surfaces only `wcag21aa` + `section508`, so those findings render with `Section 508` in the ruleSets column and no WCAG label — even though "WCAG 2.1 AA compliance" by W3C convention requires meeting *Level A and Level AA* combined.
+
+Three plausible answers:
+1. **Expand the filter** to `['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'section508']` and humanize as a single `WCAG 2.1 AA` label on output. Most accurate to common usage.
+2. **Split the column** into two labels (`WCAG Level A` / `WCAG Level AA`). Honest but noisier.
+3. **Status quo.** Strict literal interpretation — Level AA only. Underreports.
+
+Lean: option 1. It's a small change (the surfaced-tag list in `normalize.ts` + the humanizer in `renderer.ts`); the contract's `A11yRuleTagSchema` would need to widen too. Deferring to a separate PR so the v0.3.5 CLI ships with documented current behavior and the broader filter is a single-purpose change. Touches: `packages/core/src/types/analysis.ts`, `packages/core/src/analyze/a11y/normalize.ts`, `packages/core/src/render/a11y/renderer.ts`, plus tests for all three.

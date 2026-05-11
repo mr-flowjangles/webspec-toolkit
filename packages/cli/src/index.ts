@@ -1,18 +1,51 @@
 #!/usr/bin/env node
-// webspec — CLI stub. Real commands (gen, audit) land in M3 / M4.
-// At M0 this exists so make image / make smoke can verify the Docker pipeline.
-const arg = process.argv[2];
+/**
+ * webspec CLI entry point.
+ *
+ * Thin shell shim: parse argv → dispatch to a command → write output → set exit.
+ * The dispatchable logic lives in `./commands/*`. The pure arg parser lives in
+ * `./args.js`.
+ *
+ * Exit codes:
+ *   0 — command ran cleanly (regardless of audit findings)
+ *   1 — runtime error (puppeteer launch failed, network, FS)
+ *   2 — bad arguments (caller-side error)
+ */
+import { runAudit } from './commands/audit.js';
+import { HELP_TEXT, parseArgs } from './args.js';
 
-if (!arg || arg === '--help' || arg === '-h') {
-  console.log('webspec 0.0.0 (M0 stub)');
-  console.log('');
-  console.log('Usage:');
-  console.log('  webspec gen <component.ts>   Generate Jest spec — landing in M3');
-  console.log('  webspec audit <url>          Run WCAG/508 audit — landing in M4');
-  console.log('');
-  console.log('See docs/07-build-plan.md for the implementation roadmap.');
-  process.exit(0);
+async function main(): Promise<number> {
+  const parsed = parseArgs(process.argv.slice(2));
+
+  switch (parsed.kind) {
+    case 'help':
+      process.stdout.write(HELP_TEXT);
+      return 0;
+
+    case 'error':
+      process.stderr.write(`webspec: ${parsed.message}\n\n`);
+      process.stderr.write(HELP_TEXT);
+      return 2;
+
+    case 'audit': {
+      try {
+        const result = await runAudit(parsed);
+        if (result.stdout !== undefined) process.stdout.write(result.stdout);
+        process.stderr.write(`webspec audit: ${result.log}\n`);
+        return 0;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`webspec audit: ${msg}\n`);
+        return 1;
+      }
+    }
+  }
 }
 
-console.error(`webspec: unknown command "${arg}" — CLI commands ship in M3+`);
-process.exit(2);
+main().then(
+  (code) => process.exit(code),
+  (err) => {
+    process.stderr.write(`webspec: unexpected error: ${err}\n`);
+    process.exit(1);
+  },
+);
