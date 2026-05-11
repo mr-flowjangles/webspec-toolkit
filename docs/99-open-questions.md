@@ -102,3 +102,28 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 **Status:** deferred to v2
 **Resolution trigger:** a Bellese e2e test fails flakily because the backend it depends on is unstable in CI.
 **Notes:** v1 records URLs + methods only. Recording response bodies and stubbing them on replay is the obvious next step but introduces meaningful storage + privacy concerns (response bodies often include PHI for our customers). Defer.
+
+---
+
+## (v0.3.2 pivot) How does M6 amplification get from `WorkflowRecording` to Playwright source?
+
+**Status:** resolved (v0.3.2)
+**Resolution:** **Path C — e2e-shaped structured IR.** The LLM emits a typed structured object (an `AmplifiedRecording` or similarly named shape: `scenarios[]` each with `kind: 'happy' | 'negative'`, `name`, `description`, `actions[]` (typed: `fill`, `click`, `goto`, etc.), `assertions[]` (typed: `visible`, `text`, `url`, etc.)), zod-validated at the seam. A deterministic renderer formats that into Playwright source.
+
+**Why C over the alternatives:**
+
+- **Path A — TestPlan as IR (rejected).** Reuses M2's `TestPlan{cases[].arrange/act/assert}`, but the unit-test `arrange/act/assert` shape is a category mismatch for e2e flows. Forcing them through the same IR is symmetry for symmetry's sake.
+- **Path B — Direct LLM-emits-Playwright-source (rejected).** Simpler short-term but loses the validation gate that the rest of the tool relies on. The LLM never writes shipped code anywhere else (M2 emits `cases[]`, not Jest source); breaking that pattern for M6 introduces a prompt-injection / malformed-output surface for no architectural gain.
+- **Path C (resolved).** Same architectural pattern as M2 (LLM emits validated structured data; deterministic renderer formats it), shape adapted for e2e instead of unit. Buys: zod validation at the seam, goldenable rendering, easy retargeting to Cypress later (different renderer, same IR).
+
+**Implementation note for M6:** the new IR is `AmplifiedRecording` (or whatever name lands at implementation), defined in `packages/core/src/types/analysis.ts` alongside `WorkflowRecording`. It is **not** a fourth `Analysis` variant — it's an intermediate produced by the M6 amplifying analyzer and consumed by the M6 renderer; the user-facing artifact remains `WorkflowRecording` (capture) and the rendered Playwright spec (output). The TestPlan widening (`framework: 'jest' | 'playwright'`) flagged in `02-contract-spec.md` is no longer needed.
+
+## (v0.3.2 pivot) Does the unit-test-from-source path return post-v1 as a save-time watcher?
+
+**Status:** resolved (v0.3.2)
+**Resolution:** Yes — post-v1, as a save-time watcher in an editor (regenerate the spec on save; surface immediately if the spec breaks). That's a real shift-left signal, unlike the manual-CLI form. Foundation is intact in the codebase: parser at `packages/core/src/analyze/test-plan/`, renderer at `packages/core/src/render/test/`, fixtures + golden tests + integration test all green. When the watcher work picks up, M3 reactivates with a different scope (editor integration rather than `webspec gen` CLI).
+
+## (v0.3.2 pivot) Is the v1 CLI surface area smaller than originally scoped?
+
+**Status:** resolved
+**Resolution:** Yes. Original M3 scoped a unified CLI with `init`, `gen`, `audit`, `record-to-spec`. Post-pivot, v1 CLI is just `audit` (ships with M4) and `record-to-spec` (ships with M6). `gen` and `init` deferred. Documented in `07-build-plan.md` "Out of v1 active path."

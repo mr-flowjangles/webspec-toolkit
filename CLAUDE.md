@@ -1,10 +1,10 @@
-# Angular Automated Testing
+# webspec
 
-**webspec** — an LLM-powered toolkit for testing webpages: generates Angular unit tests, runs Section 508 / WCAG audits, and renders recordings to Playwright e2e specs. Shared core with VS Code and Chrome extensions on top.
+**webspec** — a browser-based shift-left companion for web app development. The Chrome extension records a user's workflow, audits the page for Section 508 / WCAG issues, and renders the recording into a runnable Playwright spec with positive AND negative scenarios (LLM-amplified). The whole point is short feedback loops — catch problems while you're building, not after.
 
 ## Current state
 
-**Foundations laid (M0 complete on `V0dot1dot0/Foundations`).** Monorepo scaffold (pnpm workspaces, TypeScript project references, ESLint, Prettier, Vitest, multi-stage Node 20 Dockerfile) is in place; the CLI `--help` stub builds and runs in the image. No feature code yet — M1 is next: lock the `Analysis` contract artifact and the `LLMProvider` seam.
+**M0–M2 complete; pivoted to a browser-first shift-left scope at v0.3.2.** Foundations (M0, v0.1.0), `Analysis` contract artifact + `LLMProvider` seam with `BedrockAdapter` (M1, v0.2.0), and the Angular `TestPlan` analyzer + Jest renderer (M2, v0.3.0) all shipped. **The unit-test-from-source path (M2) stays in the codebase as foundation but is deferred from the v1 active path** — the v1 mission is shift-left + fail-fast on a live page, not productivity tooling for hand-writing unit tests. v1 active path is now M4 (a11y) + M5 (Chrome extension) + M6 (recording → Playwright with positive/negative scenarios). M3 (CLI for unit-test gen) and M7 (VS Code) deferred from v1.
 
 ## How to read this repo
 

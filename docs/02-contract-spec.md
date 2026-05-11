@@ -21,11 +21,13 @@ Each variant pairs a `data` payload with a shared `meta` envelope. Sub-shapes (`
 
 ### TestPlan — LLM-generated, structured for renderer consumption
 
-The LLM emits a `TestPlan`, not raw `.spec.ts` text. The render pass is deterministic — it turns the plan's `cases[]` (each with `name`, `arrange`, `act`, `assert`) into Jest source. This split exists because:
+The LLM emits a `TestPlan`, not raw spec text. The render pass is deterministic — it turns the plan's `cases[]` (each with `name`, `arrange`, `act`, `assert`) into source. This split exists because:
 
 1. **Goldenable rendering.** Hand-written `TestPlan` fixtures snapshot-test the renderer. The LLM is tested separately via the adapter contract test (M1) and the e2e component fixtures (M2).
-2. **Provider parity is structural, not textual.** The OpenAI adapter (M8) returning a different `cases[]` text for the same component is fine; returning a structurally different shape is not. We assert the shape, not the prose.
+2. **Provider parity is structural, not textual.** A future second adapter returning different `cases[]` text for the same input is fine; returning a structurally different shape is not. We assert the shape, not the prose.
 3. **No prompt-injection ladder.** The LLM never writes raw test code we then `eval`/import; it returns typed data, which the renderer formats. Zod validation at the seam is the gate.
+
+**Note on the v1 pivot (v0.3.2):** TestPlan was introduced for the M2 Angular-source-→-Jest path (shipped in v0.3.0). After the pivot to a shift-left scope, that path is foundation-only — not on the v1 active path. **TestPlan stays unit-test-shaped**: the `arrange/act/assert` cases model is the right shape for unit tests but a category mismatch for e2e flows. M6 introduces a separate intermediate (`AmplifiedRecording` or similar — `scenarios[]` with typed `actions` + `assertions`) for the recording-→-Playwright path; same architectural pattern (LLM emits validated structured data, deterministic renderer formats it), but a shape that fits e2e. See `99-open-questions.md` for the path-C rationale.
 
 ### A11yReport — axe-shaped, augmented with our rule-tag normalization
 

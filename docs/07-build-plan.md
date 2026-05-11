@@ -8,17 +8,24 @@ The convention is `## M<N> — {Title}` so `make version-M<N>` can auto-resolve 
 
 ## v1 — Definition of Done
 
-v1 ships when **all** of the following are true:
+v1 ships a **browser-based shift-left companion**: a Chrome extension that records workflows, generates a test plan with positive + negative scenarios as a runnable Playwright spec, and audits a11y on the live page. v1 ships when **all** of the following are true:
 
-- [ ] Docker image builds reproducibly (`make image`) and `webspec --help` works in the smoke test.
-- [ ] CLI: `webspec gen <component.ts>` produces a Jest `.spec.ts` that compiles and runs against a sample Angular 19+ app.
-- [ ] CLI: `webspec audit <url>` produces a normalized JSON + Markdown a11y report tagged `wcag21aa` + `section508`.
-- [ ] CLI: `webspec record-to-spec <recording.json>` produces a Playwright `.spec.ts` that runs end-to-end against the same app.
-- [ ] Chrome extension: popup has both modes — "Audit this tab" returns axe findings; "Record" captures a workflow and exports a `WorkflowRecording` JSON.
-- [ ] VS Code extension: right-click on a `.component.ts` → "Generate Spec" produces the same output as the CLI; sidebar a11y panel runs against `localhost:4200`.
-- [ ] LLM access is via AWS Bedrock with standard AWS credentials. The `LLMProvider` interface is provider-agnostic — adding a second adapter (M8) is a code change scoped to one new file plus a config flip; no renderer or surface changes.
-- [ ] All milestones below are checked.
-- [ ] `README.md` has a quickstart that a new operator can follow end-to-end (gen + audit + record-to-spec).
+- [ ] **Chrome extension installs and runs**, with two modes:
+  - [ ] "Audit this tab" returns a normalized 508 / WCAG 2.1 AA report (severity-grouped, rule-tag column, selector + fix-hint per finding).
+  - [ ] "Record" captures a workflow (clicks, input, change, submit, navigation, key events, outgoing requests) with hardened selectors, then exports a `WorkflowRecording` JSON via `chrome.downloads`.
+- [ ] **Recording → Playwright with positive + negative scenarios.** A `WorkflowRecording` (from the Chrome ext or a fixture) renders into a runnable Playwright `.spec.ts`. The deterministic pass emits the recorded happy path; the LLM amplification pass adds negative scenarios (invalid input, empty fields, error states, edge variants), assertion suggestions, and test naming. LLM polish skipped if no provider is configured — the deterministic happy-path spec still emits.
+- [ ] **Thin CLI for CI integration**: `webspec audit <url>` and `webspec record-to-spec <recording.json>` work end-to-end. (No `webspec gen` in v1 — see "Out of v1 active path" below.)
+- [ ] **LLM access via AWS Bedrock** with standard AWS credentials. The `LLMProvider` interface is provider-agnostic; adding a second adapter is a code change scoped to one new file.
+- [ ] **Verified on three deployed sites** — audit parity between Chrome ext and CLI; recordings render to passing Playwright specs against each site's golden-path flow.
+- [ ] All milestones below (M4 through M6) are checked.
+- [ ] `README.md` has a quickstart that a new operator can follow end-to-end (install Chrome ext → record → audit → render a Playwright spec).
+
+### Out of v1 active path (intentional)
+
+- **M2 — TestPlan analyzer + Jest renderer (Angular source → Jest specs).** Shipped in v0.3.0 as foundation; reusable for the workflow→Playwright path's positive/negative scenarios because the `TestPlan` contract artifact has the right shape (`cases[]` with arrange/act/assert). Stays in the codebase. **The CLI surface to use it (M3) is deferred** — unit-test gen from source isn't a shift-left signal in v1.
+- **M3 — CLI surface as originally scoped** (`webspec gen` for unit tests, `webspec init` onboarding wizard with Angular auto-detection). Deferred. CLI v1 is reduced to `audit` + `record-to-spec`, both of which ship with their respective milestones (M4, M6).
+- **M7 — VS Code extension.** Deferred to post-v1. Browser-first means browser-only in v1.
+- **M8 — Second LLM adapter + parity test.** Deferred. The `LLMProvider` seam is proven structurally; adding a second adapter is post-v1 unless a customer-procurement constraint forces it.
 
 ---
 
@@ -35,9 +42,9 @@ Goal: project skeleton ready, dev environment wired, no feature code yet.
 - [x] Add Vitest at the root with `passWithNoTests`; `make test` passes with no tests yet.
 - [x] Verify `make ci` passes.
 - [x] Replace the `Dockerfile` stub with a multi-stage Node 20 build (CLI runtime image); `make image` builds and `make smoke` returns the CLI's `--help`.
-- [x] Verify versioning ceremony: `./scripts/new-version.sh --dry-run "Smoke Test"` prints the plan with no side effects; `make version-M0` created the `V0dot1dot0/Foundations` branch and `Versions/v0/v0.1.0/release-notes.md`.
+- [x] Verify versioning ceremony.
 
-**Done when:** monorepo builds, `make ci` is green, Docker image builds + smoke-tests, versioning ceremony runs cleanly.
+**Done when:** monorepo builds, `make ci` is green, Docker image builds + smoke-tests, versioning ceremony runs cleanly. ✅ Shipped in v0.1.0.
 
 ---
 
@@ -45,69 +52,61 @@ Goal: project skeleton ready, dev environment wired, no feature code yet.
 
 Goal: lock the `Analysis` shape (all three variants: `TestPlan`, `A11yReport`, `WorkflowRecording`) and the `LLMProvider` interface in code; ship one adapter; nothing else.
 
-- [x] Created `packages/core/src/types/analysis.ts` with zod schemas + inferred types for the full `Analysis` discriminated union (3 variants) plus sub-shapes (`TestPlan` w/ `TestCase`/`SurfaceInput`/`SurfaceOutput`/etc., `A11yReport` w/ `Finding`, `WorkflowRecording` w/ `RecordedEvent` discriminated union + `HardenedSelector`/`NetworkRequest`/`ObservedState`).
-- [x] Created `packages/core/src/llm/provider.ts` with the vendor-neutral `LLMProvider` interface, `CompletionRequest`, `ChatMessage`, and `LLMValidationError`. Documented the contract — adapters MUST validate against the zod schema before returning.
-- [x] Implemented `BedrockAdapter` (`packages/core/src/llm/bedrock.ts`) using `@anthropic-ai/bedrock-sdk` (AWS standard credential chain, no API key), `tools` + `tool_choice` for structured output, zod 4 native `z.toJSONSchema()` for the tool's `input_schema`, adaptive thinking + `effort: 'high'` defaults, system-prompt prompt caching via `cache_control: 'ephemeral'`, injectable `client` for tests. Default model `us.anthropic.claude-opus-4-5-20251101-v1:0` (cross-region inference profile).
-- [x] Added `packages/core/tests/llm/bedrock.test.ts` — 12 fixture-based tests covering happy path, request shape (tool_choice forcing, cache_control on system, adaptive+effort defaults, maxTokens override), and failure modes (no tool_use block, mismatched tool name, zod validation failure, transport error pass-through).
-- [x] Wrote `docs/02-contract-spec.md` — variant rationale, the `schemaVersion` evolution rule (Buckets A/B/C), why `WorkflowRecording` is LLM-free at capture and LLM-polished only at render time, what the M1 contract test guarantees about the seam.
+- [x] `packages/core/src/types/analysis.ts` with zod schemas + inferred types for the full `Analysis` discriminated union.
+- [x] `packages/core/src/llm/provider.ts` with the vendor-neutral `LLMProvider` interface.
+- [x] `BedrockAdapter` (`packages/core/src/llm/bedrock.ts`) using `@anthropic-ai/bedrock-sdk` (AWS standard credential chain), `tools` + `tool_choice` for structured output, zod 4 native `z.toJSONSchema()`, adaptive thinking + `effort: 'high'` defaults, system-prompt prompt caching.
+- [x] `packages/core/tests/llm/bedrock.test.ts` — 12 fixture-based tests.
+- [x] `docs/02-contract-spec.md` — variant rationale, schemaVersion evolution rule.
 
-**Done when:** `Analysis`, `LLMProvider`, and `BedrockAdapter` exist; the contract test passes; `02-contract-spec.md` is written.
-
----
-
-## M2 — Test generator (Phase 1 + Phase 2 for tests)
-
-Goal: end-to-end test generation for one Angular component shape.
-
-- [x] Implemented `TestPlanAnalyzer` for **Angular 19+ standalone components** using `ts-morph` (`packages/core/src/analyze/test-plan/`). Extracts: name, selector inferred from @Component, inputs (decorator `@Input` + `input()` signal + `input.required<T>()`), outputs (decorator `@Output` + `output()` signal), public methods (private/protected/lifecycle filtered out), lifecycle hooks captured separately, injected deps (`inject()` field initializer + constructor DI), `styleHints` (useStandalone, useSignals, useInject).
-- [x] Built the prompt template (`packages/core/src/analyze/test-plan/prompt.ts`). System prompt is long + stable (caches via the adapter's `cache_control`); user prompt is per-component and varies. The LLM returns only `cases[]`; the analyzer assembles the full TestPlan locally so the model cannot fabricate a different surface.
-- [x] Implemented `TestRenderer` (`packages/core/src/render/test/renderer.ts`): pure function `TestPlan → string`. Emits `import { ComponentFixture, TestBed }`, the standalone `imports: [Component]` pattern, standard provider mocks for `HttpClient` (→ `provideHttpClient() + provideHttpClientTesting()`) and `Router` (→ `provideRouter([])`), generic `{ provide: X, useValue: {} }` stubs for unrecognized deps, and `it()` blocks with arrange/act/assert comments.
-- [x] Golden-tested `TestRenderer` with 15 hand-written `TestPlan` fixtures + an inline-snapshot full-layout assertion (no LLM in the loop).
-- [x] Added 16 parser unit tests covering decorator inputs/outputs, signal inputs/outputs, constructor DI, `inject()` deps, lifecycle hooks, standalone defaults, and non-component file rejection.
-- [x] Added three example components as fixtures (`packages/core/tests/fixtures/components/`): `greeter.component.ts` (presentational, decorator-based), `user-list.component.ts` (service-injecting, constructor DI with HttpClient + Router + a custom service), `signal-counter.component.ts` (modern signal API: `input()`, `input.required()`, `output()`, `inject()`, `computed()`).
-- [x] Added three hand-authored `TestPlan` JSON fixtures and an integration test (18 tests) pinning the parser → renderer round-trip against each fixture.
-
-**Done when:** code-complete with parser + renderer + golden tests + 3-fixture integration test green. **Live Jest run against a sample Angular 20 app deferred** — see `docs/99-open-questions.md` "M2 e2e: live Jest verification". That work bundles naturally with M3 CLI integration (which needs the same Angular fixture app) and has been moved there.
+**Done when:** `Analysis`, `LLMProvider`, and `BedrockAdapter` exist; the contract test passes; `02-contract-spec.md` is written. ✅ Shipped in v0.2.0.
 
 ---
 
-## M3 — CLI surface
+## M2 — TestPlan analyzer + Jest renderer (foundation, deferred from v1 active path)
 
-Goal: validate the contract through the simplest UI before tackling the IDE/browser surfaces. Make onboarding a single command. Also closes the M2 e2e gap: bootstraps the Angular 20 fixture app the integration test runs against.
+Goal: end-to-end TestPlan generation for one Angular component shape. **This work shipped in v0.3.0 and is reusable** — the `TestPlan` contract artifact (with `cases[]` carrying arrange/act/assert) is the natural intermediate shape for workflow-derived positive/negative scenarios in M6. The Angular-specific parser + Jest renderer stay in the codebase as the precedent.
 
-- [ ] `packages/cli/`: `webspec gen <path>` reads source, runs analysis, writes `.spec.ts` next to the source.
-- [ ] `webspec audit <url>` is stubbed (returns "M4 not yet implemented" — wired for the contract).
-- [ ] `webspec init` — onboarding wizard. Detects the Angular project (reads `angular.json` / `package.json`), drops a sane `webspec.config.json`, prompts for AWS region (credentials come from the standard AWS chain), prints install URLs for the Chrome and VS Code extensions. Idempotent — re-running updates the config in place.
-- [ ] Implement `webspec.config.json` resolution + Angular-project auto-detection in `packages/config/`.
-- [ ] Exit codes: 0 success, 2 user error, 3 LLM/provider error, 4 internal error.
-- [ ] **Bootstrap the Angular 20 fixture app** under `tests/fixtures/angular-app/` (jest-preset-angular wired up; the three M2 fixture components live here). Closes the deferred M2 e2e verification.
-- [ ] Integration test: run the CLI against the fixture repo, verify file emitted + Jest passes (using a recorded TestPlan to keep CI offline) + a separate gated suite that calls live Bedrock when `BEDROCK_LIVE_E2E=true`. Separate test for `init` against a fresh Angular project fixture.
+- [x] `TestPlanAnalyzer` for Angular 19+ standalone components using `ts-morph`.
+- [x] Prompt template (system prompt cacheable; user prompt per-component).
+- [x] `TestRenderer` (pure function `TestPlan → string`).
+- [x] Golden tests, parser tests, three-fixture integration test.
 
-**Done when:** `webspec init && webspec gen <path>` works end-to-end against the fixture Angular repo; `npx jest` against the rendered specs returns green.
+**Done when:** code-complete with parser + renderer + golden tests + integration test green. ✅ Shipped in v0.3.0.
+
+**Status for v1:** foundation complete. Not extended further until v1 ships. Live Jest run against a sample Angular app remains deferred — see `docs/99-open-questions.md`. If/when the unit-test path returns post-v1 (e.g. as a save-time watcher), this is where it picks up.
+
+---
+
+## ~~M3 — CLI surface~~ (deferred from v1)
+
+**Status:** Deferred from v1. Original scope was a CLI wrapping unit-test generation (`webspec gen`), an `init` onboarding wizard with Angular auto-detection, and a stubbed `audit` + `record-to-spec`. Without unit-test gen on the v1 active path, the only CLI commands v1 needs are `audit` and `record-to-spec`, which ship with M4 and M6 respectively.
+
+If an external user post-v1 wants a unified CLI surface (`webspec gen`, `webspec init`), this milestone reactivates.
 
 ---
 
 ## M4 — A11y analyzer + report renderer
 
-Goal: WCAG 2.1 AA + Section 508 audits running through the same `Analysis` contract.
+Goal: WCAG 2.1 AA + Section 508 audits on a live page, available both in the Chrome extension and as a CLI command for CI gating.
 
 - [ ] `A11yAnalyzer` (Node mode): wrap `@axe-core/puppeteer`, run with tags `['wcag21aa','section508']`, validate output into `A11yReport`.
-- [ ] `ReportRenderer`: emit JSON and Markdown (severity grouping, rule tag column, selector + fix-hint per finding).
-- [ ] CLI: implement `webspec audit <url>` end-to-end.
-- [ ] Tests: snapshot-test the Markdown renderer against a recorded axe result.
+- [ ] `A11yAnalyzer` (browser mode): inject `axe-core/browser` from the Chrome extension content script; same `A11yReport` shape out.
+- [ ] `ReportRenderer`: emit JSON and Markdown (severity grouping, rule tag column, selector + fix-hint per finding). The Chrome popup renders its own React/HTML view from the same typed report.
+- [ ] CLI: implement `webspec audit <url>` end-to-end (Node-mode analyzer + Markdown renderer to stdout/file).
+- [ ] Tests: snapshot-test the Markdown renderer against a recorded axe result; snapshot-test the typed `A11yReport` round-trip.
 
-**Done when:** `webspec audit https://example.com` produces a clean Markdown report with each finding tagged 508 / WCAG / both.
+**Done when:** `webspec audit https://example.com` produces a clean Markdown report with each finding tagged 508 / WCAG / both, AND the same analyzer can be loaded into the Chrome extension's browser bundle for M5.
 
 ---
 
-## M5 — Chrome extension (the flagship "easy to use" surface)
+## M5 — Chrome extension (the v1 flagship surface)
 
-Goal: ship the only surface non-developers can use. Two modes — runtime a11y audit, and workflow recorder. Front-loaded ahead of the VS Code extension because it's the lowest "easy to use" floor (508 reviewers, QA, designers, PMs all use this).
+Goal: ship the primary v1 surface. Two modes — runtime a11y audit, and workflow recorder. The dev (or QA, designer, 508 reviewer, PM) drives this; nobody needs to leave Chrome to use it.
 
 **Audit mode:**
 
 - [ ] Scaffold Manifest V3 extension; bundle the **browser flavor** of `core` (a11y + recorder + report renderer; no test generator, no Node imports).
-- [ ] Content script injects `axe-core` browser build; scans on demand from the popup.
+- [ ] Content script injects the browser build of `axe-core`; scans on demand from the popup.
 - [ ] Popup React UI renders the `A11yReport`; "Copy report" button copies the Markdown rendering.
 
 **Recorder mode:**
@@ -117,66 +116,49 @@ Goal: ship the only surface non-developers can use. Two modes — runtime a11y a
 - [ ] Background service worker captures outgoing requests via `webRequest` (URL + method only — no response bodies in v1).
 - [ ] Sensitive-input masking: any `<input type="password">` value is replaced with a marker; everything else captured raw with a "review before sharing" warning in the export UI.
 - [ ] Stop button → presents the trace summary in the popup → "Download recording.json" button writes a `WorkflowRecording` JSON to disk via `chrome.downloads`.
-- [ ] No LLM auth in the Chrome extension for v1 — it doesn't call the LLM (a11y is local; recorder is deterministic). Settings UI is limited to recorder behavior (selector strategy, masking rules). LLM-backed Chrome features would require AWS credentials in the browser, which is awkward; defer until concretely needed.
+- [ ] No LLM auth in the Chrome extension for v1 — it doesn't call the LLM (a11y is local; recorder is deterministic). LLM amplification happens at render time (M6, in Node).
 
 **Verification:**
 
-- [ ] Verify on three deployed Bellese sites: audit parity with CLI; recorder produces a clean trace for each site's golden-path flow (login → primary action → confirmation).
+- [ ] Verify on three deployed sites: audit parity with CLI; recorder produces a clean trace for each site's golden-path flow (login → primary action → confirmation).
 
 **Done when:** unpacked extension installs in Chrome, both modes work end-to-end on three sites, audit findings match the CLI for the same URLs, recordings export as JSON.
 
 ---
 
-## M6 — E2E renderer (`WorkflowRecording` → Playwright `.spec.ts`)
+## M6 — E2E renderer (`WorkflowRecording` → Playwright with positive + negative scenarios)
 
-Goal: turn a recording into a runnable Playwright test. Two-pass renderer; LLM polish optional.
+Goal: turn a recording into a runnable Playwright spec **with multiple test cases — the recorded happy path, plus LLM-generated negative scenarios.** Two-pass renderer; deterministic-only is a valid output if no provider is configured.
 
-- [ ] Implement deterministic pass: each `RecordedEvent` maps to a Playwright action (`page.click(selector)`, `page.fill(selector, value)`, `page.goto(url)`, etc.). Selectors use the recording's hardened forms.
-- [ ] Implement LLM-polish pass: given the action trace + observed network calls, the LLM names the test (`describe`/`test` strings), inserts assertions (`expect(page.getByRole('heading', { name: 'Success' })).toBeVisible()`), and proposes selector consolidations where redundant. Polish is no-op if no provider key is configured.
+- [ ] **Deterministic pass:** each `RecordedEvent` maps to a Playwright action (`page.click(selector)`, `page.fill(selector, value)`, `page.goto(url)`, etc.). Selectors use the recording's hardened forms. Output: one Playwright `test()` block — the recorded happy path. Always works.
+- [ ] **LLM amplification pass** (the v1 differentiator): given the action trace + observed network calls + page state, the LLM:
+  - Names the test (`describe` + `test` strings inferred from the workflow).
+  - Inserts assertions (e.g. `expect(page.getByRole('heading', { name: 'Success' })).toBeVisible()` after a recorded submit).
+  - **Generates negative scenarios** as additional `test()` blocks: empty input, invalid input, malformed input, error-state coverage. Constraints on which negatives to generate are encoded in the prompt — plausible variants only, not exhaustive fuzzing.
+  - Proposes selector consolidations where redundant.
+  - Skipped if no provider key is configured (deterministic spec emits alone).
+- [ ] **IR decision (resolved at v0.3.2 — Path C):** the LLM emits a typed structured `AmplifiedRecording` (`scenarios[]` with typed `actions` + `assertions`), zod-validated at the seam. A deterministic renderer formats that into Playwright source. Same architectural pattern as M2 (validated structured output → deterministic format). The LLM never writes shipped Playwright code directly. See `99-open-questions.md` for why C beats both "TestPlan reuse" and "LLM-writes-source-directly."
 - [ ] Golden-test the deterministic pass with hand-written `WorkflowRecording` fixtures (no LLM in the loop).
+- [ ] Golden-test the amplification pass against a recorded-LLM-response fixture (deterministic test of "given this recording + this LLM response, render this spec").
 - [ ] CLI: implement `webspec record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`).
-- [ ] Integration test: capture a recording (use a fixture, not a live browser) → render → run the emitted Playwright spec against a sample Angular 20 app → spec passes.
+- [ ] Integration test: capture a recording (use a fixture, not a live browser) → render → run the emitted Playwright spec against a sample web app → spec passes (at least the happy-path test; negative-scenario tests pass when the app handles those failure modes correctly, fail informatively when it doesn't).
 
-**Done when:** a recording exported from M5 produces a Playwright `.spec.ts` that compiles, runs, and passes against the same app the recording was made against.
-
----
-
-## M7 — VS Code extension
-
-Goal: in-editor surface for two of the three capabilities (test generation in-flow, dev-time a11y). The recorder lives in the Chrome ext only — no live tab in VS Code.
-
-- [ ] Scaffold the extension with `yo code` (or equivalent); set up `vsce package`.
-- [ ] AWS settings: optional `aws_region` and `aws_profile` overrides in VS Code settings. No SecretStorage for credentials — AWS auth uses the system's default credential chain (env / `~/.aws/credentials` / IAM role).
-- [ ] Command: `Bellese Test: Generate Spec for Active File` → calls `core` → writes `.spec.ts`.
-- [ ] Command: `Bellese Test: Run A11y Audit (URL)` → input box for URL → calls `core` → opens a webview panel rendering the `A11yReport`.
-- [ ] Command: `Bellese Test: Render Recording to Playwright Spec` → file picker for a `recording.json` → calls `core/render/E2ERenderer` → writes the `.spec.ts` next to the recording.
-- [ ] Sidebar panel: most-recent `Analysis` (any variant) + "Re-run" button.
-- [ ] Manual test against a sample Angular 20 project. Document the install (VSIX) flow in the project README.
-
-**Done when:** VSIX installs in VS Code, all three commands work end-to-end, keys persist across reloads.
-
----
-
-## M8 — Second LLM adapter + provider parity test
-
-Goal: prove the `LLMProvider` seam by adding a second adapter alongside `BedrockAdapter`. The specific second provider is decided at this milestone — candidates: a different Bedrock model family (e.g. a Sonnet variant for cheap default + an Opus variant for hard tasks), OpenAI direct (for OSS users without AWS), or another Bedrock-hosted model.
-
-- [ ] Implement the second adapter following the `BedrockAdapter` pattern. Same `LLMProvider` interface. Same zod-validated outputs.
-- [ ] Add a parity test: given the same fixture component and prompt, both adapters return a `TestPlan` with the same shape (structural assertion — case count, surface coverage — not exact text). Repeat the parity test for the E2E LLM-polish pass.
-- [ ] CLI flag + config option: `--provider <id>` switching between adapters.
-- [ ] Document adding a third adapter in `docs/03-llm-provider-interface.md` (created in this milestone).
-
-**Done when:** both adapters produce passing generated tests for the M2 example components AND polished e2e specs for an M5 fixture recording; parity tests are green.
+**Done when:** a recording exported from M5 produces a Playwright `.spec.ts` with multiple `test()` blocks (happy + negatives) that compiles and runs against the same app the recording was made against. Spec emits cleanly with or without an LLM provider configured.
 
 ---
 
 <!--
+Deferred from v1:
+- M7: VS Code extension (browser-first means browser-only in v1)
+- M8: Second LLM adapter + parity test (proven structurally; add when a procurement constraint forces it)
+
 Future milestones to consider when v1 is real:
-- M9: Karma + Jasmine emitter (gated on a Bellese-project inventory — see 99-open-questions.md)
+- M3 reactivated: webspec gen + webspec init for unit-test-gen as a save-time watcher
+- M9: Karma + Jasmine emitter (gated on inventory)
 - M10: Cypress renderer alongside Playwright
 - M11: In-extension recording playback + visual diffing
 - M12: Network-response capture and replay (recorded mocks)
-- M13: Coverage feedback loop (re-run Jest, feed gaps to a second LLM pass)
+- M13: Coverage feedback loop (re-run Playwright, feed gaps to a second LLM amplification pass)
 - M14: GitHub Action surface
 - M15: Optional Bellese LLM proxy
 -->
