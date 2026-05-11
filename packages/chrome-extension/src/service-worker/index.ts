@@ -12,14 +12,27 @@
  *     is only available to the service worker.
  *   - One storage key per tab: `webspec:recorder:<tabId>`. Cleared on stop or
  *     on tab close (chrome.tabs.onRemoved).
- *   - Future PRs (deferred from v1 path):
- *     - Navigation event capture (`chrome.webNavigation`) — v0.5.3.
- *     - Network capture (`chrome.webRequest`) — v0.5.x or M6-enables.
+ *
+ * v0.5.3 scope:
+ *   - Navigation event capture via `chrome.webNavigation`. Three listeners
+ *     cover the four navigation kinds: onCommitted (cross-doc + reload),
+ *     onHistoryStateUpdated (pushState/replaceState), onReferenceFragmentUpdated
+ *     (hash). For same-document navigations we message the content script,
+ *     which appends the event to its in-memory buffer and persists. For
+ *     cross-document navigations the content script is being torn down — we
+ *     write the event directly to storage, since the new content script's
+ *     bootstrap will pick it up.
+ *
+ * Future PRs (deferred from v1 path):
+ *   - Network capture (`chrome.webRequest`) — v0.5.x or M6-enables.
  */
+import type { RecordedEvent } from '@webspec/core/browser';
 import {
   isRecorderSessionClearRequest,
   isRecorderSessionGetRequest,
   isRecorderSessionPutRequest,
+  type RecorderAppendEventRequest,
+  type RecorderAppendEventResponse,
   type RecorderSessionClearResponse,
   type RecorderSessionGetResponse,
   type RecorderSessionPutResponse,
@@ -132,4 +145,82 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // state around, and Chrome doesn't garbage-collect storage.session for us.
 chrome.tabs.onRemoved.addListener((tabId) => {
   void clearSession(tabId);
+});
+
+// ---------------------------------------------------------------------------
+// Navigation capture (v0.5.3)
+// ---------------------------------------------------------------------------
+
+type NavReason = 'navigate' | 'reload' | 'history' | 'hash';
+
+/**
+ * Handle a webNavigation event for an active recording. Same-document
+ * navigations go via a message to the still-alive content script (so the
+ * event lands in the in-memory buffer immediately). Cross-document
+ * navigations write directly to storage, because the old content script is
+ * being destroyed and the new one will read storage on bootstrap.
+ *
+ * Top frames only — subframe navigations are noise for a workflow recording.
+ */
+async function handleNavigation(
+  details: chrome.webNavigation.WebNavigationFramedCallbackDetails,
+  baseReason: Exclude<NavReason, 'reload'>,
+): Promise<void> {
+  if (details.frameId !== 0) return;
+  const tabId = details.tabId;
+  if (tabId === undefined || tabId < 0) return;
+
+  const state = await getSession(tabId);
+  if (state === null) return; // no recording for this tab — drop silently
+
+  // onCommitted fires for both fresh loads and reloads. Distinguish them by
+  // transitionType so renderers can emit `page.reload()` vs `goto(url)`.
+  const isReload =
+    baseReason === 'navigate' &&
+    'transitionType' in details &&
+    details.transitionType === 'reload';
+  const reason: NavReason = isReload ? 'reload' : baseReason;
+
+  const event: RecordedEvent = {
+    t: Date.now() - state.startedAtMs,
+    kind: 'navigate',
+    url: details.url,
+    reason,
+  };
+
+  if (baseReason === 'navigate') {
+    // Cross-document: content script is dying. Write directly so the new
+    // content script's bootstrap reads the nav event from storage.
+    state.events.push(event);
+    await putSession(tabId, state);
+    return;
+  }
+
+  // Same-document: tell the live content script. It owns the buffer and will
+  // persist after appending. Fall back to a direct storage write if the tab
+  // doesn't respond (rare — content script crashed / not yet injected).
+  try {
+    const request: RecorderAppendEventRequest = { type: 'recorder:append-event', event };
+    const response = await chrome.tabs.sendMessage<
+      RecorderAppendEventRequest,
+      RecorderAppendEventResponse
+    >(tabId, request);
+    if (response.ok && response.absorbed) return;
+  } catch {
+    // Receiver gone or messaging blocked — fall through to direct write.
+  }
+  state.events.push(event);
+  await putSession(tabId, state);
+}
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  void handleNavigation(details, 'navigate');
+});
+
+chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
+  void handleNavigation(details, 'history');
+});
+
+chrome.webNavigation.onReferenceFragmentUpdated.addListener((details) => {
+  void handleNavigation(details, 'hash');
 });
