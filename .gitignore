@@ -5,6 +5,11 @@ Thumbs.db
 # Local scratch (design mockups, throwaway HTML, smoke fixtures)
 _tmp/
 
+# Playwright integration-test artifacts
+test-results/
+playwright-report/
+**/tests/integration/.tmp/
+
 # Editors
 .vscode/
 .idea/
