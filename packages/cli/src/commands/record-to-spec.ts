@@ -11,15 +11,25 @@
  * input file). Any other thrown error → exit code 1 (runtime fault).
  */
 import { readFile, writeFile } from 'node:fs/promises';
-import { renderPlaywrightSpec, WorkflowRecordingSchema } from '@webspec/core';
-import type { WorkflowRecording } from '@webspec/core';
-import type { RecordToSpecCommand } from '../args.js';
+import {
+  AmplifyAnalyzer,
+  BedrockAdapter,
+  renderAmplifiedPlaywrightSpec,
+  renderPlaywrightSpec,
+  WorkflowRecordingSchema,
+} from '@webspec/core';
+import type { LLMProvider, WorkflowRecording } from '@webspec/core';
+import type { LLMProviderId, RecordToSpecCommand } from '../args.js';
 
 export interface RecordToSpecResult {
   /** Path the rendered spec was written to. */
   outputPath: string;
   /** Number of events in the source recording — surfaced in the stderr log. */
   eventCount: number;
+  /** Number of scenarios rendered. 1 for the deterministic pass; 1 + N for amplified. */
+  scenarioCount: number;
+  /** True when --provider drove the render. */
+  amplified: boolean;
 }
 
 export async function runRecordToSpec(cmd: RecordToSpecCommand): Promise<RecordToSpecResult> {
@@ -41,12 +51,45 @@ export async function runRecordToSpec(cmd: RecordToSpecCommand): Promise<RecordT
   }
 
   const recording: WorkflowRecording = result.data;
-  const spec = renderPlaywrightSpec(recording, cmd.testName !== undefined ? { testName: cmd.testName } : {});
-
   const outputPath = cmd.out ?? defaultOutputPath(cmd.input);
-  await writeFile(outputPath, spec, 'utf8');
 
-  return { outputPath, eventCount: recording.events.length };
+  if (cmd.provider !== undefined) {
+    const provider = constructProvider(cmd.provider);
+    const analyzer = new AmplifyAnalyzer(provider);
+    const amplified = await analyzer.amplify(recording);
+    const spec = renderAmplifiedPlaywrightSpec(amplified);
+    await writeFile(outputPath, spec, 'utf8');
+    return {
+      outputPath,
+      eventCount: recording.events.length,
+      scenarioCount: amplified.scenarios.length,
+      amplified: true,
+    };
+  }
+
+  const spec = renderPlaywrightSpec(
+    recording,
+    cmd.testName !== undefined ? { testName: cmd.testName } : {},
+  );
+  await writeFile(outputPath, spec, 'utf8');
+  return {
+    outputPath,
+    eventCount: recording.events.length,
+    scenarioCount: 1,
+    amplified: false,
+  };
+}
+
+function constructProvider(id: LLMProviderId): LLMProvider {
+  switch (id) {
+    case 'bedrock':
+      return new BedrockAdapter();
+    default: {
+      const _exhaustive: never = id;
+      void _exhaustive;
+      throw new Error(`Unsupported provider: ${id as string}`);
+    }
+  }
 }
 
 /**

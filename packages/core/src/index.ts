@@ -30,6 +30,15 @@ export {
 } from './analyze/test-plan/parser.js';
 export { SYSTEM_PROMPT, formatUserPrompt } from './analyze/test-plan/prompt.js';
 
+// Phase 1 — AmplifyAnalyzer (WorkflowRecording → AmplifiedRecording via LLM).
+// Node-only because it requires a configured LLMProvider; browser bundles
+// can still consume the rendered output via the IR schema + e2e renderer.
+export { AmplifyAnalyzer } from './analyze/amplify/analyzer.js';
+export {
+  SYSTEM_PROMPT as AMPLIFY_SYSTEM_PROMPT,
+  formatUserPrompt as formatAmplifyUserPrompt,
+} from './analyze/amplify/prompt.js';
+
 // Phase 2 — TestRenderer (TestPlan → Jest .spec.ts text). Pure function;
 // browser-safe (uses string ops, no Node `path`).
 export { renderTestPlan } from './render/test/renderer.js';
