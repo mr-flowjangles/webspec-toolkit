@@ -130,6 +130,8 @@ Goal: ship the primary v1 surface. Two modes — runtime a11y audit, and workflo
 
 Goal: turn a recording into a runnable Playwright spec **with multiple test cases — the recorded happy path, plus LLM-generated negative scenarios.** Two-pass renderer; deterministic-only is a valid output if no provider is configured.
 
+**Design:** see `docs/06-renderer.md` for the locked action set, assertion set, `navigate.reason` mapping, integration-test target, ambiguous-selector policy, and the `AmplifiedRecording` IR shape. Decisions land at v0.6.2; implementation follows in v0.7.x.
+
 - [ ] **Deterministic pass:** each `RecordedEvent` maps to a Playwright action (`page.click(selector)`, `page.fill(selector, value)`, `page.goto(url)`, etc.). Selectors use the recording's hardened forms. Output: one Playwright `test()` block — the recorded happy path. Always works.
 - [ ] **LLM amplification pass** (the v1 differentiator): given the action trace + observed network calls + page state, the LLM:
   - Names the test (`describe` + `test` strings inferred from the workflow).
