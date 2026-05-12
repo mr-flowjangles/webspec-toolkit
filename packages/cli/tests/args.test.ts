@@ -121,3 +121,65 @@ describe('parseArgs — errors', () => {
     });
   });
 });
+
+describe('parseArgs — record-to-spec', () => {
+  it('parses a bare path with defaults', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json'])).toEqual({
+      kind: 'record-to-spec',
+      input: 'recording.json',
+    });
+  });
+
+  it('accepts --out for a custom output path', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json', '--out', 'tests/login.spec.ts'])).toEqual({
+      kind: 'record-to-spec',
+      input: 'recording.json',
+      out: 'tests/login.spec.ts',
+    });
+  });
+
+  it('accepts --test-name to override the test() title', () => {
+    expect(
+      parseArgs(['record-to-spec', 'recording.json', '--test-name', 'login then logout']),
+    ).toEqual({
+      kind: 'record-to-spec',
+      input: 'recording.json',
+      testName: 'login then logout',
+    });
+  });
+
+  it('errors when the recording path is missing', () => {
+    expect(parseArgs(['record-to-spec'])).toEqual({
+      kind: 'error',
+      message: 'record-to-spec requires a recording.json path',
+    });
+  });
+
+  it('errors on --out with no value', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json', '--out'])).toEqual({
+      kind: 'error',
+      message: '--out requires a path',
+    });
+  });
+
+  it('errors on --test-name with no value', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json', '--test-name'])).toEqual({
+      kind: 'error',
+      message: '--test-name requires a value',
+    });
+  });
+
+  it('errors on unknown flag', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json', '--negative'])).toEqual({
+      kind: 'error',
+      message: 'unknown flag "--negative"',
+    });
+  });
+
+  it('errors on extra positional argument', () => {
+    expect(parseArgs(['record-to-spec', 'a.json', 'b.json'])).toEqual({
+      kind: 'error',
+      message: 'unexpected argument "b.json"',
+    });
+  });
+});

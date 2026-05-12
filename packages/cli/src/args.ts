@@ -18,6 +18,16 @@ export interface AuditCommand {
   out?: string;
 }
 
+export interface RecordToSpecCommand {
+  kind: 'record-to-spec';
+  /** Path to the input `recording.json` produced by the Chrome extension. */
+  input: string;
+  /** Optional output path. Defaults to the input path with `.spec.ts` appended. */
+  out?: string;
+  /** Optional custom test name for the deterministic test() block. */
+  testName?: string;
+}
+
 export interface HelpCommand {
   kind: 'help';
 }
@@ -27,7 +37,7 @@ export interface ParseError {
   message: string;
 }
 
-export type ParsedArgs = AuditCommand | HelpCommand | ParseError;
+export type ParsedArgs = AuditCommand | RecordToSpecCommand | HelpCommand | ParseError;
 
 const HELP_FLAGS = new Set(['--help', '-h']);
 const VALID_FORMATS = new Set<AuditFormat>(['md', 'json']);
@@ -39,11 +49,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const [subcommand, ...rest] = argv;
 
-  if (subcommand !== 'audit') {
-    return { kind: 'error', message: `unknown command "${subcommand}"` };
-  }
+  if (subcommand === 'audit') return parseAudit(rest);
+  if (subcommand === 'record-to-spec') return parseRecordToSpec(rest);
 
-  return parseAudit(rest);
+  return { kind: 'error', message: `unknown command "${subcommand}"` };
 }
 
 function parseAudit(rest: readonly string[]): ParsedArgs {
@@ -95,22 +104,64 @@ function isValidUrl(s: string): boolean {
   }
 }
 
+function parseRecordToSpec(rest: readonly string[]): ParsedArgs {
+  let input: string | undefined;
+  let out: string | undefined;
+  let testName: string | undefined;
+
+  for (let i = 0; i < rest.length; i++) {
+    const tok = rest[i]!;
+    if (tok === '--out') {
+      const value = rest[++i];
+      if (value === undefined) return { kind: 'error', message: '--out requires a path' };
+      out = value;
+    } else if (tok === '--test-name') {
+      const value = rest[++i];
+      if (value === undefined) return { kind: 'error', message: '--test-name requires a value' };
+      testName = value;
+    } else if (tok.startsWith('--')) {
+      return { kind: 'error', message: `unknown flag "${tok}"` };
+    } else if (input === undefined) {
+      input = tok;
+    } else {
+      return { kind: 'error', message: `unexpected argument "${tok}"` };
+    }
+  }
+
+  if (input === undefined) {
+    return { kind: 'error', message: 'record-to-spec requires a recording.json path' };
+  }
+
+  return testName !== undefined
+    ? { kind: 'record-to-spec', input, ...(out !== undefined ? { out } : {}), testName }
+    : { kind: 'record-to-spec', input, ...(out !== undefined ? { out } : {}) };
+}
+
 export const HELP_TEXT = `webspec — browser-based shift-left companion for web app development
 
 Usage:
   webspec audit <url> [--format md|json] [--out <path>]
+  webspec record-to-spec <recording.json> [--out <path>] [--test-name <name>]
   webspec --help
 
 Commands:
-  audit <url>      Run a WCAG 2.1 AA + Section 508 + best-practice audit
-                   against a live page (matches the extension's tag set).
+  audit <url>                  Run a WCAG 2.1 AA + Section 508 + best-practice
+                               audit against a live page (matches the extension's
+                               tag set).
+  record-to-spec <path>        Render a WorkflowRecording JSON (from the Chrome
+                               extension) into a runnable Playwright .spec.ts.
+                               Deterministic pass only in v0.7.0 — LLM
+                               amplification lands in v0.7.2.
 
 Options:
-  --format md|json   Output format. Defaults to md.
-  --out <path>       Write to a file instead of stdout.
+  --format md|json   Output format for audit. Defaults to md.
+  --out <path>       Write to a file instead of the default location.
+  --test-name <s>    Override the test() title (record-to-spec only).
   --help, -h         Show this help.
 
 Examples:
   webspec audit https://example.com
   webspec audit https://example.com --format json --out report.json
+  webspec record-to-spec recording.json
+  webspec record-to-spec recording.json --out tests/login.spec.ts
 `;

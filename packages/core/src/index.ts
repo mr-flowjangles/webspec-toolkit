@@ -52,3 +52,8 @@ export {
   renderA11yReportMarkdown,
   renderA11yReportJson,
 } from './render/a11y/renderer.js';
+
+// Phase 2 — E2ERenderer (WorkflowRecording → Playwright .spec.ts text). Pure
+// function; browser-safe. v0.7.0 ships the deterministic pass; LLM
+// amplification is added in v0.7.2.
+export { renderPlaywrightSpec, type RenderE2EOptions } from './render/e2e/renderer.js';
