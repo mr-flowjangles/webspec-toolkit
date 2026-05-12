@@ -44,10 +44,11 @@ async function main(): Promise<number> {
     case 'record-to-spec': {
       try {
         const result = await runRecordToSpec(parsed);
+        const eventNoun = result.eventCount === 1 ? 'event' : 'events';
+        const scenarioNoun = result.scenarioCount === 1 ? 'scenario' : 'scenarios';
+        const mode = result.amplified ? ` (amplified, ${result.scenarioCount} ${scenarioNoun})` : '';
         process.stderr.write(
-          `webspec record-to-spec: rendered ${result.eventCount} event${
-            result.eventCount === 1 ? '' : 's'
-          } → ${result.outputPath}\n`,
+          `webspec record-to-spec: rendered ${result.eventCount} ${eventNoun}${mode} → ${result.outputPath}\n`,
         );
         return 0;
       } catch (err) {

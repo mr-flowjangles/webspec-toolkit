@@ -182,4 +182,26 @@ describe('parseArgs — record-to-spec', () => {
       message: 'unexpected argument "b.json"',
     });
   });
+
+  it('accepts --provider bedrock', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json', '--provider', 'bedrock'])).toEqual({
+      kind: 'record-to-spec',
+      input: 'recording.json',
+      provider: 'bedrock',
+    });
+  });
+
+  it('errors on --provider with an unknown value', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json', '--provider', 'openai'])).toEqual({
+      kind: 'error',
+      message: '--provider must be one of: bedrock (got "openai")',
+    });
+  });
+
+  it('errors on --provider with no value', () => {
+    expect(parseArgs(['record-to-spec', 'recording.json', '--provider'])).toEqual({
+      kind: 'error',
+      message: '--provider requires a value',
+    });
+  });
 });

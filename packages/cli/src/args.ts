@@ -18,6 +18,8 @@ export interface AuditCommand {
   out?: string;
 }
 
+export type LLMProviderId = 'bedrock';
+
 export interface RecordToSpecCommand {
   kind: 'record-to-spec';
   /** Path to the input `recording.json` produced by the Chrome extension. */
@@ -26,7 +28,16 @@ export interface RecordToSpecCommand {
   out?: string;
   /** Optional custom test name for the deterministic test() block. */
   testName?: string;
+  /**
+   * Optional LLM provider for amplification. When set, the deterministic
+   * pass is replaced with an `AmplifyAnalyzer` call — the rendered spec
+   * gains LLM-generated negative scenarios alongside the happy path.
+   * Currently only `bedrock` is supported.
+   */
+  provider?: LLMProviderId;
 }
+
+const VALID_PROVIDERS = new Set<LLMProviderId>(['bedrock']);
 
 export interface HelpCommand {
   kind: 'help';
@@ -108,6 +119,7 @@ function parseRecordToSpec(rest: readonly string[]): ParsedArgs {
   let input: string | undefined;
   let out: string | undefined;
   let testName: string | undefined;
+  let provider: LLMProviderId | undefined;
 
   for (let i = 0; i < rest.length; i++) {
     const tok = rest[i]!;
@@ -119,6 +131,16 @@ function parseRecordToSpec(rest: readonly string[]): ParsedArgs {
       const value = rest[++i];
       if (value === undefined) return { kind: 'error', message: '--test-name requires a value' };
       testName = value;
+    } else if (tok === '--provider') {
+      const value = rest[++i];
+      if (value === undefined) return { kind: 'error', message: '--provider requires a value' };
+      if (!VALID_PROVIDERS.has(value as LLMProviderId)) {
+        return {
+          kind: 'error',
+          message: `--provider must be one of: ${[...VALID_PROVIDERS].join(', ')} (got "${value}")`,
+        };
+      }
+      provider = value as LLMProviderId;
     } else if (tok.startsWith('--')) {
       return { kind: 'error', message: `unknown flag "${tok}"` };
     } else if (input === undefined) {
@@ -132,16 +154,18 @@ function parseRecordToSpec(rest: readonly string[]): ParsedArgs {
     return { kind: 'error', message: 'record-to-spec requires a recording.json path' };
   }
 
-  return testName !== undefined
-    ? { kind: 'record-to-spec', input, ...(out !== undefined ? { out } : {}), testName }
-    : { kind: 'record-to-spec', input, ...(out !== undefined ? { out } : {}) };
+  const cmd: RecordToSpecCommand = { kind: 'record-to-spec', input };
+  if (out !== undefined) cmd.out = out;
+  if (testName !== undefined) cmd.testName = testName;
+  if (provider !== undefined) cmd.provider = provider;
+  return cmd;
 }
 
 export const HELP_TEXT = `webspec — browser-based shift-left companion for web app development
 
 Usage:
   webspec audit <url> [--format md|json] [--out <path>]
-  webspec record-to-spec <recording.json> [--out <path>] [--test-name <name>]
+  webspec record-to-spec <recording.json> [--out <path>] [--test-name <name>] [--provider bedrock]
   webspec --help
 
 Commands:
@@ -150,13 +174,17 @@ Commands:
                                tag set).
   record-to-spec <path>        Render a WorkflowRecording JSON (from the Chrome
                                extension) into a runnable Playwright .spec.ts.
-                               Deterministic pass only in v0.7.0 — LLM
-                               amplification lands in v0.7.2.
+                               Deterministic by default (happy path only);
+                               pass --provider to add LLM-generated negative
+                               scenarios alongside the happy path.
 
 Options:
   --format md|json   Output format for audit. Defaults to md.
   --out <path>       Write to a file instead of the default location.
-  --test-name <s>    Override the test() title (record-to-spec only).
+  --test-name <s>    Override the test() title (record-to-spec only,
+                     deterministic mode).
+  --provider <name>  LLM provider for amplification (record-to-spec only).
+                     Currently: bedrock. Requires AWS credentials.
   --help, -h         Show this help.
 
 Examples:
@@ -164,4 +192,5 @@ Examples:
   webspec audit https://example.com --format json --out report.json
   webspec record-to-spec recording.json
   webspec record-to-spec recording.json --out tests/login.spec.ts
+  webspec record-to-spec recording.json --provider bedrock
 `;
