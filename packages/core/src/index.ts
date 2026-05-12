@@ -54,6 +54,11 @@ export {
 } from './render/a11y/renderer.js';
 
 // Phase 2 — E2ERenderer (WorkflowRecording → Playwright .spec.ts text). Pure
-// function; browser-safe. v0.7.0 ships the deterministic pass; LLM
-// amplification is added in v0.7.2.
-export { renderPlaywrightSpec, type RenderE2EOptions } from './render/e2e/renderer.js';
+// function; browser-safe. v0.7.0 ships the deterministic pass over a captured
+// recording; v0.7.1 adds the AmplifiedRecording renderer (one test() block per
+// scenario); v0.7.2 wires the LLM that produces the AmplifiedRecording.
+export {
+  renderPlaywrightSpec,
+  renderAmplifiedPlaywrightSpec,
+  type RenderE2EOptions,
+} from './render/e2e/renderer.js';
