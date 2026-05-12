@@ -12,7 +12,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@webspec/core": "workspace:*",
-    "@webspec/config": "workspace:*"
+    "@webspec/config": "workspace:*",
+    "@webspec/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }

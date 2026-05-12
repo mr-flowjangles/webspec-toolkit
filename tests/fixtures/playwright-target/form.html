@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>webspec integration fixture — form</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 40px auto; }
+  label { display: block; margin: 12px 0 4px; }
+  input, select, button { font-size: 14px; padding: 4px 8px; }
+  #success { color: #1e8449; margin-top: 16px; }
+  [hidden] { display: none; }
+</style>
+
+<h1>Sign up</h1>
+
+<form id="signup">
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required />
+
+  <label for="country">Country</label>
+  <select id="country" name="country">
+    <option value="us">United States</option>
+    <option value="ca">Canada</option>
+    <option value="mx">Mexico</option>
+  </select>
+
+  <label>
+    <input id="subscribe" name="subscribe" type="checkbox" />
+    Subscribe to the newsletter
+  </label>
+
+  <button type="submit">Submit</button>
+</form>
+
+<p id="success" role="status" hidden>Welcome aboard!</p>
+
+<script>
+  // Minimal stand-in for a real signup handler. On valid submit, show the
+  // success message. Kept dead-simple so the integration test's assertions
+  // are about the renderer, not about app logic.
+  const form = document.getElementById('signup');
+  const success = document.getElementById('success');
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    success.hidden = false;
+  });
+</script>
