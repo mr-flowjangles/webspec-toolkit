@@ -28,4 +28,8 @@ export {
   renderA11yReportMarkdown,
   renderA11yReportJson,
 } from './render/a11y/renderer.js';
-export { renderPlaywrightSpec, type RenderE2EOptions } from './render/e2e/renderer.js';
+export {
+  renderPlaywrightSpec,
+  renderAmplifiedPlaywrightSpec,
+  type RenderE2EOptions,
+} from './render/e2e/renderer.js';

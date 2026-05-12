@@ -273,6 +273,95 @@ export const WorkflowRecordingSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// AmplifiedRecording — M6 IR between the LLM amplifier and the e2e renderer.
+//
+// Not a fourth Analysis variant. It's an intermediate the amplifier produces
+// from a WorkflowRecording and the renderer consumes to emit Playwright
+// `test()` blocks. User-facing artifacts stay WorkflowRecording (capture) and
+// the rendered .spec.ts (output). See `docs/06-renderer.md` for the locked
+// action and assertion sets that constrain this schema.
+//
+// v0.7.1 ships the schema + a deterministic renderer for it. The LLM call
+// that *produces* an AmplifiedRecording from a WorkflowRecording lands in
+// v0.7.2.
+// ---------------------------------------------------------------------------
+
+/**
+ * Playwright actions an amplified scenario can emit. Kept at Playwright's
+ * primitive level — already-translated from DOM events. Six base actions
+ * (`click`, `fill`, `press`, `goto`, `reload`, `waitForURL`) plus three
+ * implicit-but-distinct primitives derived from `change` events
+ * (`selectOption`, `check`, `uncheck`).
+ */
+export const AmplifiedActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('click'), selector: HardenedSelectorSchema }),
+  z.object({ kind: z.literal('fill'), selector: HardenedSelectorSchema, value: z.string() }),
+  z.object({ kind: z.literal('press'), selector: HardenedSelectorSchema, key: z.string() }),
+  z.object({ kind: z.literal('goto'), url: z.string() }),
+  z.object({ kind: z.literal('reload') }),
+  z.object({ kind: z.literal('waitForURL'), url: z.string() }),
+  z.object({
+    kind: z.literal('selectOption'),
+    selector: HardenedSelectorSchema,
+    value: z.string(),
+  }),
+  z.object({ kind: z.literal('check'), selector: HardenedSelectorSchema }),
+  z.object({ kind: z.literal('uncheck'), selector: HardenedSelectorSchema }),
+]);
+
+/**
+ * Playwright assertions an amplified scenario can emit. Seven matchers locked
+ * by v0.6.2: visible/hidden, text (equals or contains), url, count, value,
+ * checked. Each maps cleanly to an `expect(...).toX()` call in the rendered
+ * spec.
+ */
+export const AmplifiedAssertionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('visible'), selector: HardenedSelectorSchema }),
+  z.object({ kind: z.literal('hidden'), selector: HardenedSelectorSchema }),
+  z.object({
+    kind: z.literal('text'),
+    selector: HardenedSelectorSchema,
+    mode: z.enum(['equals', 'contains']),
+    value: z.string(),
+  }),
+  z.object({ kind: z.literal('url'), value: z.string() }),
+  z.object({
+    kind: z.literal('count'),
+    selector: HardenedSelectorSchema,
+    value: z.number().int().nonnegative(),
+  }),
+  z.object({
+    kind: z.literal('value'),
+    selector: HardenedSelectorSchema,
+    value: z.string(),
+  }),
+  z.object({ kind: z.literal('checked'), selector: HardenedSelectorSchema }),
+]);
+
+/**
+ * One scenario = one Playwright `test()` block. `kind: 'happy'` mirrors the
+ * recorded user flow; `kind: 'negative'` is an LLM-generated variant (invalid
+ * input, empty form, out-of-order action, etc.) that asserts the app handles
+ * the failure mode informatively.
+ *
+ * Actions run first, then assertions. Mid-flow assertions aren't expressible
+ * in v1 — most negative scenarios fit the "do actions, assert end state"
+ * shape cleanly; if a real case needs interleaving, a future schema bump
+ * adds a unified `steps[]` array.
+ */
+export const AmplifiedScenarioSchema = z.object({
+  kind: z.enum(['happy', 'negative']),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  actions: z.array(AmplifiedActionSchema),
+  assertions: z.array(AmplifiedAssertionSchema),
+});
+
+export const AmplifiedRecordingSchema = z.object({
+  scenarios: z.array(AmplifiedScenarioSchema).min(1),
+});
+
+// ---------------------------------------------------------------------------
 // The Analysis discriminated union
 // ---------------------------------------------------------------------------
 
@@ -317,6 +406,10 @@ export type ObservedState = z.infer<typeof ObservedStateSchema>;
 export type NetworkRequest = z.infer<typeof NetworkRequestSchema>;
 export type RecordedEvent = z.infer<typeof RecordedEventSchema>;
 export type WorkflowRecording = z.infer<typeof WorkflowRecordingSchema>;
+export type AmplifiedAction = z.infer<typeof AmplifiedActionSchema>;
+export type AmplifiedAssertion = z.infer<typeof AmplifiedAssertionSchema>;
+export type AmplifiedScenario = z.infer<typeof AmplifiedScenarioSchema>;
+export type AmplifiedRecording = z.infer<typeof AmplifiedRecordingSchema>;
 export type Analysis = z.infer<typeof AnalysisSchema>;
 
 /** Current contract artifact schema version. Bump when the IR changes shape. */

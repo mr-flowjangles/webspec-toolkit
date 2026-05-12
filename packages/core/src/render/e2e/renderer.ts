@@ -20,7 +20,14 @@
  * See `docs/06-renderer.md` for the locked action and assertion sets, the
  * navigate.reason mapping, and the v0.7.x sequence.
  */
-import type { HardenedSelector, RecordedEvent, WorkflowRecording } from '../../types/analysis.js';
+import type {
+  AmplifiedAction,
+  AmplifiedAssertion,
+  AmplifiedRecording,
+  HardenedSelector,
+  RecordedEvent,
+  WorkflowRecording,
+} from '../../types/analysis.js';
 
 export interface RenderE2EOptions {
   /** Title used for the deterministic `test()` block. Defaults to "recorded workflow". */
@@ -130,6 +137,96 @@ function renderNavigate(event: Extract<RecordedEvent, { kind: 'navigate' }>): st
       const _exhaustive: never = event.reason;
       void _exhaustive;
       return [];
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AmplifiedRecording → Playwright (v0.7.1)
+//
+// Renders the structured IR that the LLM amplifier will produce in v0.7.2.
+// One `test()` block per scenario; actions run first, then assertions.
+// Shares the locator translation and string-quoting helpers with the
+// deterministic pass above.
+// ---------------------------------------------------------------------------
+
+export function renderAmplifiedPlaywrightSpec(amplified: AmplifiedRecording): string {
+  const lines: string[] = [];
+  lines.push("import { expect, test } from '@playwright/test';");
+
+  for (const scenario of amplified.scenarios) {
+    lines.push('');
+    if (scenario.description !== undefined && scenario.description !== '') {
+      // Description rides above the test() as a single-line comment. Multi-
+      // line descriptions get newlines preserved so the spec stays readable.
+      for (const descLine of scenario.description.split('\n')) {
+        lines.push(`// ${descLine}`);
+      }
+    }
+    lines.push(`test(${quote(scenario.name)}, async ({ page }) => {`);
+    for (const action of scenario.actions) {
+      lines.push(`  ${renderAction(action)}`);
+    }
+    for (const assertion of scenario.assertions) {
+      lines.push(`  ${renderAssertion(assertion)}`);
+    }
+    lines.push('});');
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function renderAction(action: AmplifiedAction): string {
+  switch (action.kind) {
+    case 'click':
+      return `await ${locator(action.selector)}.click();`;
+    case 'fill':
+      return `await ${locator(action.selector)}.fill(${quote(action.value)});`;
+    case 'press':
+      return `await ${locator(action.selector)}.press(${quote(action.key)});`;
+    case 'goto':
+      return `await page.goto(${quote(action.url)});`;
+    case 'reload':
+      return `await page.reload();`;
+    case 'waitForURL':
+      return `await page.waitForURL(${quote(action.url)});`;
+    case 'selectOption':
+      return `await ${locator(action.selector)}.selectOption(${quote(action.value)});`;
+    case 'check':
+      return `await ${locator(action.selector)}.check();`;
+    case 'uncheck':
+      return `await ${locator(action.selector)}.uncheck();`;
+    default: {
+      const _exhaustive: never = action;
+      void _exhaustive;
+      return '';
+    }
+  }
+}
+
+function renderAssertion(assertion: AmplifiedAssertion): string {
+  switch (assertion.kind) {
+    case 'visible':
+      return `await expect(${locator(assertion.selector)}).toBeVisible();`;
+    case 'hidden':
+      return `await expect(${locator(assertion.selector)}).toBeHidden();`;
+    case 'text': {
+      const matcher = assertion.mode === 'equals' ? 'toHaveText' : 'toContainText';
+      return `await expect(${locator(assertion.selector)}).${matcher}(${quote(assertion.value)});`;
+    }
+    case 'url':
+      return `await expect(page).toHaveURL(${quote(assertion.value)});`;
+    case 'count':
+      return `await expect(${locator(assertion.selector)}).toHaveCount(${assertion.value});`;
+    case 'value':
+      return `await expect(${locator(assertion.selector)}).toHaveValue(${quote(assertion.value)});`;
+    case 'checked':
+      return `await expect(${locator(assertion.selector)}).toBeChecked();`;
+    default: {
+      const _exhaustive: never = assertion;
+      void _exhaustive;
+      return '';
     }
   }
 }
