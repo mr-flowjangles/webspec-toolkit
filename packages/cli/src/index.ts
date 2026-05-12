@@ -12,6 +12,7 @@
  *   2 — bad arguments (caller-side error)
  */
 import { runAudit } from './commands/audit.js';
+import { runRecordToSpec, RecordToSpecInputError } from './commands/record-to-spec.js';
 import { HELP_TEXT, parseArgs } from './args.js';
 
 async function main(): Promise<number> {
@@ -37,6 +38,22 @@ async function main(): Promise<number> {
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(`webspec audit: ${msg}\n`);
         return 1;
+      }
+    }
+
+    case 'record-to-spec': {
+      try {
+        const result = await runRecordToSpec(parsed);
+        process.stderr.write(
+          `webspec record-to-spec: rendered ${result.eventCount} event${
+            result.eventCount === 1 ? '' : 's'
+          } → ${result.outputPath}\n`,
+        );
+        return 0;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`webspec record-to-spec: ${msg}\n`);
+        return err instanceof RecordToSpecInputError ? 2 : 1;
       }
     }
   }
