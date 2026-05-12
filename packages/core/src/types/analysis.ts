@@ -214,6 +214,21 @@ export const RecordedEventSchema = z.discriminatedUnion('kind', [
     kind: z.literal('change'),
     selector: HardenedSelectorSchema,
     value: z.string(),
+    /**
+     * For `<select>` targets only: the full set of options the user had to
+     * choose from at the moment of change. Renderers can use this to emit
+     * `selectByLabel(...)` when label is more stable than value, and the M6
+     * amplifier uses it to generate negative scenarios ("what if the user
+     * picked X instead?"). Absent for checkbox/radio changes.
+     */
+    options: z
+      .array(
+        z.object({
+          value: z.string(),
+          label: z.string(),
+        }),
+      )
+      .optional(),
   }),
   z.object({
     t: z.number(),

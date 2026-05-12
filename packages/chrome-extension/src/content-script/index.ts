@@ -16,7 +16,10 @@
  *   - A focusing `click` immediately followed by an `input` on the same
  *     field is dropped — `fill()` focuses on its own.
  *   - A checkbox/radio click fires both `click` and `change`; the preceding
- *     `click` is dropped so one user action yields one event.
+ *     `click` is dropped so one user action yields one event. Same rule
+ *     applies to `<select>` — `selectOption()` covers both. `<select>` also
+ *     emits a *trailing* click (the option click bubbles after the change
+ *     fires), which is dropped on the way in.
  *   - Selectors are hardened at capture time (`data-testid` > role+name >
  *     text > css). See `selectors.ts`.
  *   - State persists across page reloads: on each event we push the recording
@@ -140,10 +143,22 @@ function handleClick(ev: MouseEvent): void {
   const target = ev.target;
   if (!(target instanceof Element)) return;
 
+  const selector = selectorFor(target);
+
+  // A `<select>` fires its `change` event before the `click` finishes
+  // bubbling up from the chosen option, so the click arrives *after* the
+  // change. Same physical action, two events — drop the trailing click.
+  if (target instanceof HTMLSelectElement) {
+    const last = recordedEvents[recordedEvents.length - 1];
+    if (last && last.kind === 'change' && last.selector.preferred === selector.preferred) {
+      return;
+    }
+  }
+
   recordedEvents.push({
     t: timestamp(),
     kind: 'click',
-    selector: selectorFor(target),
+    selector,
     ...(target.textContent ? { targetText: target.textContent.trim().slice(0, 80) } : {}),
   });
   persistSession();
@@ -218,14 +233,39 @@ function handleChange(ev: Event): void {
     return;
   }
   if (target instanceof HTMLSelectElement) {
+    const selector = selectorFor(target);
+    // Same dedup logic as checkbox/radio: a click that opened the dropdown
+    // is redundant once the change fires — `page.selectOption()` does both.
+    const last = recordedEvents[recordedEvents.length - 1];
+    if (last && last.kind === 'click' && last.selector.preferred === selector.preferred) {
+      recordedEvents.pop();
+    }
     recordedEvents.push({
       t: timestamp(),
       kind: 'change',
-      selector: selectorFor(target),
+      selector,
       value: target.value,
+      options: optionsFor(target),
     });
     persistSession();
   }
+}
+
+/**
+ * Capture the option set on a `<select>` at the moment of change. Renderers
+ * use this to choose `selectByLabel` vs `selectByValue` and the M6 amplifier
+ * uses it to generate negative scenarios from the unchosen options.
+ *
+ * Single-select only for v0.6.1 — `<select multiple>` is rare in shift-left
+ * recordings and adds renderer surface (array of values) we'll handle later.
+ * Optgroups are flattened; disabled options are still captured (they're part
+ * of the visible UI even when unselectable).
+ */
+function optionsFor(select: HTMLSelectElement): { value: string; label: string }[] {
+  return Array.from(select.options).map((opt) => ({
+    value: opt.value,
+    label: opt.textContent?.trim() ?? '',
+  }));
 }
 
 function handleSubmit(ev: SubmitEvent): void {
