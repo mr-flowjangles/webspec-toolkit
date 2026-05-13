@@ -90,7 +90,7 @@ If an external user post-v1 wants a unified CLI surface (`webspec gen`, `webspec
 Goal: WCAG 2.1 AA + Section 508 audits on a live page, available both in the Chrome extension and as a CLI command for CI gating.
 
 - [x] `A11yAnalyzer` (Node mode): wrap `@axe-core/puppeteer`, run with tags `['wcag21aa','section508']`, validate output into `A11yReport`. ✅ v0.3.3.
-- [ ] `A11yAnalyzer` (browser mode): inject `axe-core/browser` from the Chrome extension content script; same `A11yReport` shape out. **Folded into M5** — the browser-mode wrapper has no callsite outside the extension; ships as the second M5 PR alongside content-script injection.
+- [x] `A11yAnalyzer` (browser mode): inject `axe-core/browser` from the Chrome extension content script; same `A11yReport` shape out. ✅ Folded into M5, shipped in v0.3.8 — the browser-mode wrapper has no callsite outside the extension, so it shipped with content-script injection rather than as a standalone M4 PR.
 - [x] `ReportRenderer`: emit JSON and Markdown (severity grouping, rule tag column, selector + fix-hint per finding). The Chrome popup renders its own React/HTML view from the same typed report. ✅ v0.3.4.
 - [x] CLI: implement `webspec audit <url>` end-to-end (Node-mode analyzer + Markdown renderer to stdout/file). ✅ v0.3.5.
 - [x] Tests: snapshot-test the Markdown renderer against a recorded axe result; snapshot-test the typed `A11yReport` round-trip. ✅ v0.3.4 (renderer) + v0.3.3 (round-trip).
@@ -113,7 +113,7 @@ Goal: ship the primary v1 surface. Two modes — runtime a11y audit, and workflo
 
 - [x] Popup gains a "Record" button (start / stop / discard). Recording state survives popup close (chrome.storage.session). ✅ v0.4.1 (skeleton) + v0.5.2 (session persistence) + v0.5.4 (Discard).
 - [x] Content script captures `click`, `input`, `change`, `submit`, `keydown`, navigation events. Each event is annotated with a `HardenedSelector` computed at capture time (data-testid > role+name > text > css fallback). ✅ v0.5.0 (DOM events) + v0.5.1 (hardened selectors + dedup) + v0.5.3 (navigation).
-- [ ] Background service worker captures outgoing requests via `webRequest` (URL + method only — no response bodies in v1). **Deferred to M6-enables** — the renderer can decide whether it actually needs network metadata before we pay for capture; M5 ships without it.
+- ~~Background service worker captures outgoing requests via `webRequest` (URL + method only — no response bodies in v1).~~ **Out of v1** — M6 confirmed the renderer doesn't consume network metadata (neither the deterministic pass nor the amplifier reference `WorkflowRecording.network`; the extension emits `network: []`). The schema field stays as a forward-compat seam for the deferred network-mocking milestone (M12).
 - [x] Sensitive-input masking: any `<input type="password">` value is replaced with a marker; everything else captured raw with a "review before sharing" warning in the export UI. ✅ v0.5.0 (password masking) + v0.5.4 (review warning).
 - [x] Stop button → presents the trace summary in the popup → "Download recording.json" button writes a `WorkflowRecording` JSON to disk via `chrome.downloads`. ✅ v0.5.4.
 - [x] No LLM auth in the Chrome extension for v1 — it doesn't call the LLM (a11y is local; recorder is deterministic). LLM amplification happens at render time (M6, in Node). ✅ confirmed.
@@ -141,7 +141,7 @@ Goal: turn a recording into a runnable Playwright spec **with multiple test case
   - Skipped if no provider key is configured (deterministic spec emits alone).
 - [ ] **IR decision (resolved at v0.3.2 — Path C):** the LLM emits a typed structured `AmplifiedRecording` (`scenarios[]` with typed `actions` + `assertions`), zod-validated at the seam. A deterministic renderer formats that into Playwright source. Same architectural pattern as M2 (validated structured output → deterministic format). The LLM never writes shipped Playwright code directly. See `99-open-questions.md` for why C beats both "TestPlan reuse" and "LLM-writes-source-directly."
 - [ ] Golden-test the deterministic pass with hand-written `WorkflowRecording` fixtures (no LLM in the loop).
-- [ ] Golden-test the amplification pass against a recorded-LLM-response fixture (deterministic test of "given this recording + this LLM response, render this spec").
+- [x] Golden-test the amplification pass against a recorded-LLM-response fixture (deterministic test of "given this recording + this LLM response, render this spec"). ✅ v0.7.4 — `packages/core/tests/render/e2e/amplification-pass.test.ts` composes `AmplifyAnalyzer` (with a fake `LLMProvider`) + `renderAmplifiedPlaywrightSpec` and snapshots the resulting source.
 - [ ] CLI: implement `webspec record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`).
 - [ ] Integration test: capture a recording (use a fixture, not a live browser) → render → run the emitted Playwright spec against a sample web app → spec passes (at least the happy-path test; negative-scenario tests pass when the app handles those failure modes correctly, fail informatively when it doesn't).
 
