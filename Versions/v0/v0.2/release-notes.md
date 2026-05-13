@@ -1,12 +1,14 @@
-# v0.2.0 — Contract artifact + LLM provider seam (2026-05-07)
+# v0.2
 
-## Problem
+## v0.2.0 — Contract artifact + LLM provider seam (2026-05-07)
+
+### Problem
 
 M0 gave us a buildable monorepo. The next step was the architecturally load-bearing one: lock the `Analysis` discriminated union and the `LLMProvider` interface in code. Every analyzer (M2 source-driven, M4 a11y, M5 recorder) and every renderer (M2 test, M4 report, M6 e2e) consumes one of these two shapes. Get them wrong here and every later milestone has to rework. Get the LLM seam wrong and the LLM-provider-agnostic constraint can't hold.
 
 A second non-negotiable surfaced during M1: Bellese's federal-customer work runs on AWS-resident infrastructure for compliance reasons, so all Anthropic-model traffic goes through **Amazon Bedrock**, not the direct Anthropic API. The seam doesn't change — that's exactly what the seam was designed for — but the v1 adapter does.
 
-## Solution
+### Solution
 
 Three pieces of code, one design doc, one contract test:
 
@@ -16,7 +18,7 @@ Three pieces of code, one design doc, one contract test:
 4. **`packages/core/tests/llm/bedrock.test.ts`** — 12 fixture-based contract tests pinning the seam invariants without hitting live AWS.
 5. **`docs/02-contract-spec.md`** — the IR-evolution rule (Buckets A/B/C), the rationale for each variant's shape, and what the contract test guarantees.
 
-## New
+### New
 
 - **`Analysis` zod schema and inferred types** (`packages/core/src/types/analysis.ts`).
   - `AnalysisSchema` — discriminated union, exported with `CURRENT_SCHEMA_VERSION = '1'`.
@@ -45,7 +47,7 @@ Three pieces of code, one design doc, one contract test:
 - **Core deps:** `zod ^4.4.3`, `@anthropic-ai/bedrock-sdk ^0.29.1` added to `@bellese/test-core`. (No `zod-to-json-schema`; zod 4 has native `z.toJSONSchema()`. No direct `@anthropic-ai/sdk` — Bedrock is the v1 path.)
 - **ESLint:** added `argsIgnorePattern: '^_'` / `varsIgnorePattern: '^_'` etc. to `@typescript-eslint/no-unused-vars` so `_`-prefixed names signal "intentionally unused" in destructuring patterns.
 
-## Changed
+### Changed
 
 - **`docs/mission.md`** — locked decisions now name AWS Bedrock + standard AWS credential chain explicitly, replacing the prior "BYOK with API keys" framing. Out-of-scope updated: "Bellese-managed LLM proxy or shared AWS / Bedrock allocation infrastructure" (was: shared API key infra). The "what the tool must do" list now references Bedrock + the provider-agnostic seam instead of "let the user pick their LLM provider."
 - **`docs/00-overview.md`** — VS Code extension settings line says "AWS region/profile settings" instead of "BYOK settings."
@@ -56,11 +58,11 @@ Three pieces of code, one design doc, one contract test:
 - `packages/core/src/index.ts` — replaced the M0 stub export. Now re-exports the analysis schemas/types, the `LLMProvider` interface + `LLMValidationError`, and `BedrockAdapter`. Includes a comment marking `./llm/bedrock.js` as the only Bedrock-SDK-importing module — browser bundles must exclude it.
 - `eslint.config.mjs` — see ESLint note above.
 
-## Fixed
+### Fixed
 
 - (n/a — first implementation milestone)
 
-## Files Changed
+### Files Changed
 
 | File | Change |
 | ---- | ------ |
@@ -80,3 +82,4 @@ Three pieces of code, one design doc, one contract test:
 | `eslint.config.mjs` | Changed — `^_`-prefix unused-vars exception |
 | `pnpm-lock.yaml` | Changed — new deps |
 | `Versions/v0/v0.2.0/release-notes.md` | New — this file |
+
