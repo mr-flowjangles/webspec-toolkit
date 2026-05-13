@@ -1,16 +1,18 @@
-# v0.0.0 — Initial Design (2026-05-07)
+# v0.0
 
-## Problem
+## v0.0.0 — Initial Design (2026-05-07)
+
+### Problem
 
 Bellese Angular teams burn time on two recurring chores: writing `.spec.ts` boilerplate that every component, service, directive, and pipe needs, and chasing Section 508 / WCAG accessibility regressions that only get caught late. We have no shared tooling that does either, and per-project hacks don't compose.
 
-## Solution
+### Solution
 
 Bootstrap a single project — `angular-automated-testing` — that exposes one shared `core` (Phase 1: Analyze → typed `Analysis` artifact → Phase 2: Render) through three surfaces: a CLI, a VS Code extension, and a Chrome extension. Test generation is LLM-backed with a pluggable provider interface (BYOK, Anthropic + OpenAI in v1). Accessibility is axe-core with `wcag21aa` + `section508` rule tags. Angular 19+ standalone components are the v1 baseline; Jest is the test framework target.
 
 This commit locks no application code — it locks the design.
 
-## New
+### New
 
 - **Project scaffold** copied from `bellese-starter-pack/template/`. README, CLAUDE.md, Makefile, Dockerfile stub, `.gitignore` / `.dockerignore`, `infra/terraform/` placeholder, `scripts/new-version.sh` versioning ceremony, `Versions/v0/v0.0.0/`.
 - **Mission statement** (`docs/mission.md`). Target audience, must-do behaviors, hard constraints, locked decisions, explicit v1 out-of-scope.
@@ -27,7 +29,7 @@ This commit locks no application code — it locks the design.
   - A11y engine: axe-core with `wcag21aa` + `section508` tags.
   - Surfaces: CLI, VS Code extension, Chrome extension — all on shared `core`.
 
-## Files Changed
+### Files Changed
 
 | File | Change |
 |------|--------|
@@ -45,3 +47,4 @@ This commit locks no application code — it locks the design.
 | `scripts/new-version.sh` | New — versioning ceremony script |
 | `infra/terraform/README.md` | New — AWS deployment placeholder |
 | `Versions/v0/v0.0.0/release-notes.md` | New — this file |
+

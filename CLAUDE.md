@@ -23,13 +23,27 @@
 
 ## Versioning
 
-Every PR is a version. Three-part semver, folder-per-version under `Versions/`.
+Every PR is a version. Three-part semver, one stacked release-notes file per **minor** under `Versions/`.
 
 ```
 Versions/
 └── v{major}/
-    └── v{major}.{minor}.{patch}/
-        └── release-notes.md
+    └── v{major}.{minor}/
+        └── release-notes.md     # newest patch at top, oldest at bottom
+```
+
+Each minor file is structured as:
+
+```
+# v{major}.{minor}
+
+## v{major}.{minor}.{patch} — Title (YYYY-MM-DD)   ← newest at top
+### Problem
+### Solution
+### New / Changed / Fixed / Files Changed
+
+## v{major}.{minor}.{patch-1} — …
+…
 ```
 
 **Start a new version:**
@@ -44,9 +58,9 @@ Versions/
 The script:
 
 1. Refuses to run on a dirty working tree.
-2. Finds the latest existing `v*.*.*` folder, bumps it.
+2. Finds the latest version by scanning H2 headings (`## v{maj}.{min}.{pat} …`) across `Versions/v*/v*/release-notes.md`, bumps it.
 3. Creates a branch named `V{major}dot{minor}dot{patch}/{Description_With_Underscores}`.
-4. Creates `Versions/v{major}/v{major}.{minor}.{patch}/release-notes.md` from a stubbed template (Problem / Solution / New / Changed / Fixed / Files Changed table).
+4. **Patch bump** → prepends a new H2 stub at the top of the existing minor's file (just under the H1). **Minor / major bump** → creates a new `Versions/v{major}/v{major}.{minor}/release-notes.md` with the H1 + first H2 stub.
 5. You fill in the notes as you implement, commit alongside the code, open a PR.
 
 The Makefile has shortcuts:
@@ -69,7 +83,7 @@ make version-M1                       # minor bump, title auto-resolved from doc
 
 ### PR rules
 
-- **PR title must be `v{version} — {short description}`**, matching the H1 in `release-notes.md` (minus the date suffix). Example: `v0.0.1 — Versioning Bootstrap`. The version number makes the PR list scannable as a release log.
+- **PR title must be `v{version} — {short description}`**, matching this patch's H2 heading in the minor's `release-notes.md` (minus the date suffix). Example: `v0.0.1 — Versioning Bootstrap`. The version number makes the PR list scannable as a release log.
 - **Rob initiates PRs.** Claude creates the branch (via `new-version.sh`) and fills in the release notes during implementation, but does **not** push the branch or run `gh pr create` until Rob explicitly says so ("open the PR" / "create the PR"). Local commits are fine.
 
 ## Tech choices (locked)
