@@ -8,6 +8,8 @@ The convention is `## M<N> — {Title}` so `make version-M<N>` can auto-resolve 
 
 ## v1 — Definition of Done
 
+> 🚀 **v1 shipped at `v1.0.0` on 2026-05-14.** Every box below is `[x]` with a footprint of the version it shipped in. The full release announcement is in `Versions/v1/v1.0/release-notes.md`. This section is preserved as a historical record of the v1 contract — don't edit the boxes; if a future version regresses a deliverable, that's a separate fix in a new milestone.
+
 v1 ships a **browser-based shift-left companion**: a Chrome extension that records workflows, generates a test plan with positive + negative scenarios as a runnable Playwright spec, and audits a11y on the live page. v1 ships when **all** of the following are true:
 
 - [x] **Chrome extension installs and runs**, with two modes: ✅ M5 done at v0.6.0.
