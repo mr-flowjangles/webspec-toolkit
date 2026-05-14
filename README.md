@@ -4,7 +4,7 @@ A browser-based shift-left companion for web app development. The Chrome extensi
 
 ## Status
 
-**M5 (Chrome extension) and M6 (`WorkflowRecording` → Playwright renderer) both shipped.** Audit mode (axe-core, WCAG 2.1 AA + Section 508 + best-practice) and recorder mode (hardened selectors, dedup, session persistence, navigation capture, review-then-download) verified end-to-end against three real public sites (`v0.6.0`). The render-to-spec path is verified against those same three sites (`v0.7.6`) — recordings render to Playwright specs that pass on the live URL. v1 ships once the remaining DoD boxes in `docs/07-build-plan.md` are ticked.
+🚀 **webspec v1 shipped at `v1.0.0` on 2026-05-14.** Chrome extension (audit + record modes), thin CLI (`webspec audit` + `webspec record-to-spec`), LLM-amplified Playwright renderer, and three-site live verification — all green against the v1 Definition of Done. Read the full release announcement in [`Versions/v1/v1.0/release-notes.md`](Versions/v1/v1.0/release-notes.md). Post-v1 work continues against the milestone backlog in `docs/07-build-plan.md`.
 
 ## Quickstart
 
