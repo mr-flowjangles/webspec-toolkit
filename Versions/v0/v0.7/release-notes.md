@@ -1,5 +1,86 @@
 # v0.7
 
+## v0.7.7 — README Quickstart (2026-05-14)
+
+### Problem
+
+The v1 Definition of Done has a `README.md` line:
+
+> README.md has a quickstart that a new operator can follow end-to-end (install Chrome ext → record → audit → render a Playwright spec).
+
+The pre-v0.7.7 `README.md` had a "Quickstart" section, but it was a **developer bootstrap** (`nvm use` → `make setup` → `make ci` → `make build`) — the right thing for someone *working on webspec*, the wrong thing for someone *using* it. There were no install steps for the Chrome extension, no record/audit walkthrough, no `record-to-spec` invocation, and no way to actually run a rendered spec. The Status section was also stale — it claimed M5 was the latest milestone and M6 was "next," but M6 has been done since v0.7.4 and the live-site render verification shipped in v0.7.6.
+
+A secondary friction surfaced while drafting: running a rendered spec against an arbitrary path doesn't have a one-line invocation. `@playwright/test` is a dep of `packages/cli`, not the root, so `npx playwright test some-path.spec.ts` from the repo root doesn't resolve the binary. The natural command — `pnpm --filter @webspec/cli exec playwright test ...` — changes cwd to `packages/cli/` before exec, breaking any relative paths the operator passes. There needs to be a clean wrapper for step 6 or the quickstart trails off on its most important command.
+
+### Solution
+
+Rewrite the README around an **operator-facing six-step quickstart**, and add the missing Makefile target to make step 6 a one-liner.
+
+**Six-step operator quickstart**, end-to-end:
+
+1. **Build the toolkit.** `git clone` → `nvm use` → `pnpm install` → `pnpm -w build` (builds core + cli + extension).
+2. **Install the Chrome extension.** `chrome://extensions/` → Developer mode → Load unpacked → `packages/chrome-extension/dist/`.
+3. **Audit a page.** Two surfaces, identical findings: in-browser ("Audit this tab") or CLI (`node packages/cli/dist/index.js audit <url>`). Both use `wcag21aa + section508 + best-practice`.
+4. **Record a workflow.** Click extension icon → Record → walk through flow (passwords masked automatically) → Stop → review → Download recording.json.
+5. **Render a Playwright spec.** `node packages/cli/dist/index.js record-to-spec recording.json` (deterministic happy path) or `... --provider bedrock` (adds LLM-amplified negative scenarios as additional `test()` blocks).
+6. **Run the spec.** `make run-spec SPEC=path/to/recording.spec.ts`.
+
+Plus an aside on the realistic v1 integration pattern: drop the rendered `.spec.ts` into your own app's existing Playwright test suite — it only imports from `@playwright/test`, so it slots in without any webspec dependency.
+
+**`make run-spec` target.** New Makefile target that wraps the cwd-sensitive `pnpm --filter @webspec/cli exec playwright test` invocation. Accepts `SPEC=<path>`, resolves it to an absolute path before handing to Playwright, and points Playwright at a shared `playwright.config.ts` so it can find the spec regardless of where it lives. First-time setup (`pnpm --filter @webspec/cli exec playwright install chromium`) is documented in the README and the target's header comment.
+
+**Shared Playwright config.** New `tests/fixtures/recordings/playwright.config.ts`: 7-line `defineConfig` (`testDir: '.'`, `testMatch: '**/*.spec.ts'`, headless, line reporter). Lives alongside the three reference recordings from v0.7.6 so they (and any other recording rendered to a path on disk) can be run through `make run-spec` with no per-spec config setup.
+
+**Status section refresh.** Updated to read "M5 and M6 both shipped" with pointers to v0.6.0 (Chrome ext flagship) and v0.7.6 (render-to-spec live verification). v1 ships once the remaining DoD boxes are ticked.
+
+**Build-plan box.** `README.md has a quickstart …` is now `[x]` in `docs/07-build-plan.md`'s v1 DoD checklist, with `✅ v0.7.7.`
+
+### New
+
+- `tests/fixtures/recordings/playwright.config.ts` — shared Playwright config the `make run-spec` target points at. Lets operators run any rendered spec by file path without authoring a config first.
+- `Makefile`: new `run-spec` target. `make run-spec SPEC=…` resolves the path, points Playwright at the shared config, and runs the spec via the cli package's installed `@playwright/test`. Documented in `make help` and in the README's step 6.
+
+### Changed
+
+- `README.md` — full rewrite of the user-facing surface:
+  - **Status** updated to reflect M5 + M6 both shipped (with version pointers).
+  - **Quickstart** replaced with a six-step operator walkthrough (build → install ext → audit → record → render → run), with copy-pasteable commands.
+  - **Develop** section (renamed from the old "Quickstart") preserves the `nvm use` / `make setup` / `make ci` bootstrap for contributors.
+  - **Repo layout** updated to include `tests/fixtures/` and the new "stacked release notes per minor" wording (the per-patch folder convention died in v0.7.5).
+- `docs/07-build-plan.md` — `README.md has a quickstart …` box in the v1 DoD checklist is now ticked with `✅ v0.7.7`.
+
+### Fixed
+
+Nothing fixed in the shipped code path. Still-known issue (carried from v0.7.6, not fixed here): `scripts/new-version.sh` fails on BSD awk when injecting the H2 stub. Worked around manually again for this PR. Should be fixed in its own version — switch from `awk -v stub="$stub"` to piping the stub via stdin, or require GNU awk.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `README.md` | Rewrite. New operator-facing 6-step quickstart; refreshed Status; renamed contributor section to Develop. |
+| `Makefile` | New `run-spec` target wrapping the cwd-sensitive Playwright invocation. Added to `.PHONY`. |
+| `tests/fixtures/recordings/playwright.config.ts` | New shared config for `make run-spec`. |
+| `docs/07-build-plan.md` | Tick the `README.md has a quickstart …` box in v1 DoD. |
+| `Versions/v0/v0.7/release-notes.md` | This file. |
+
+### Verification
+
+End-to-end of the documented six-step path, on this machine:
+
+- Steps 1–2: confirmed previously (extension already installed locally; `pnpm -w build` ran during v0.7.6).
+- Step 3: `node packages/cli/dist/index.js audit https://example.com` returns the expected `landmark-one-main` + `region` findings.
+- Step 4: the three reference recordings under `tests/fixtures/recordings/three-sites/` are the artifacts captured during v0.7.6.
+- Step 5: `node packages/cli/dist/index.js record-to-spec tests/fixtures/recordings/three-sites/example.recording.json --out tests/fixtures/recordings/three-sites/.tmp/example.spec.ts` writes a clean 3-line spec.
+- Step 6: `make run-spec SPEC=tests/fixtures/recordings/three-sites/.tmp/example.spec.ts` → `1 passed (2.3s)` against the live `example.com`.
+
+### What's next
+
+One DoD line remains before `v1.0.0`:
+
+- **Tick the remaining v1 DoD boxes** in `docs/07-build-plan.md`. Most are factually true at this point (Chrome ext installs + runs ✓, two modes ✓, render-to-spec with positive + negative scenarios ✓, thin CLI ✓, Bedrock-via-AWS-credentials ✓, verified on three deployed sites ✓ for both audit-parity and render-to-spec, all M4–M6 milestones ✓). The next version is a doc-only sweep that goes through the checklist, ticks each box with the version it shipped in, and prepares the final v0.x patch before the major bump.
+
+Then the **major bump to v1.0.0**.
+
 ## v0.7.6 — Three Site Render Verification (2026-05-14)
 
 ### Problem

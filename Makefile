@@ -4,7 +4,7 @@
 # Targets that produce no files are .PHONY so make doesn't try to track them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup build ext-build test lint format format-check ci image smoke clean version version-minor version-major
+.PHONY: help setup build ext-build test lint format format-check ci image smoke run-spec clean version version-minor version-major
 
 # ---------------------------------------------------------------------------
 # Help
@@ -59,6 +59,25 @@ image: ## Build the runtime Docker image
 
 smoke: ## Smoke-test the built image (override CMD as appropriate for your tool)
 	docker run --rm webspec/angular-automated-testing:dev --help
+
+# ---------------------------------------------------------------------------
+# Run a rendered Playwright spec (README quickstart step 6)
+# ---------------------------------------------------------------------------
+# Run a rendered Playwright spec against its live target URL. Pass the path
+# to the rendered .spec.ts via SPEC=… (any path relative to the repo root).
+# Uses the shared config under tests/fixtures/recordings/playwright.config.ts.
+# Requires Chromium installed once: pnpm --filter @webspec/cli exec playwright
+# install chromium.
+#
+# Example:
+#   make run-spec SPEC=tests/fixtures/recordings/three-sites/.tmp/todomvc.spec.ts
+run-spec: ## Run a rendered Playwright spec (SPEC=path/to/spec.ts)
+	@if [ -z "$(SPEC)" ]; then \
+	  echo "Usage: make run-spec SPEC=path/to/rendered.spec.ts"; exit 1; \
+	fi
+	pnpm --filter @webspec/cli exec playwright test \
+	  --config "$(CURDIR)/tests/fixtures/recordings/playwright.config.ts" \
+	  "$(abspath $(SPEC))"
 
 # ---------------------------------------------------------------------------
 # Cleanup
