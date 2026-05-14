@@ -10,14 +10,14 @@ The convention is `## M<N> — {Title}` so `make version-M<N>` can auto-resolve 
 
 v1 ships a **browser-based shift-left companion**: a Chrome extension that records workflows, generates a test plan with positive + negative scenarios as a runnable Playwright spec, and audits a11y on the live page. v1 ships when **all** of the following are true:
 
-- [ ] **Chrome extension installs and runs**, with two modes:
-  - [ ] "Audit this tab" returns a normalized 508 / WCAG 2.1 AA report (severity-grouped, rule-tag column, selector + fix-hint per finding).
-  - [ ] "Record" captures a workflow (clicks, input, change, submit, navigation, key events, outgoing requests) with hardened selectors, then exports a `WorkflowRecording` JSON via `chrome.downloads`.
-- [ ] **Recording → Playwright with positive + negative scenarios.** A `WorkflowRecording` (from the Chrome ext or a fixture) renders into a runnable Playwright `.spec.ts`. The deterministic pass emits the recorded happy path; the LLM amplification pass adds negative scenarios (invalid input, empty fields, error states, edge variants), assertion suggestions, and test naming. LLM polish skipped if no provider is configured — the deterministic happy-path spec still emits.
-- [ ] **Thin CLI for CI integration**: `webspec audit <url>` and `webspec record-to-spec <recording.json>` work end-to-end. (No `webspec gen` in v1 — see "Out of v1 active path" below.)
-- [ ] **LLM access via AWS Bedrock** with standard AWS credentials. The `LLMProvider` interface is provider-agnostic; adding a second adapter is a code change scoped to one new file.
-- [ ] **Verified on three deployed sites** — audit parity between Chrome ext and CLI; recordings render to passing Playwright specs against each site's golden-path flow.
-- [ ] All milestones below (M4 through M6) are checked.
+- [x] **Chrome extension installs and runs**, with two modes: ✅ M5 done at v0.6.0.
+  - [x] "Audit this tab" returns a normalized 508 / WCAG 2.1 AA report (severity-grouped, rule-tag column, selector + fix-hint per finding). ✅ v0.3.8 (browser-mode injection) + v0.4.0–v0.4.2 (popup UI).
+  - [x] "Record" captures a workflow (clicks, input, change, submit, navigation, key events) with hardened selectors, then exports a `WorkflowRecording` JSON via `chrome.downloads`. ✅ v0.5.0–v0.5.4. (Network capture explicitly out of v1 per M5 below; the schema seam remains for the deferred M12.)
+- [x] **Recording → Playwright with positive + negative scenarios.** A `WorkflowRecording` (from the Chrome ext or a fixture) renders into a runnable Playwright `.spec.ts`. The deterministic pass emits the recorded happy path; the LLM amplification pass adds negative scenarios (invalid input, empty fields, error states, edge variants), assertion suggestions, and test naming. LLM polish skipped if no provider is configured — the deterministic happy-path spec still emits. ✅ M6 done at v0.7.4 (deterministic v0.7.0, IR v0.7.1, amplifier v0.7.2, integration test v0.7.3, amplification golden v0.7.4).
+- [x] **Thin CLI for CI integration**: `webspec audit <url>` and `webspec record-to-spec <recording.json>` work end-to-end. (No `webspec gen` in v1 — see "Out of v1 active path" below.) ✅ `audit` v0.3.5; `record-to-spec` v0.7.0 (deterministic) + v0.7.2 (`--provider` amplified).
+- [x] **LLM access via AWS Bedrock** with standard AWS credentials. The `LLMProvider` interface is provider-agnostic; adding a second adapter is a code change scoped to one new file. ✅ M1 at v0.2.0.
+- [x] **Verified on three deployed sites** — audit parity between Chrome ext and CLI; recordings render to passing Playwright specs against each site's golden-path flow. ✅ audit-parity v0.6.0 (example.com, react.dev, TodoMVC); render-to-spec v0.7.6 (same three sites, all rendered specs pass against the live URL).
+- [x] All milestones below (M4 through M6) are checked. ✅ M4 v0.3.6, M5 v0.6.0, M6 v0.7.4.
 - [x] `README.md` has a quickstart that a new operator can follow end-to-end (install Chrome ext → record → audit → render a Playwright spec). ✅ v0.7.7.
 
 ### Out of v1 active path (intentional)
