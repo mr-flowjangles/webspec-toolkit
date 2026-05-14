@@ -1,5 +1,50 @@
 # v1.0
 
+## v1.0.1 — Fix BSD awk in new version script (2026-05-14)
+
+### Problem
+
+`scripts/new-version.sh` used `awk -v stub="$stub"` to inject the new patch's H2 heading into the existing minor's `release-notes.md`. BSD awk (the macOS default) rejects multi-line values passed to `-v` with `awk: newline in string`. Every patch bump this cycle (v0.7.6 → v0.7.7 → v0.7.8 → this one) hit the bug. The branch was always created successfully; only the stub-prepend failed, and the workaround was to hand-prepend the H2 by Edit-ing the file.
+
+The fix has been deferred PR-after-PR ("not a blocker, do it in its own version"). Now that v1.0.0 has shipped, it's the natural first post-v1 patch.
+
+### Solution
+
+Drop the `awk -v stub="$stub"` invocation. Replace it with a `grep` + `head` + `tail` splice:
+
+1. Find the line number of the first existing H2 heading (`grep -n -E '^## v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | cut -d: -f1`).
+2. Splice the file: `head -n $((line - 1))` for everything above the existing H2, then `printf '%s\n\n' "$stub"` for the new stub + blank-line separator, then `tail -n +${line}` for everything from the first H2 onward.
+3. Replace the original with the spliced temp file.
+
+No awk, no `-v` flag, no multi-line shell-variable handoff. Pure POSIX shell + `grep -E`, both of which behave identically on BSD and GNU.
+
+Added a guard: if no H2 heading is found, the script now exits with a clear error rather than silently producing an unmodified file (the prior behavior under the awk path was to print the original unchanged).
+
+### Verification
+
+Manual splice test against a synthetic fixture (`v0.9.1` → splice in `v0.9.2`) and against a copy of the live `Versions/v1/v1.0/release-notes.md` (splice in a `v1.0.2` test stub). Both produced the correct structure: H1 preserved, new H2 inserted with a trailing blank line, existing H2s preserved in order. The bug was reproducible against the pre-fix script (hit on the v1.0.1 scaffolding for this very PR — last manual workaround).
+
+Production verification will happen the next time `./scripts/new-version.sh` is run for a patch bump. If it injects cleanly without the `awk: newline in string` error, the fix is good.
+
+### New
+
+Nothing new.
+
+### Changed
+
+- `scripts/new-version.sh` — replaced the `awk -v stub="$stub"` block (15 lines) with a `grep` + `head` + `tail` splice (14 lines including the missing-H2 guard). Updated the inline comment to explain why awk was avoided.
+
+### Fixed
+
+- BSD-awk crash when prepending a new H2 stub. Described in Problem.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `scripts/new-version.sh` | Replace the buggy awk-based prepend block with a portable `grep`+`head`+`tail` splice. Add a missing-H2 guard. |
+| `Versions/v1/v1.0/release-notes.md` | This file. |
+
 ## v1.0.0 — v1 Ship (2026-05-14)
 
 **webspec v1 ships.** A browser-based shift-left companion for web app development. The Chrome extension records a user's workflow and audits the page for Section 508 / WCAG issues; the CLI renders the recording into a runnable Playwright spec with positive AND negative scenarios (LLM-amplified). Short feedback loops — catch problems while you're building, not after.
