@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-05-14T19:29:43.831Z",
+  "endedAt": "2026-05-14T19:29:53.476Z",
+  "startUrl": "https://react.dev/",
+  "events": [
+    {
+      "t": 3228,
+      "kind": "click",
+      "selector": {
+        "preferred": "role=link[name=\"Learn React\"] >> nth=0",
+        "strategy": "role",
+        "fallbacks": [
+          "text=\"Learn React\"",
+          "a.w-full.sm\\:w-auto"
+        ]
+      },
+      "targetText": "Learn React"
+    },
+    {
+      "t": 3236,
+      "kind": "navigate",
+      "url": "https://react.dev/learn",
+      "reason": "history"
+    }
+  ],
+  "network": [],
+  "framework": "playwright"
+}

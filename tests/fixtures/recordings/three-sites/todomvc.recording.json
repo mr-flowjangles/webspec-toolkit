@@ -1,0 +1,71 @@
+{
+  "startedAt": "2026-05-14T19:32:10.931Z",
+  "endedAt": "2026-05-14T19:32:33.556Z",
+  "startUrl": "https://demo.playwright.dev/todomvc/#/",
+  "events": [
+    {
+      "t": 4501,
+      "kind": "input",
+      "selector": {
+        "preferred": "role=textbox[name=\"What needs to be done?\"]",
+        "strategy": "role",
+        "fallbacks": [
+          "input.new-todo"
+        ]
+      },
+      "value": "buy milk",
+      "sensitive": false
+    },
+    {
+      "t": 6771,
+      "kind": "keydown",
+      "key": "Enter",
+      "selector": {
+        "preferred": "role=textbox[name=\"What needs to be done?\"]",
+        "strategy": "role",
+        "fallbacks": [
+          "input.new-todo"
+        ]
+      }
+    },
+    {
+      "t": 9639,
+      "kind": "input",
+      "selector": {
+        "preferred": "role=textbox[name=\"What needs to be done?\"]",
+        "strategy": "role",
+        "fallbacks": [
+          "input.new-todo"
+        ]
+      },
+      "value": "walk dog",
+      "sensitive": false
+    },
+    {
+      "t": 10807,
+      "kind": "keydown",
+      "key": "Enter",
+      "selector": {
+        "preferred": "role=textbox[name=\"What needs to be done?\"]",
+        "strategy": "role",
+        "fallbacks": [
+          "input.new-todo"
+        ]
+      }
+    },
+    {
+      "t": 16937,
+      "kind": "change",
+      "selector": {
+        "preferred": "role=checkbox[name=\"Toggle Todo\"] >> nth=0",
+        "strategy": "role",
+        "fallbacks": [
+          "input.toggle"
+        ]
+      },
+      "value": "true"
+    }
+  ],
+  "network": [],
+  "framework": "playwright"
+}

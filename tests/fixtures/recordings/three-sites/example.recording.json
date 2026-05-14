@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-05-14T19:27:16.656Z",
+  "endedAt": "2026-05-14T19:27:46.235Z",
+  "startUrl": "https://example.com/",
+  "events": [
+    {
+      "kind": "click",
+      "selector": {
+        "fallbacks": [
+          "text=\"Learn more\"",
+          "a"
+        ],
+        "preferred": "role=link[name=\"Learn more\"]",
+        "strategy": "role"
+      },
+      "t": 9976,
+      "targetText": "Learn more"
+    },
+    {
+      "kind": "navigate",
+      "reason": "navigate",
+      "t": 10341,
+      "url": "https://www.iana.org/help/example-domains"
+    }
+  ],
+  "network": [],
+  "framework": "playwright"
+}

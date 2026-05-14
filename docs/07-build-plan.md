@@ -132,20 +132,20 @@ Goal: turn a recording into a runnable Playwright spec **with multiple test case
 
 **Design:** see `docs/06-renderer.md` for the locked action set, assertion set, `navigate.reason` mapping, integration-test target, ambiguous-selector policy, and the `AmplifiedRecording` IR shape. Decisions land at v0.6.2; implementation follows in v0.7.x.
 
-- [ ] **Deterministic pass:** each `RecordedEvent` maps to a Playwright action (`page.click(selector)`, `page.fill(selector, value)`, `page.goto(url)`, etc.). Selectors use the recording's hardened forms. Output: one Playwright `test()` block — the recorded happy path. Always works.
-- [ ] **LLM amplification pass** (the v1 differentiator): given the action trace + observed network calls + page state, the LLM:
+- [x] **Deterministic pass:** each `RecordedEvent` maps to a Playwright action (`page.click(selector)`, `page.fill(selector, value)`, `page.goto(url)`, etc.). Selectors use the recording's hardened forms. Output: one Playwright `test()` block — the recorded happy path. Always works. ✅ v0.7.0.
+- [x] **LLM amplification pass** (the v1 differentiator): given the action trace + observed network calls + page state, the LLM:
   - Names the test (`describe` + `test` strings inferred from the workflow).
   - Inserts assertions (e.g. `expect(page.getByRole('heading', { name: 'Success' })).toBeVisible()` after a recorded submit).
   - **Generates negative scenarios** as additional `test()` blocks: empty input, invalid input, malformed input, error-state coverage. Constraints on which negatives to generate are encoded in the prompt — plausible variants only, not exhaustive fuzzing.
   - Proposes selector consolidations where redundant.
-  - Skipped if no provider key is configured (deterministic spec emits alone).
-- [ ] **IR decision (resolved at v0.3.2 — Path C):** the LLM emits a typed structured `AmplifiedRecording` (`scenarios[]` with typed `actions` + `assertions`), zod-validated at the seam. A deterministic renderer formats that into Playwright source. Same architectural pattern as M2 (validated structured output → deterministic format). The LLM never writes shipped Playwright code directly. See `99-open-questions.md` for why C beats both "TestPlan reuse" and "LLM-writes-source-directly."
-- [ ] Golden-test the deterministic pass with hand-written `WorkflowRecording` fixtures (no LLM in the loop).
+  - Skipped if no provider key is configured (deterministic spec emits alone). ✅ v0.7.2.
+- [x] **IR decision (resolved at v0.3.2 — Path C):** the LLM emits a typed structured `AmplifiedRecording` (`scenarios[]` with typed `actions` + `assertions`), zod-validated at the seam. A deterministic renderer formats that into Playwright source. Same architectural pattern as M2 (validated structured output → deterministic format). The LLM never writes shipped Playwright code directly. See `99-open-questions.md` for why C beats both "TestPlan reuse" and "LLM-writes-source-directly." ✅ IR shipped in v0.7.1.
+- [x] Golden-test the deterministic pass with hand-written `WorkflowRecording` fixtures (no LLM in the loop). ✅ v0.7.0 — `packages/core/tests/render/e2e/renderer.test.ts`.
 - [x] Golden-test the amplification pass against a recorded-LLM-response fixture (deterministic test of "given this recording + this LLM response, render this spec"). ✅ v0.7.4 — `packages/core/tests/render/e2e/amplification-pass.test.ts` composes `AmplifyAnalyzer` (with a fake `LLMProvider`) + `renderAmplifiedPlaywrightSpec` and snapshots the resulting source.
-- [ ] CLI: implement `webspec record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`).
-- [ ] Integration test: capture a recording (use a fixture, not a live browser) → render → run the emitted Playwright spec against a sample web app → spec passes (at least the happy-path test; negative-scenario tests pass when the app handles those failure modes correctly, fail informatively when it doesn't).
+- [x] CLI: implement `webspec record-to-spec <recording.json> [--provider X]` end-to-end. Output written next to the recording (`recording.spec.ts`). ✅ v0.7.0 (deterministic) + v0.7.2 (`--provider` amplified path).
+- [x] Integration test: capture a recording (use a fixture, not a live browser) → render → run the emitted Playwright spec against a sample web app → spec passes (at least the happy-path test; negative-scenario tests pass when the app handles those failure modes correctly, fail informatively when it doesn't). ✅ v0.7.3.
 
-**Done when:** a recording exported from M5 produces a Playwright `.spec.ts` with multiple `test()` blocks (happy + negatives) that compiles and runs against the same app the recording was made against. Spec emits cleanly with or without an LLM provider configured.
+**Done when:** a recording exported from M5 produces a Playwright `.spec.ts` with multiple `test()` blocks (happy + negatives) that compiles and runs against the same app the recording was made against. Spec emits cleanly with or without an LLM provider configured. **✅ M6 done at v0.7.4.**
 
 ---
 
