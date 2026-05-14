@@ -18,7 +18,7 @@ v1 ships a **browser-based shift-left companion**: a Chrome extension that recor
 - [ ] **LLM access via AWS Bedrock** with standard AWS credentials. The `LLMProvider` interface is provider-agnostic; adding a second adapter is a code change scoped to one new file.
 - [ ] **Verified on three deployed sites** — audit parity between Chrome ext and CLI; recordings render to passing Playwright specs against each site's golden-path flow.
 - [ ] All milestones below (M4 through M6) are checked.
-- [ ] `README.md` has a quickstart that a new operator can follow end-to-end (install Chrome ext → record → audit → render a Playwright spec).
+- [x] `README.md` has a quickstart that a new operator can follow end-to-end (install Chrome ext → record → audit → render a Playwright spec). ✅ v0.7.7.
 
 ### Out of v1 active path (intentional)
 
