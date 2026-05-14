@@ -163,17 +163,19 @@ if [ "$action" = "create" ]; then
 else
   # Prepend the new H2 stub just below the existing H1.
   # The file always starts `# v{major}.{minor}\n\n## v… (first entry)\n…`.
-  # Splitting on the first H2 line keeps the H1 header intact.
+  # We splice the file at the first H2 line: everything before stays, then the
+  # new stub, then everything from the first H2 onward. Done with shell + grep
+  # instead of `awk -v stub="$stub"` because BSD awk on macOS rejects
+  # multi-line `-v` values with `awk: newline in string`.
+  first_h2_line=$(grep -n -E '^## v[0-9]+\.[0-9]+\.[0-9]+' "$notes_file" | head -1 | cut -d: -f1)
+  if [ -z "$first_h2_line" ]; then
+    echo "No existing H2 heading found in $notes_file; cannot prepend." >&2
+    exit 1
+  fi
   tmp=$(mktemp)
-  awk -v stub="$stub" '
-    BEGIN { inserted = 0 }
-    /^## v[0-9]+\.[0-9]+\.[0-9]+/ && !inserted {
-      print stub
-      print ""
-      inserted = 1
-    }
-    { print }
-  ' "$notes_file" > "$tmp"
+  head -n "$((first_h2_line - 1))" "$notes_file" > "$tmp"
+  printf '%s\n\n' "$stub" >> "$tmp"
+  tail -n "+${first_h2_line}" "$notes_file" >> "$tmp"
   mv "$tmp" "$notes_file"
   echo "Prepended new H2 stub to $notes_file"
 fi
