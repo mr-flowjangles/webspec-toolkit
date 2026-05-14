@@ -9,6 +9,7 @@ _tmp/
 test-results/
 playwright-report/
 **/tests/integration/.tmp/
+tests/fixtures/recordings/**/.tmp/
 
 # Editors
 .vscode/

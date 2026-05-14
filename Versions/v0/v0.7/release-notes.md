@@ -1,5 +1,75 @@
 # v0.7
 
+## v0.7.6 — Three Site Render Verification (2026-05-14)
+
+### Problem
+
+M6's implementation work shipped across v0.7.0–v0.7.4 (deterministic renderer, amplified IR, LLM amplifier, integration test, amplification-pass golden), but the **v1 Definition of Done** still had two unclosed lines tied to M6:
+
+1. **"Verified on three deployed sites — … recordings render to passing Playwright specs against each site's golden-path flow."** v0.6.0 closed the *audit-parity* half of this line; the *render-to-spec* half had no evidence. The integration test in v0.7.3 ran against a hermetic `file://` fixture, which proves the pipeline works in isolation but not that captures from the Chrome extension survive the full ext → render → run-against-live-site loop.
+2. **M6 milestone checkboxes were still `[ ]`.** Code existed; boxes hadn't been ticked.
+
+Without the live-site render evidence, we can't honestly call M6 done or move toward `v1.0.0`.
+
+### Solution
+
+Captured one recording per v0.6.0 site via the unpacked Chrome extension, rendered each through `webspec record-to-spec`, and ran the resulting `.spec.ts` with Playwright against the live URL. All three passed cleanly on the first try.
+
+| Site | Events | Render result | Playwright run |
+|------|--------|---------------|----------------|
+| `https://example.com/` | 2 (`click` + `navigate`) | 3-line spec: `goto` + `getByRole(link).click()` + `waitForURL` | ✅ passed (2.6s) |
+| `https://react.dev/` | 2 (`click` + `navigate` w/ `reason: "history"`) | 3-line spec: `goto` + `getByRole(link).nth(0).click()` + `expect(page).toHaveURL(...)` | ✅ passed (1.5s) |
+| `https://demo.playwright.dev/todomvc/` | 5 (`input` × 2, `keydown` × 2, `change`) | 6-line spec: `fill`/`press('Enter')` × 2, `getByRole(checkbox).nth(0).check()` | ✅ passed (1.2s) |
+
+Three behaviors specifically verified by this matrix that the synthetic v0.7.3 fixture did not cover:
+
+- **`navigate.reason` divergence renders correctly against real navigation models.** example.com's real page load produced `reason: "navigate"` → `waitForURL` action; react.dev's client-side route push produced `reason: "history"` → `expect(page).toHaveURL` assertion. Both behaviors are specified in `docs/06-renderer.md` and now have live-site evidence.
+- **`role=…[name=…] >> nth=N` selectors round-trip.** The recorder emits the `>> nth=N` suffix to disambiguate (react.dev had multiple "Learn React" links; TodoMVC had multiple toggle checkboxes once the second todo landed). The renderer correctly translates this to `getByRole(...).nth(N)`.
+- **`change` events on checkboxes with `value: "true"` render to `.check()`** (and would render to `.uncheck()` for `"false"`). TodoMVC was the only fixture that exercised this branch in production.
+
+The recordings are committed under `tests/fixtures/recordings/three-sites/` so the verification is reproducible. A future regression check can re-run the render pipeline against these JSONs without re-capturing — with the caveat that real sites drift, so eventual breakage may reflect site changes, not a webspec bug.
+
+This also closes M6 in `docs/07-build-plan.md`: every box in the milestone is ticked, with the version each task shipped in. M6 is done at v0.7.4 in code; v0.7.6 is the verification that lets us say so on the build plan.
+
+### New
+
+- `tests/fixtures/recordings/three-sites/example.recording.json` — captured workflow on `example.com` (click "Learn more" link → cross-origin navigation to iana.org).
+- `tests/fixtures/recordings/three-sites/react-dev.recording.json` — captured workflow on `react.dev` (click "Learn React" CTA → SPA route change to `/learn`).
+- `tests/fixtures/recordings/three-sites/todomvc.recording.json` — captured workflow on `demo.playwright.dev/todomvc/` (add two todos, mark one complete).
+
+### Changed
+
+- `docs/07-build-plan.md` — every M6 checkbox now `[x]` with the version it shipped in (v0.7.0 deterministic pass + CLI, v0.7.0 deterministic golden, v0.7.1 IR, v0.7.2 amplification pass, v0.7.3 integration test, v0.7.4 amplification golden). Milestone footer reads "✅ M6 done at v0.7.4."
+- `.gitignore` — added `tests/fixtures/recordings/**/.tmp/` so the rendered specs + Playwright config under each recording's `.tmp/` directory stay out of git (mirrors the existing `**/tests/integration/.tmp/` rule).
+
+### Fixed
+
+- Nothing in the shipped code path. One bug noted but **not** fixed in this PR: `scripts/new-version.sh` uses `awk -v stub="$stub"` to inject the new H2 heading, which fails on BSD awk (macOS) with `awk: newline in string ...` because BSD awk doesn't accept newlines in `-v` values. The branch creation still succeeds; only the stub-prepend fails. Worked around manually here. Worth fixing separately by switching to GNU awk or by piping the stub through stdin.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `tests/fixtures/recordings/three-sites/example.recording.json` | New — captured workflow on example.com (2 events). |
+| `tests/fixtures/recordings/three-sites/react-dev.recording.json` | New — captured workflow on react.dev (2 events, client-side routing). |
+| `tests/fixtures/recordings/three-sites/todomvc.recording.json` | New — captured workflow on TodoMVC (5 events: form + checkbox). |
+| `docs/07-build-plan.md` | Tick all M6 checkboxes with the version each shipped in; add "✅ M6 done at v0.7.4" to the milestone footer. |
+| `.gitignore` | Add `tests/fixtures/recordings/**/.tmp/` so rendered specs aren't committed. |
+| `Versions/v0/v0.7/release-notes.md` | This file. |
+
+### Verification
+
+For each site: render with `node packages/cli/dist/index.js record-to-spec <recording.json> --out <.tmp>/<site>.spec.ts`, then `npx playwright test --config <.tmp>/playwright.config.ts <.tmp>/<site>.spec.ts`. The Playwright config under each `.tmp/` is a 6-line `defineConfig` (testDir: '.', headless, line reporter). All three specs pass against the live URLs as of 2026-05-14.
+
+### What's next
+
+Two items remain before `v1.0.0`:
+
+1. **README quickstart** — end-to-end walkthrough a new operator can follow (install Chrome ext → record → audit → render a Playwright spec). The `README.md` line in the v1 DoD.
+2. **Tick the remaining v1 DoD boxes** in `docs/07-build-plan.md` (Chrome ext install + run, recording → Playwright with positive + negative scenarios, thin CLI for CI integration, LLM access via Bedrock, "verified on three deployed sites" — most of these are already true, just unchecked).
+
+After those, it's a minor → minor → **major bump to v1.0.0**.
+
 ## v0.7.5 — Version Folder Consolidation (2026-05-13)
 
 ### Problem
