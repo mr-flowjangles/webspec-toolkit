@@ -1,5 +1,82 @@
 # v0.7
 
+## v0.7.8 — v1 DoD Box Tick (2026-05-14)
+
+### Problem
+
+Every v1 Definition of Done line item in `docs/07-build-plan.md` was factually true after v0.7.7 — but six of the seven DoD checkboxes were still `[ ]`. The doc was lying about ship-readiness by omission: every box was deliverable, but no human reading the doc would know that without diffing it against the version history.
+
+There was also one DoD bullet that had drifted out of sync with what M5 actually shipped:
+
+> "Record" captures a workflow (clicks, input, change, submit, navigation, key events, **outgoing requests**) with hardened selectors…
+
+M5 (v0.5.x → v0.6.0) deliberately carved network capture out of v1. The decision is documented in M5's section header (~~strikethrough~~ on the `webRequest`-listener bullet, with "**Out of v1**" rationale) and in `docs/99-open-questions.md` (deferred to M12). But the DoD bullet at the top of the file was never updated to match the milestone-level scope cut — so a reader would scan the DoD, look for the network-capture deliverable in the shipped code, not find it, and assume something was missing.
+
+The major-version bump to `v1.0.0` should land against a build plan that's honest about both what shipped and what didn't. So before the bump, the DoD checklist needs to be ticked truthfully — and the one out-of-sync line needs to be reconciled with the scope decision M5 actually made.
+
+### Solution
+
+Doc-only sweep. Two changes:
+
+**1. Tick every v1 DoD checkbox**, with the version each deliverable shipped in:
+
+| DoD line | Shipped | Notes |
+|----------|---------|-------|
+| Chrome extension installs and runs (two modes) | M5 done at v0.6.0 | — |
+| → "Audit this tab" 508/WCAG 2.1 AA report | v0.3.8 (browser-mode injection) + v0.4.0–v0.4.2 (popup UI) | — |
+| → "Record" captures workflow + hardened selectors + chrome.downloads export | v0.5.0–v0.5.4 | Network capture explicitly OOS (see below). |
+| Recording → Playwright with positive + negative scenarios | M6 done at v0.7.4 | Deterministic v0.7.0, IR v0.7.1, amplifier v0.7.2, integration test v0.7.3, golden v0.7.4. |
+| Thin CLI for CI integration (`webspec audit` + `webspec record-to-spec`) | v0.3.5 + v0.7.0 (+ v0.7.2 for `--provider`) | — |
+| LLM access via AWS Bedrock | M1 at v0.2.0 | `LLMProvider` interface; one adapter (`BedrockAdapter`); adding a second adapter is a single new file. |
+| Verified on three deployed sites | v0.6.0 audit-parity + v0.7.6 render-to-spec | example.com / react.dev / TodoMVC, both halves covered. |
+| All milestones M4–M6 checked | M4 v0.3.6, M5 v0.6.0, M6 v0.7.4 | — |
+| README quickstart end-to-end | v0.7.7 | Already ticked. |
+
+**2. Reconcile the "Record" bullet with M5's scope decision.** Removed `outgoing requests` from the captured-event list in the DoD bullet. The full event list is now `(clicks, input, change, submit, navigation, key events)`, with a trailing parenthetical: *"Network capture explicitly out of v1 per M5 below; the schema seam remains for the deferred M12."*
+
+Three reasons this is the right reconciliation rather than silent removal:
+
+- M5's body already strikes through the network-capture work-item and labels it "Out of v1." The DoD bullet was the only line in the file that still implied it was in scope.
+- `WorkflowRecording.network: NetworkEvent[]` stays in the zod schema (recording emits `[]`, neither the deterministic renderer nor the amplifier consume it). That's the "schema seam for M12" — preserves forward-compat for the deferred network-mocking milestone without committing v1 to ship the capture.
+- The reader should see one consistent scope statement, not a DoD line that promises a feature the milestone explicitly dropped.
+
+After this sweep, every box in the v1 DoD is `[x]` with a `✅ vX.Y.Z` footprint. The doc and the shipped code agree.
+
+### New
+
+Nothing new — doc-only sweep.
+
+### Changed
+
+- `docs/07-build-plan.md` — all seven v1 DoD checkboxes are now `[x]` with the version each line shipped in. The "Record" bullet's captured-event list no longer includes `outgoing requests`, with a parenthetical noting M5's explicit scope cut and the preserved schema seam.
+
+### Fixed
+
+- DoD/scope drift on the "Record" bullet (described in Problem). The fix is the DoD-bullet edit above, not a code change.
+
+Still-known issue, deliberately not fixed here (and now intentionally a separate PR after the major bump): `scripts/new-version.sh` uses `awk -v stub="$stub"` to inject the H2 stub, which fails on BSD awk because multi-line `-v` values aren't allowed. Worked around manually for the third consecutive PR. Worth fixing in its own post-v1.0.0 patch — either pipe the stub via stdin or require GNU awk.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docs/07-build-plan.md` | Tick all v1 DoD checkboxes with their shipping versions; reconcile the "Record" bullet to match M5's actual scope (drop "outgoing requests" + add parenthetical noting M12 deferral). |
+| `Versions/v0/v0.7/release-notes.md` | This file. |
+
+### Verification
+
+- Visual: every line in the v1 DoD section of `07-build-plan.md` starts with `- [x]` (no `- [ ]` left in that block).
+- Cross-reference: each `✅ vX.Y.Z` footprint maps to either a release-notes entry, a milestone footer, or both.
+- `awk '/^## M[456]/,/^---$/' docs/07-build-plan.md | grep -E "^- \[ \]|^  - \[ \]"` returns no rows — every M4/M5/M6 checkbox is `[x]`.
+
+### What's next
+
+**The major bump to `v1.0.0`.**
+
+`v0.7.8` is the last patch of the pre-release line. The next version is `v1.0.0 — v1 Ship` (or similar — the title is the call) and is a minor-bump-style version (own folder under `Versions/v1/v1.0/release-notes.md`). The body is the **release announcement**: what `v1.0.0` is, what's in it, who it's for, and what's intentionally not in it. No new code lands in `v1.0.0` itself — the work is the writeup. After merge, the version line resets to `v1.0.x` for post-ship patches.
+
+The BSD-awk bug in `scripts/new-version.sh` is the natural first patch after `v1.0.0` — every version has hit it, the workaround is manual, and the fix is small.
+
 ## v0.7.7 — README Quickstart (2026-05-14)
 
 ### Problem
