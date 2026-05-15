@@ -122,10 +122,13 @@ type Assertion =
 
 **Deterministic-only output (no LLM provider configured):**
 
+The `test()` title comes from `recording.name`, captured in the popup before recording begins. `recording.description` is emitted as one or more `// `-prefixed comment lines immediately under the `test(...)` opener (multi-line descriptions split on `\n` into multiple comment lines) and above `await page.goto(...)`. Both fields are required on the contract.
+
 ```ts
 import { test, expect } from '@playwright/test';
 
-test('recorded workflow', async ({ page }) => {
+test('add and filter a todo', async ({ page }) => {
+  // Add a new todo item then switch to the Active filter to confirm it shows.
   await page.goto('https://example.com');
   await page.fill('role=textbox[name="What needs to be done?"]', 'buy milk');
   await page.press('role=textbox[name="What needs to be done?"]', 'Enter');
@@ -136,7 +139,7 @@ test('recorded workflow', async ({ page }) => {
 
 **Amplified output (provider configured):**
 
-Same `test()` block plus one or more additional `test()` blocks generated from the LLM's `AmplifiedRecording.scenarios[]` where `kind === 'negative'`. Examples the amplifier might emit:
+Same `test()` block (title + description preserved) plus one or more additional `test()` blocks generated from the LLM's `AmplifiedRecording.scenarios[]` where `kind === 'negative'`. The LLM does not rename the user's test — the recording's `name` is canonical. Examples the amplifier might emit:
 
 - "rejects empty submission" — same actions minus the fill, plus `expect(errorMessage).toBeVisible()`.
 - "rejects too-long input" — fill with a value beyond the field's likely max, assert error.

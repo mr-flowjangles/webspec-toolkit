@@ -32,6 +32,8 @@ function fakeProvider(response: AmplifiedRecording): LLMProvider {
 }
 
 const recording: WorkflowRecording = {
+  name: 'sign in with valid credentials',
+  description: 'Amplification pass fixture — exercises the login form.',
   startedAt: '2026-05-13T00:00:00.000Z',
   endedAt: '2026-05-13T00:00:10.000Z',
   startUrl: 'https://x.test/login',

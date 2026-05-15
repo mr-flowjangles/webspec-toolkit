@@ -46,24 +46,22 @@ Both surfaces use the same axe-core rule set (`wcag21aa` + `section508` + `best-
 ### 4. Record a workflow
 
 1. Navigate to the page you want to test
-2. Click the webspec icon → **Record**
-3. Walk through the flow (clicks, typing, form submits, checkboxes, selects, key presses are all captured; passwords are masked automatically; recording state survives popup close)
-4. When done, open the popup → **Stop**
-5. Review the trace summary and the "review before sharing" warning, then **Download recording.json**
+2. Click the webspec icon → **Record workflow**
+3. Name the test case and describe what it should prove (both required — the name becomes the `test()` title, the description rides into the spec as a comment) → **Start recording**
+4. Walk through the flow (clicks, typing, form submits, checkboxes, selects, key presses are all captured; passwords are masked automatically; recording state survives popup close and page reloads)
+5. When done, open the popup → **Stop**
+6. Review the trace summary and the "review before sharing" warning, then **Download** — the extension writes both `recording-<timestamp>.spec.ts` (the rendered Playwright spec, ready to run) and `recording-<timestamp>.json` (the raw `WorkflowRecording`, kept so the recording can be re-rendered later)
 
-### 5. Render a Playwright spec
+### 5. Render an LLM-amplified spec (optional)
 
-Deterministic happy-path (no LLM, always works):
-
-```sh
-node packages/cli/dist/index.js record-to-spec ~/Downloads/recording.json
-# → writes ~/Downloads/recording.spec.ts
-```
-
-LLM-amplified (adds negative scenarios — invalid input, empty fields, error states — as additional `test()` blocks alongside the happy path; requires AWS credentials for Bedrock):
+The extension's Download button already gives you a runnable deterministic `.spec.ts`. To regenerate it or to layer in LLM-amplified negative scenarios (invalid input, empty fields, error states — added as additional `test()` blocks alongside the happy path), feed the saved `recording.json` to the CLI:
 
 ```sh
-node packages/cli/dist/index.js record-to-spec ~/Downloads/recording.json --provider bedrock
+# Re-render the deterministic spec:
+node packages/cli/dist/index.js record-to-spec ~/Downloads/recording-<timestamp>.json
+
+# Amplified — requires AWS credentials for Bedrock:
+node packages/cli/dist/index.js record-to-spec ~/Downloads/recording-<timestamp>.json --provider bedrock
 ```
 
 The renderer uses `getByRole` selectors with the hardened forms captured at record time, so the spec is robust to typical DOM churn.

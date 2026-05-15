@@ -47,10 +47,12 @@ Why the split:
 3. **The recorder works without a key.** Per `mission.md` — the LLM is value-add (test names, assertions, selector consolidation), not load-bearing. A team without a Claude/OpenAI key can still record and emit a deterministic Playwright spec.
 4. **Replayability.** A serialized `WorkflowRecording` JSON is the audit trail. It can be diffed, re-rendered, and re-graded later without re-recording.
 
+A `WorkflowRecording` carries two required user-supplied fields — `name` and `description` — captured in the Chrome popup before the recorder is armed. The renderer uses `name` as the `test()` title and emits `description` as a `// `-prefixed comment block immediately under the `test(...)` opener (multi-line descriptions become multiple comment lines). These also serve as the headline + intent in any downstream test report, which is why they're captured at the user's keyboard, not inferred by the LLM.
+
 So the renderer is two-pass:
 
-- **Pass 1 (deterministic):** each `RecordedEvent` → one Playwright action. Selectors come from the recording's `HardenedSelector.preferred`. Naming is `test('recorded workflow', ...)`. Always works.
-- **Pass 2 (LLM polish, optional):** given the deterministic spec + the event trace + the network log, the LLM renames the test, inserts assertions inferred from observed state changes, and proposes selector consolidations. Skipped when no provider key is configured.
+- **Pass 1 (deterministic):** each `RecordedEvent` → one Playwright action. Selectors come from the recording's `HardenedSelector.preferred`. The `test()` title comes from `recording.name`; the leading comment from `recording.description`. Always works.
+- **Pass 2 (LLM polish, optional):** given the deterministic spec + the event trace + the network log, the LLM inserts assertions inferred from observed state changes and proposes selector consolidations. It does **not** rename the test — the user's name is canonical. Skipped when no provider key is configured.
 
 ## The shared envelope (`AnalysisMeta`)
 

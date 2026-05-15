@@ -29,6 +29,8 @@ function cssSelector(css: string): HardenedSelector {
 
 function recording(events: RecordedEvent[], startUrl = 'https://example.com'): WorkflowRecording {
   return {
+    name: 'recorded workflow',
+    description: 'Test recording from renderer unit tests.',
     startedAt: '2026-05-12T00:00:00.000Z',
     endedAt: '2026-05-12T00:00:10.000Z',
     startUrl,
@@ -45,11 +47,23 @@ describe('renderPlaywrightSpec — header and scaffold', () => {
     expect(rendered).toContain(`import { expect, test } from '@playwright/test';`);
   });
 
-  it('opens a single test() block with the default name', () => {
+  it('opens a single test() block titled with the recording name', () => {
     expect(rendered).toContain(`test('recorded workflow', async ({ page }) => {`);
   });
 
-  it('emits goto(startUrl) as the first line of the test body', () => {
+  it('emits the recording description as a comment in the test body', () => {
+    expect(rendered).toContain(`  // Test recording from renderer unit tests.`);
+  });
+
+  it('preserves newlines in multi-line descriptions as separate comment lines', () => {
+    const multi = renderPlaywrightSpec({
+      ...recording([]),
+      description: 'First line.\nSecond line.',
+    });
+    expect(multi).toContain(`  // First line.\n  // Second line.`);
+  });
+
+  it('emits goto(startUrl) inside the test body', () => {
     expect(rendered).toContain(`await page.goto('https://example.com');`);
   });
 
@@ -57,7 +71,7 @@ describe('renderPlaywrightSpec — header and scaffold', () => {
     expect(rendered.trimEnd().endsWith('});')).toBe(true);
   });
 
-  it('honors a custom test name', () => {
+  it('honors a custom test name override', () => {
     const named = renderPlaywrightSpec(recording([]), { testName: 'login then logout' });
     expect(named).toContain(`test('login then logout', async ({ page }) => {`);
   });

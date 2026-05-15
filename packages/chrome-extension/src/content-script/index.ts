@@ -45,6 +45,7 @@ import {
   type RecorderSessionPutRequest,
   type RecorderSessionPutResponse,
   type RecorderSessionState,
+  type RecorderStartRequest,
   type RecorderStartResponse,
   type RecorderStatusResponse,
   type RecorderStopResponse,
@@ -95,6 +96,8 @@ let recordedEvents: RecordedEvent[] = [];
 let recorderStartMs = 0;
 let recorderStartedAtIso: string | null = null;
 let recorderStartUrl: string | null = null;
+let recorderName: string | null = null;
+let recorderDescription: string | null = null;
 
 function timestamp(): number {
   return Date.now() - recorderStartMs;
@@ -111,11 +114,21 @@ function selectorFor(target: Element): HardenedSelector {
  * automatically; awaiting it in an event handler would just slow capture.
  */
 function persistSession(): void {
-  if (!recorderActive || recorderStartedAtIso === null || recorderStartUrl === null) return;
+  if (
+    !recorderActive ||
+    recorderStartedAtIso === null ||
+    recorderStartUrl === null ||
+    recorderName === null ||
+    recorderDescription === null
+  ) {
+    return;
+  }
   const state: RecorderSessionState = {
     startedAtIso: recorderStartedAtIso,
     startUrl: recorderStartUrl,
     startedAtMs: recorderStartMs,
+    name: recorderName,
+    description: recorderDescription,
     events: recordedEvents,
   };
   const request: RecorderSessionPutRequest = { type: 'recorder:session:put', state };
@@ -296,7 +309,7 @@ function handleKeydown(ev: KeyboardEvent): void {
   persistSession();
 }
 
-function startRecorder(): RecorderStartResponse {
+function startRecorder(req: RecorderStartRequest): RecorderStartResponse {
   if (recorderActive) {
     return { ok: false, error: 'Recorder already running in this tab.' };
   }
@@ -304,6 +317,8 @@ function startRecorder(): RecorderStartResponse {
   recorderStartMs = Date.now();
   recorderStartedAtIso = new Date(recorderStartMs).toISOString();
   recorderStartUrl = location.href;
+  recorderName = req.name;
+  recorderDescription = req.description;
   recorderActive = true;
   addRecorderListeners();
   persistSession();
@@ -314,9 +329,15 @@ function stopRecorder(): RecorderStopResponse {
   if (!recorderActive) {
     return { ok: false, error: 'Recorder is not running. Click Record first.' };
   }
+  // Capture before clearing — the stop response needs to carry these back to
+  // the popup so the WorkflowRecording it builds has the right name/description.
+  const name = recorderName ?? '';
+  const description = recorderDescription ?? '';
   recorderActive = false;
   recorderStartedAtIso = null;
   recorderStartUrl = null;
+  recorderName = null;
+  recorderDescription = null;
   removeRecorderListeners();
   const events = recordedEvents;
   recordedEvents = [];
@@ -324,7 +345,7 @@ function stopRecorder(): RecorderStopResponse {
   void chrome.runtime.sendMessage<RecorderSessionClearRequest, RecorderSessionClearResponse>(
     clearRequest,
   );
-  return { ok: true, endedAt: new Date().toISOString(), events };
+  return { ok: true, endedAt: new Date().toISOString(), name, description, events };
 }
 
 /**
@@ -358,6 +379,8 @@ async function bootstrapRecorder(): Promise<void> {
       recorderStartMs = state.startedAtMs;
       recorderStartedAtIso = state.startedAtIso;
       recorderStartUrl = state.startUrl;
+      recorderName = state.name;
+      recorderDescription = state.description;
       recorderActive = true;
       addRecorderListeners();
       console.log('[webspec] recorder resumed:', state.events.length, 'events buffered');
@@ -377,7 +400,13 @@ function sleep(ms: number): Promise<void> {
 const bootstrapPromise = bootstrapRecorder();
 
 function getRecorderStatus(): RecorderStatusResponse {
-  if (!recorderActive || recorderStartedAtIso === null || recorderStartUrl === null) {
+  if (
+    !recorderActive ||
+    recorderStartedAtIso === null ||
+    recorderStartUrl === null ||
+    recorderName === null ||
+    recorderDescription === null
+  ) {
     return { ok: true, recording: false };
   }
   return {
@@ -385,6 +414,8 @@ function getRecorderStatus(): RecorderStatusResponse {
     recording: true,
     startedAt: recorderStartedAtIso,
     startUrl: recorderStartUrl,
+    name: recorderName,
+    description: recorderDescription,
     eventCount: recordedEvents.length,
   };
 }
@@ -415,7 +446,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // Recorder messages wait on bootstrap so a popup query that lands during
   // the async restore on page reload still sees the resumed state.
   if (isRecorderStartRequest(message)) {
-    void bootstrapPromise.then(() => sendResponse(startRecorder()));
+    void bootstrapPromise.then(() => sendResponse(startRecorder(message)));
     return true;
   }
 
