@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  deriveSlug,
   normalizeAxeResults,
   renderA11yReportMarkdown,
   renderPlaywrightSpec,
@@ -27,20 +28,21 @@ type AuditStatus =
 
 type RecorderStatus =
   | { kind: 'idle' }
-  | { kind: 'naming'; name: string; description: string }
-  | { kind: 'starting'; name: string; description: string }
+  | { kind: 'naming'; name: string; description: string; runAs: string }
+  | { kind: 'starting'; name: string; description: string; runAs: string }
   | {
       kind: 'recording';
       startedAt: string;
       startUrl: string;
       name: string;
       description: string;
+      runAs: string;
       tabId: number;
     }
   | { kind: 'stopping' }
   | { kind: 'error'; message: string }
   | { kind: 'review'; recording: WorkflowRecording }
-  | { kind: 'saved'; filename: string; events: number }
+  | { kind: 'saved'; slug: string; events: number }
   | { kind: 'discarded' };
 
 export function App(): JSX.Element {
@@ -89,6 +91,7 @@ export function App(): JSX.Element {
         recorder.startUrl,
         recorder.name,
         recorder.description,
+        recorder.runAs,
       );
       return;
     }
@@ -96,14 +99,23 @@ export function App(): JSX.Element {
       setRecorder({ kind: 'idle' });
       return;
     }
-    setRecorder({ kind: 'naming', name: '', description: '' });
+    setRecorder({ kind: 'naming', name: '', description: '', runAs: '' });
   }
 
-  async function startRecording(name: string, description: string): Promise<void> {
-    setRecorder({ kind: 'starting', name, description });
+  async function startRecording(
+    name: string,
+    description: string,
+    runAs: string,
+  ): Promise<void> {
+    setRecorder({ kind: 'starting', name, description, runAs });
     try {
       const { tabId, url } = await activeHttpTab();
-      const request: RecorderStartRequest = { type: 'recorder:start', name, description };
+      const request: RecorderStartRequest = {
+        type: 'recorder:start',
+        name,
+        description,
+        runAs,
+      };
       const response = await chrome.tabs.sendMessage<RecorderStartRequest, RecorderStartResponse>(
         tabId,
         request,
@@ -115,6 +127,7 @@ export function App(): JSX.Element {
         startUrl: response.startUrl ?? url,
         name,
         description,
+        runAs,
         tabId,
       });
     } catch (err) {
@@ -131,6 +144,7 @@ export function App(): JSX.Element {
     startUrl: string,
     fallbackName: string,
     fallbackDescription: string,
+    fallbackRunAs: string,
   ): Promise<void> {
     setRecorder({ kind: 'stopping' });
     try {
@@ -145,10 +159,16 @@ export function App(): JSX.Element {
       // reload mid-recording); fall back to popup state for the same-popup case.
       const name = response.name || fallbackName;
       const description = response.description || fallbackDescription;
+      const rawRunAs = response.runAs ?? fallbackRunAs;
+      // Normalize the optional field: empty string → null on the recording so
+      // downstream consumers (renderer, future test report) can short-circuit
+      // on a single nullish check.
+      const runAs = rawRunAs.trim() === '' ? null : rawRunAs.trim();
 
       const recording: WorkflowRecording = {
         name,
         description,
+        runAs,
         startedAt,
         endedAt: response.endedAt,
         startUrl,
@@ -166,24 +186,43 @@ export function App(): JSX.Element {
     }
   }
 
-  async function handleDownloadRecording(recording: WorkflowRecording): Promise<void> {
-    const base = `recording-${stamp(recording.startedAt)}`;
+  async function handleSaveRecording(recording: WorkflowRecording): Promise<void> {
+    const slug = deriveSlug(recording.name);
+    if (slug === '') {
+      setRecorder({
+        kind: 'error',
+        message:
+          'Cannot derive a folder name from the test name. Use letters or digits.',
+      });
+      return;
+    }
     try {
       const spec = renderPlaywrightSpec(recording);
-      // application/octet-stream — `text/plain` made Chrome append `.txt` to
-      // the filename ("recording-….spec.txt"). octet-stream tells Chrome to
-      // save the blob verbatim and respect the `.spec.ts` extension.
-      await downloadText(spec, `${base}.spec.ts`, 'application/octet-stream');
-      await downloadText(
+      const dir = `webspec/${slug}`;
+
+      // Per-test files: overwrite. The user named the same slug; this is
+      // their canonical place for it. v1.2.0 takes the silent-overwrite
+      // default per docs/08-test-library.md open question (1); a confirm
+      // step can land in v1.2.1 if it bites.
+      await writeToWebspec(`${dir}/recording.spec.ts`, spec, 'application/octet-stream');
+      await writeToWebspec(
+        `${dir}/recording.json`,
         JSON.stringify(recording, null, 2),
-        `${base}.json`,
         'application/json',
       );
-      setRecorder({
-        kind: 'saved',
-        filename: `${base}.spec.ts`,
-        events: recording.events.length,
-      });
+      await writeToWebspec(
+        `${dir}/playwright.config.ts`,
+        PER_TEST_PLAYWRIGHT_CONFIG,
+        'application/octet-stream',
+      );
+
+      // Parent config: write-once. Skip if we've ever written it from this
+      // extension before (chrome.downloads.search is best-effort but adequate
+      // — the worst case is one orphan uniquify'd file if the user later
+      // deletes our prior write).
+      await ensureParentPlaywrightConfig();
+
+      setRecorder({ kind: 'saved', slug, events: recording.events.length });
     } catch (err) {
       setRecorder({
         kind: 'error',
@@ -233,10 +272,13 @@ export function App(): JSX.Element {
         <NamingForm
           name={recorder.name}
           description={recorder.description}
-          onChange={(name, description) =>
-            setRecorder({ kind: 'naming', name, description })
+          runAs={recorder.runAs}
+          onChange={(name, description, runAs) =>
+            setRecorder({ kind: 'naming', name, description, runAs })
           }
-          onStart={(name, description) => void startRecording(name, description)}
+          onStart={(name, description, runAs) =>
+            void startRecording(name, description, runAs)
+          }
         />
       )}
 
@@ -262,15 +304,16 @@ export function App(): JSX.Element {
       {recorder.kind === 'review' && (
         <RecordingSummaryPanel
           recording={recorder.recording}
-          onDownload={() => handleDownloadRecording(recorder.recording)}
+          onSave={() => handleSaveRecording(recorder.recording)}
           onDiscard={handleDiscardRecording}
         />
       )}
 
       {recorder.kind === 'saved' && (
         <p className="recorder-success" role="status">
-          Saved <code>{recorder.filename}</code> ({recorder.events}{' '}
-          event{recorder.events === 1 ? '' : 's'}).
+          Saved to <code>~/Downloads/webspec/{recorder.slug}/</code> ({recorder.events}{' '}
+          event{recorder.events === 1 ? '' : 's'}). Run <code>make run-tests</code> to
+          open Playwright UI.
         </p>
       )}
 
@@ -289,7 +332,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v1.1.1 — fix spec download extension</p>
+        <p className="meta">v1.2.0 — test library</p>
       </footer>
     </main>
   );
@@ -324,6 +367,7 @@ async function hydrateRecorderStatus(
         startUrl: response.startUrl,
         name: response.name,
         description: response.description,
+        runAs: response.runAs,
         tabId: tab.id,
       });
     }
@@ -398,22 +442,88 @@ export interface StashedReport {
 }
 
 // ---------------------------------------------------------------------------
-// Recording download — chrome.downloads API + blob URL.
+// Save flow — chrome.downloads API writes into ~/Downloads/webspec/<slug>/
+// per the v1.2 test-library design (docs/08-test-library.md).
 // ---------------------------------------------------------------------------
 
-async function downloadText(content: string, filename: string, mimeType: string): Promise<void> {
+const PER_TEST_PLAYWRIGHT_CONFIG = `import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: '.',
+  reporter: 'line',
+  use: { headless: false },
+});
+`;
+
+const PARENT_PLAYWRIGHT_CONFIG = `// webspec test-library parent config — discovers every recording.spec.ts
+// under ~/Downloads/webspec/<slug>/. Written by the extension on first save
+// and never overwritten — feel free to customize.
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: '.',
+  testMatch: '**/recording.spec.ts',
+  reporter: 'line',
+  use: { headless: false },
+});
+`;
+
+/**
+ * Write a file under ~/Downloads/<relative-path> with explicit overwrite.
+ * Per-test files (recording.spec.ts, recording.json, per-test config) all
+ * use this — the user named the same slug, this is their canonical place.
+ */
+async function writeToWebspec(
+  relativePath: string,
+  content: string,
+  mimeType: string,
+): Promise<void> {
   const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
+  const blobUrl = URL.createObjectURL(blob);
   try {
-    await chrome.downloads.download({ url, filename, saveAs: false });
+    await chrome.downloads.download({
+      url: blobUrl,
+      filename: relativePath,
+      conflictAction: 'overwrite',
+      saveAs: false,
+    });
   } finally {
     // Revoke after the download completes — Chrome reads the blob URL on its
     // own thread, so a small delay avoids racing.
-    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
   }
 }
 
-function stamp(iso: string): string {
-  // 2026-05-11T10:30:45.123Z → 2026-05-11_10-30-45
-  return iso.slice(0, 19).replace('T', '_').replace(/:/g, '-');
+/**
+ * Ensure ~/Downloads/webspec/playwright.config.ts exists. Write-once: if a
+ * previous Save from this extension wrote it (per chrome.downloads.search
+ * history), skip — the user may have customized it. Best-effort.
+ */
+async function ensureParentPlaywrightConfig(): Promise<void> {
+  try {
+    const prior = await chrome.downloads.search({
+      query: ['webspec/playwright.config.ts'],
+      limit: 1,
+    });
+    const alreadyWritten = prior.some((d) =>
+      d.filename.endsWith(`webspec/playwright.config.ts`) ||
+      d.filename.endsWith(`webspec\\playwright.config.ts`),
+    );
+    if (alreadyWritten) return;
+  } catch {
+    // search failure → fall through to a uniquify write; an orphan suffix
+    // file is the worst case and is recoverable by hand.
+  }
+  const blob = new Blob([PARENT_PLAYWRIGHT_CONFIG], { type: 'application/octet-stream' });
+  const blobUrl = URL.createObjectURL(blob);
+  try {
+    await chrome.downloads.download({
+      url: blobUrl,
+      filename: 'webspec/playwright.config.ts',
+      conflictAction: 'uniquify',
+      saveAs: false,
+    });
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+  }
 }

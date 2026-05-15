@@ -33,3 +33,7 @@ export {
   renderAmplifiedPlaywrightSpec,
   type RenderE2EOptions,
 } from './render/e2e/renderer.js';
+
+// Test library — slug derivation for the v1.2 on-disk layout
+// (~/Downloads/webspec/<slug>/). See docs/08-test-library.md.
+export { deriveSlug } from './library/slug.js';

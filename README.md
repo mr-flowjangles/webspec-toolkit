@@ -47,36 +47,46 @@ Both surfaces use the same axe-core rule set (`wcag21aa` + `section508` + `best-
 
 1. Navigate to the page you want to test
 2. Click the webspec icon → **Record workflow**
-3. Name the test case and describe what it should prove (both required — the name becomes the `test()` title, the description rides into the spec as a comment) → **Start recording**
+3. Name the test case, describe what it should prove (both required), and optionally set **Run as user** (functional in v1.3 — captured now so you don't have to re-record) → **Start recording**
 4. Walk through the flow (clicks, typing, form submits, checkboxes, selects, key presses are all captured; passwords are masked automatically; recording state survives popup close and page reloads)
 5. When done, open the popup → **Stop**
-6. Review the trace summary and the "review before sharing" warning, then **Download** — the extension writes both `recording-<timestamp>.spec.ts` (the rendered Playwright spec, ready to run) and `recording-<timestamp>.json` (the raw `WorkflowRecording`, kept so the recording can be re-rendered later)
+6. Review the trace summary, then **Save** — the extension writes the test into the on-disk library at `~/Downloads/webspec/<slug>/`:
+   - `recording.spec.ts` (the rendered Playwright spec, ready to run)
+   - `recording.json` (the raw `WorkflowRecording`, for re-rendering later)
+   - `playwright.config.ts` (per-test config so the folder is runnable on its own)
+   - On the first save, a parent `~/Downloads/webspec/playwright.config.ts` is also created — that's what Playwright UI uses to discover every saved test
 
-### 5. Render an LLM-amplified spec (optional)
-
-The extension's Download button already gives you a runnable deterministic `.spec.ts`. To regenerate it or to layer in LLM-amplified negative scenarios (invalid input, empty fields, error states — added as additional `test()` blocks alongside the happy path), feed the saved `recording.json` to the CLI:
-
-```sh
-# Re-render the deterministic spec:
-node packages/cli/dist/index.js record-to-spec ~/Downloads/recording-<timestamp>.json
-
-# Amplified — requires AWS credentials for Bedrock:
-node packages/cli/dist/index.js record-to-spec ~/Downloads/recording-<timestamp>.json --provider bedrock
-```
-
-The renderer uses `getByRole` selectors with the hardened forms captured at record time, so the spec is robust to typical DOM churn.
-
-### 6. Run the spec
-
-From the cloned `webspec-toolkit/` directory:
+### 5. Open the test library in Playwright UI
 
 ```sh
 # First time only: install Chromium for Playwright.
 pnpm --filter @webspec/cli exec playwright install chromium
 
-# Run any rendered spec against its live target URL:
-make run-spec SPEC=~/Downloads/recording.spec.ts
+# Open the library:
+make run-tests
 ```
+
+`make run-tests` opens Playwright UI against `~/Downloads/webspec/playwright.config.ts`. The left panel lists every saved test by slug; click ▶ on any one to run it (or the top-level ▶ to run them all). Run history, traces, time-travel debugger, watch mode are all built in.
+
+For headless one-shot runs (CI):
+
+```sh
+make run-tests-ci
+```
+
+### 6. Re-render with LLM amplification (optional)
+
+`recording.json` is the seed for a richer spec. Feed it back through the CLI to add negative scenarios (invalid input, empty fields, error states — emitted as additional `test()` blocks alongside the happy path):
+
+```sh
+# Re-render deterministically (no LLM):
+node packages/cli/dist/index.js record-to-spec ~/Downloads/webspec/<slug>/recording.json
+
+# Amplified — requires AWS credentials for Bedrock:
+node packages/cli/dist/index.js record-to-spec ~/Downloads/webspec/<slug>/recording.json --provider bedrock
+```
+
+The renderer uses `getByRole` selectors with the hardened forms captured at record time, so the spec is robust to typical DOM churn.
 
 Three reference recordings ship under `tests/fixtures/recordings/three-sites/` — `example.com`, `react.dev`, `demo.playwright.dev/todomvc/`. Re-render and re-run any of them as a live-site smoke test (rendered specs land under `.tmp/`, which is gitignored):
 

@@ -98,6 +98,7 @@ let recorderStartedAtIso: string | null = null;
 let recorderStartUrl: string | null = null;
 let recorderName: string | null = null;
 let recorderDescription: string | null = null;
+let recorderRunAs: string | null = null;
 
 function timestamp(): number {
   return Date.now() - recorderStartMs;
@@ -119,7 +120,8 @@ function persistSession(): void {
     recorderStartedAtIso === null ||
     recorderStartUrl === null ||
     recorderName === null ||
-    recorderDescription === null
+    recorderDescription === null ||
+    recorderRunAs === null
   ) {
     return;
   }
@@ -129,6 +131,7 @@ function persistSession(): void {
     startedAtMs: recorderStartMs,
     name: recorderName,
     description: recorderDescription,
+    runAs: recorderRunAs,
     events: recordedEvents,
   };
   const request: RecorderSessionPutRequest = { type: 'recorder:session:put', state };
@@ -319,6 +322,7 @@ function startRecorder(req: RecorderStartRequest): RecorderStartResponse {
   recorderStartUrl = location.href;
   recorderName = req.name;
   recorderDescription = req.description;
+  recorderRunAs = req.runAs;
   recorderActive = true;
   addRecorderListeners();
   persistSession();
@@ -330,14 +334,16 @@ function stopRecorder(): RecorderStopResponse {
     return { ok: false, error: 'Recorder is not running. Click Record first.' };
   }
   // Capture before clearing — the stop response needs to carry these back to
-  // the popup so the WorkflowRecording it builds has the right name/description.
+  // the popup so the WorkflowRecording it builds has the right metadata.
   const name = recorderName ?? '';
   const description = recorderDescription ?? '';
+  const runAs = recorderRunAs ?? '';
   recorderActive = false;
   recorderStartedAtIso = null;
   recorderStartUrl = null;
   recorderName = null;
   recorderDescription = null;
+  recorderRunAs = null;
   removeRecorderListeners();
   const events = recordedEvents;
   recordedEvents = [];
@@ -345,7 +351,7 @@ function stopRecorder(): RecorderStopResponse {
   void chrome.runtime.sendMessage<RecorderSessionClearRequest, RecorderSessionClearResponse>(
     clearRequest,
   );
-  return { ok: true, endedAt: new Date().toISOString(), name, description, events };
+  return { ok: true, endedAt: new Date().toISOString(), name, description, runAs, events };
 }
 
 /**
@@ -381,6 +387,8 @@ async function bootstrapRecorder(): Promise<void> {
       recorderStartUrl = state.startUrl;
       recorderName = state.name;
       recorderDescription = state.description;
+      // Defensive default — sessions persisted by older builds lack the field.
+      recorderRunAs = state.runAs ?? '';
       recorderActive = true;
       addRecorderListeners();
       console.log('[webspec] recorder resumed:', state.events.length, 'events buffered');
@@ -405,7 +413,8 @@ function getRecorderStatus(): RecorderStatusResponse {
     recorderStartedAtIso === null ||
     recorderStartUrl === null ||
     recorderName === null ||
-    recorderDescription === null
+    recorderDescription === null ||
+    recorderRunAs === null
   ) {
     return { ok: true, recording: false };
   }
@@ -416,6 +425,7 @@ function getRecorderStatus(): RecorderStatusResponse {
     startUrl: recorderStartUrl,
     name: recorderName,
     description: recorderDescription,
+    runAs: recorderRunAs,
     eventCount: recordedEvents.length,
   };
 }

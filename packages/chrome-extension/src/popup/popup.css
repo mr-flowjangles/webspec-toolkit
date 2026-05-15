@@ -120,6 +120,14 @@ body {
   opacity: 0.78;
 }
 
+.naming-form-optional {
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.6;
+  margin-left: 4px;
+}
+
 .naming-form input,
 .naming-form textarea {
   font: inherit;
