@@ -49,6 +49,8 @@ Why the split:
 
 A `WorkflowRecording` carries two required user-supplied fields — `name` and `description` — captured in the Chrome popup before the recorder is armed. The renderer uses `name` as the `test()` title and emits `description` as a `// `-prefixed comment block immediately under the `test(...)` opener (multi-line descriptions become multiple comment lines). These also serve as the headline + intent in any downstream test report, which is why they're captured at the user's keyboard, not inferred by the LLM.
 
+v1.2 adds an **optional** `runAs: string | null` field to `WorkflowRecording`, captured alongside name and description in the naming form. Captured-but-not-yet-rendered in v1.2; v1.3 makes it functional by emitting an auth step (`context.setExtraHTTPHeaders` for the default header-injection mode) driven by a project-level `webspec.config.ts`. The field stays optional so older recordings (and recordings made when the project has no auth config) continue to validate. See `08-test-library.md` for the full v1.2 → v1.4 design.
+
 So the renderer is two-pass:
 
 - **Pass 1 (deterministic):** each `RecordedEvent` → one Playwright action. Selectors come from the recording's `HardenedSelector.preferred`. The `test()` title comes from `recording.name`; the leading comment from `recording.description`. Always works.

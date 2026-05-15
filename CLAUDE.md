@@ -8,13 +8,16 @@
 
 **The unit-test-from-source path (M2) stays in the codebase as foundation but is deferred from the v1 active path** — the v1 mission is shift-left + fail-fast on a live page, not productivity tooling for hand-writing unit tests. M3 (CLI for unit-test gen) and M7 (VS Code) deferred from v1.
 
+**Post-v1 direction (designed, not yet implemented).** `docs/08-test-library.md` captures the v1.2 → v1.4 stack: an on-disk test library at `~/Downloads/webspec/<slug>/` that Playwright UI (`playwright test --ui`) opens as the see-and-execute surface; the naming form gains an optional `runAs` field (functional in v1.3 via project-level auth-injection config); suites in v1.4. The extension stays an authoring surface — Playwright UI is the run surface; we don't build a custom library tab in-extension.
+
 ## How to read this repo
 
 1. Start with `docs/00-overview.md` for the elevator pitch and scope.
 2. `docs/01-architecture.md` is the spine — module map and the contract artifact between modules.
 3. Subsystem deep-dives (`02-` through `06-`) cover individual concerns. Add them as the architecture firms up.
 4. `docs/07-build-plan.md` is the **implementation checklist** — milestones in order, boxes to tick as we go.
-5. `docs/99-open-questions.md` tracks decisions explicitly deferred from v1.
+5. `docs/08-test-library.md` is the **post-v1 design** for v1.2 (on-disk test library + Playwright UI as the run surface), v1.3 (auth injection via ModHeader-equivalent headers), and v1.4 (suites).
+6. `docs/99-open-questions.md` tracks decisions explicitly deferred from v1.
 
 ## Working norms for this project
 

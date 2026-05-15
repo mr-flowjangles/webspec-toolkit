@@ -29,6 +29,12 @@ v1 ships a **browser-based shift-left companion**: a Chrome extension that recor
 - **M7 — VS Code extension.** Deferred to post-v1. Browser-first means browser-only in v1.
 - **M8 — Second LLM adapter + parity test.** Deferred. The `LLMProvider` seam is proven structurally; adding a second adapter is post-v1 unless a customer-procurement constraint forces it.
 
+### Post-v1 stack (designed in `docs/08-test-library.md`, not yet implemented)
+
+- **v1.2 — Test Library.** Per-test slug folder under `~/Downloads/webspec/<slug>/`, each containing `recording.spec.ts` + `recording.json` + a per-test `playwright.config.ts`. A parent `~/Downloads/webspec/playwright.config.ts` is written-once so `playwright test --ui` discovers every saved test. Naming form gains an optional `runAs` field (captured-but-not-yet-rendered). The extension's review-panel "Download" becomes "Save" (writes the slug folder). New `make run-tests` shortcut launches Playwright UI against the parent config — **that is the library + execution surface; we do not build an in-extension list.**
+- **v1.3 — Auth Injection.** `runAs` becomes functional. New `webspec.config.ts` (in the user's repo) defines the auth mode — defaults to header injection (`mode: 'headers'`, ModHeader-equivalent) emitting `context.setExtraHTTPHeaders({ ... })` with `${username}` substituted from `recording.runAs`. Also supports `cookie`, `url`, and `storageState` modes. Secrets via `${env.NAME}` interpolation; never in the recording.
+- **v1.4 — Suites.** A new artifact at `~/Downloads/webspec/<suite-slug>/suite.json` with `testSlugs: string[]` renders to one `.spec.ts` with N `test()` blocks wrapped in `test.describe.serial(...)`. Suite creation is a Makefile / CLI action (`make new-suite NAME=… TESTS=…`), not an extension action — keeps the extension a recorder.
+
 ---
 
 ## M0 — Foundations

@@ -78,12 +78,17 @@ The contract between core and any UI surface is the typed `Analysis` artifact (a
 
 4. `07-build-plan.md` — milestones in order, ordered tasks, checkboxes.
 
+**Post-v1 design:**
+
+8. `08-test-library.md` — v1.2 (on-disk test library + Playwright UI as the run surface) → v1.3 (auth injection) → v1.4 (suites).
+
 **Tracking:**
 
 99. `99-open-questions.md` — what's deferred and why.
 
 ## North-star direction (post-v1)
 
+- **Test library + Playwright UI workflow (v1.2 → v1.4).** Designed in `docs/08-test-library.md`. The extension authors the test (name, description, run-as user, captured events) and Save writes a per-test folder under `~/Downloads/webspec/<slug>/`. Playwright UI (`playwright test --ui`) is the see-and-execute surface — we don't build a custom library tab. v1.3 makes the `runAs` field functional via header-injection auth (ModHeader-style); v1.4 adds suites for chained test composition.
 - **Unit-test gen as a save-time watcher.** The M2 work (Angular source → Jest spec) shipped as foundation. If a save-time integration earns its way back as a shift-left signal, it reactivates.
 - **VS Code surface** for the audit + amplification panels.
 - **Cypress renderer** alongside Playwright.
