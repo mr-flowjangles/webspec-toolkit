@@ -1,5 +1,27 @@
 # v1.1
 
+## v1.1.1 — Fix Spec Download Extension (2026-05-15)
+
+### Problem
+
+v1.1.0 wired `renderPlaywrightSpec` into the extension's Download button, but the rendered spec landed on disk as `recording-<ts>.spec.txt` instead of `.spec.ts`. Chrome's downloads API silently appends `.txt` to filenames when the blob's MIME type is `text/plain` and the extension isn't recognized as a text format. Caught at the first real recording (the `.json` companion was fine because Chrome trusts `application/json` and respects the `.json` extension).
+
+The rendered content itself was correct — title from `recording.name`, description comment, all events translated. Only the filename was wrong, and `npx playwright test recording-*.spec.txt` won't pick the file up.
+
+### Solution
+
+Change the spec download's blob MIME type from `text/plain` to `application/octet-stream`. `octet-stream` tells Chrome to save the blob verbatim and respect whatever filename the extension provides; no extension coercion, no content sniffing. The JSON download keeps `application/json` since that path was already working.
+
+### Fixed
+
+- Extension Download now writes `recording-<ts>.spec.ts` (was `.spec.txt`). Spec is immediately runnable with `npx playwright test`.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/popup/App.tsx` | `downloadText(spec, …, 'text/plain')` → `'application/octet-stream'`. Footer version bumped to `v1.1.1`. |
+
 ## v1.1.0 — Named Test Case Recording (2026-05-15)
 
 ### Problem

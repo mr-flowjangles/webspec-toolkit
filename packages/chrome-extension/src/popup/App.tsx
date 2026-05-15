@@ -170,7 +170,10 @@ export function App(): JSX.Element {
     const base = `recording-${stamp(recording.startedAt)}`;
     try {
       const spec = renderPlaywrightSpec(recording);
-      await downloadText(spec, `${base}.spec.ts`, 'text/plain');
+      // application/octet-stream — `text/plain` made Chrome append `.txt` to
+      // the filename ("recording-….spec.txt"). octet-stream tells Chrome to
+      // save the blob verbatim and respect the `.spec.ts` extension.
+      await downloadText(spec, `${base}.spec.ts`, 'application/octet-stream');
       await downloadText(
         JSON.stringify(recording, null, 2),
         `${base}.json`,
@@ -286,7 +289,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v1.1.0 — named test case recording</p>
+        <p className="meta">v1.1.1 — fix spec download extension</p>
       </footer>
     </main>
   );
