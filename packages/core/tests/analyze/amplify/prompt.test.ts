@@ -64,6 +64,8 @@ describe('SYSTEM_PROMPT', () => {
 describe('formatUserPrompt', () => {
   it('embeds the recording JSON in a fenced code block', () => {
     const recording: WorkflowRecording = {
+      name: 'click save',
+      description: 'Prompt fixture — single button click.',
       startedAt: '2026-05-12T00:00:00.000Z',
       endedAt: '2026-05-12T00:00:10.000Z',
       startUrl: 'https://example.com',

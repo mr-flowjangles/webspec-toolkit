@@ -30,7 +30,10 @@ import type {
 } from '../../types/analysis.js';
 
 export interface RenderE2EOptions {
-  /** Title used for the deterministic `test()` block. Defaults to "recorded workflow". */
+  /**
+   * Override the `test()` title. Defaults to `recording.name`. Tests use this
+   * to pin a specific title without having to mint a full WorkflowRecording.
+   */
   testName?: string;
 }
 
@@ -38,12 +41,15 @@ export function renderPlaywrightSpec(
   recording: WorkflowRecording,
   opts: RenderE2EOptions = {},
 ): string {
-  const testName = opts.testName ?? 'recorded workflow';
+  const testName = opts.testName ?? recording.name;
   const lines: string[] = [];
 
   lines.push("import { expect, test } from '@playwright/test';");
   lines.push('');
   lines.push(`test(${quote(testName)}, async ({ page }) => {`);
+  for (const descLine of recording.description.split('\n')) {
+    lines.push(`  // ${descLine}`);
+  }
   lines.push(`  await page.goto(${quote(recording.startUrl)});`);
 
   for (const event of recording.events) {

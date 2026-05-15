@@ -264,6 +264,18 @@ export const RecordedEventSchema = z.discriminatedUnion('kind', [
 ]);
 
 export const WorkflowRecordingSchema = z.object({
+  /**
+   * Human-given name for this recording. Used as the Playwright `test()`
+   * title by the renderer and as the headline in any downstream test report.
+   * Captured at start time in the Chrome extension; required.
+   */
+  name: z.string().min(1),
+  /**
+   * Human-given description — the "why" of the recording. Emitted as a
+   * comment in the rendered spec and surfaced in test reports. Captured
+   * alongside `name`; required.
+   */
+  description: z.string().min(1),
   startedAt: z.string(),
   endedAt: z.string(),
   startUrl: z.string(),

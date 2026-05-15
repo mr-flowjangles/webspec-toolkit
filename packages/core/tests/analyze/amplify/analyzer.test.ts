@@ -14,6 +14,8 @@ import { z } from 'zod';
 
 function makeRecording(): WorkflowRecording {
   return {
+    name: 'sign in',
+    description: 'Analyzer fixture — login flow.',
     startedAt: '2026-05-12T00:00:00.000Z',
     endedAt: '2026-05-12T00:00:10.000Z',
     startUrl: 'https://x.test/login',

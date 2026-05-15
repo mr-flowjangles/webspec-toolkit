@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import { normalizeAxeResults, renderA11yReportMarkdown } from '@webspec/core/browser';
+import {
+  normalizeAxeResults,
+  renderA11yReportMarkdown,
+  renderPlaywrightSpec,
+} from '@webspec/core/browser';
 import type { A11yReport, WorkflowRecording } from '@webspec/core/browser';
 import type {
   AuditRequest,
@@ -11,6 +15,7 @@ import type {
   RecorderStopRequest,
   RecorderStopResponse,
 } from '../shared/messages.js';
+import { NamingForm } from './NamingForm.js';
 import { ReportView } from './ReportView.js';
 import { RecordingSummaryPanel } from './RecordingSummaryPanel.js';
 
@@ -22,11 +27,14 @@ type AuditStatus =
 
 type RecorderStatus =
   | { kind: 'idle' }
-  | { kind: 'starting' }
+  | { kind: 'naming'; name: string; description: string }
+  | { kind: 'starting'; name: string; description: string }
   | {
       kind: 'recording';
       startedAt: string;
       startUrl: string;
+      name: string;
+      description: string;
       tabId: number;
     }
   | { kind: 'stopping' }
@@ -49,7 +57,10 @@ export function App(): JSX.Element {
   const auditRunning = audit.kind === 'running';
   const recording = recorder.kind === 'recording';
   const recorderBusy =
-    recorder.kind === 'starting' || recorder.kind === 'stopping' || recording;
+    recorder.kind === 'naming' ||
+    recorder.kind === 'starting' ||
+    recorder.kind === 'stopping' ||
+    recording;
 
   async function handleAuditClick(): Promise<void> {
     setAudit({ kind: 'running' });
@@ -70,19 +81,29 @@ export function App(): JSX.Element {
     await chrome.tabs.create({ url });
   }
 
-  async function handleRecordToggle(): Promise<void> {
-    if (recording) {
-      await stopAndReviewRecording(recorder.tabId, recorder.startedAt, recorder.startUrl);
+  function handleRecordToggle(): void {
+    if (recorder.kind === 'recording') {
+      void stopAndReviewRecording(
+        recorder.tabId,
+        recorder.startedAt,
+        recorder.startUrl,
+        recorder.name,
+        recorder.description,
+      );
       return;
     }
-    await startRecording();
+    if (recorder.kind === 'naming') {
+      setRecorder({ kind: 'idle' });
+      return;
+    }
+    setRecorder({ kind: 'naming', name: '', description: '' });
   }
 
-  async function startRecording(): Promise<void> {
-    setRecorder({ kind: 'starting' });
+  async function startRecording(name: string, description: string): Promise<void> {
+    setRecorder({ kind: 'starting', name, description });
     try {
       const { tabId, url } = await activeHttpTab();
-      const request: RecorderStartRequest = { type: 'recorder:start' };
+      const request: RecorderStartRequest = { type: 'recorder:start', name, description };
       const response = await chrome.tabs.sendMessage<RecorderStartRequest, RecorderStartResponse>(
         tabId,
         request,
@@ -92,6 +113,8 @@ export function App(): JSX.Element {
         kind: 'recording',
         startedAt: response.startedAt,
         startUrl: response.startUrl ?? url,
+        name,
+        description,
         tabId,
       });
     } catch (err) {
@@ -106,6 +129,8 @@ export function App(): JSX.Element {
     tabId: number,
     startedAt: string,
     startUrl: string,
+    fallbackName: string,
+    fallbackDescription: string,
   ): Promise<void> {
     setRecorder({ kind: 'stopping' });
     try {
@@ -116,7 +141,14 @@ export function App(): JSX.Element {
       );
       if (!response.ok) throw new Error(response.error);
 
+      // Prefer the values echoed back by the content script (survives page
+      // reload mid-recording); fall back to popup state for the same-popup case.
+      const name = response.name || fallbackName;
+      const description = response.description || fallbackDescription;
+
       const recording: WorkflowRecording = {
+        name,
+        description,
         startedAt,
         endedAt: response.endedAt,
         startUrl,
@@ -135,10 +167,20 @@ export function App(): JSX.Element {
   }
 
   async function handleDownloadRecording(recording: WorkflowRecording): Promise<void> {
-    const filename = `recording-${stamp(recording.startedAt)}.json`;
+    const base = `recording-${stamp(recording.startedAt)}`;
     try {
-      await downloadJson(recording, filename);
-      setRecorder({ kind: 'saved', filename, events: recording.events.length });
+      const spec = renderPlaywrightSpec(recording);
+      await downloadText(spec, `${base}.spec.ts`, 'text/plain');
+      await downloadText(
+        JSON.stringify(recording, null, 2),
+        `${base}.json`,
+        'application/json',
+      );
+      setRecorder({
+        kind: 'saved',
+        filename: `${base}.spec.ts`,
+        events: recording.events.length,
+      });
     } catch (err) {
       setRecorder({
         kind: 'error',
@@ -178,9 +220,22 @@ export function App(): JSX.Element {
               ? 'Saving…'
               : recording
                 ? '■ Stop recording'
-                : 'Record workflow'}
+                : recorder.kind === 'naming'
+                  ? 'Cancel'
+                  : 'Record workflow'}
         </button>
       </div>
+
+      {recorder.kind === 'naming' && (
+        <NamingForm
+          name={recorder.name}
+          description={recorder.description}
+          onChange={(name, description) =>
+            setRecorder({ kind: 'naming', name, description })
+          }
+          onStart={(name, description) => void startRecording(name, description)}
+        />
+      )}
 
       {audit.kind === 'error' && (
         <p className="error" role="alert">
@@ -194,9 +249,10 @@ export function App(): JSX.Element {
         </p>
       )}
 
-      {recording && (
+      {recorder.kind === 'recording' && (
         <p className="recorder-banner" role="status">
-          Recording on this tab — click anywhere in the page to capture events. Stop when done.
+          Recording <strong>{recorder.name}</strong> — click anywhere in the page to capture
+          events. Stop when done.
         </p>
       )}
 
@@ -230,7 +286,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v0.5.4 — trace preview + share warning</p>
+        <p className="meta">v1.1.0 — named test case recording</p>
       </footer>
     </main>
   );
@@ -263,6 +319,8 @@ async function hydrateRecorderStatus(
         kind: 'recording',
         startedAt: response.startedAt,
         startUrl: response.startUrl,
+        name: response.name,
+        description: response.description,
         tabId: tab.id,
       });
     }
@@ -340,8 +398,8 @@ export interface StashedReport {
 // Recording download — chrome.downloads API + blob URL.
 // ---------------------------------------------------------------------------
 
-async function downloadJson(recording: WorkflowRecording, filename: string): Promise<void> {
-  const blob = new Blob([JSON.stringify(recording, null, 2)], { type: 'application/json' });
+async function downloadText(content: string, filename: string, mimeType: string): Promise<void> {
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   try {
     await chrome.downloads.download({ url, filename, saveAs: false });

@@ -4,7 +4,9 @@
 
 ## Current state
 
-**M0–M5 complete; M6 is the only remaining active milestone for v1.** Foundations (M0, v0.1.0), `Analysis` contract artifact + `LLMProvider` seam with `BedrockAdapter` (M1, v0.2.0), Angular `TestPlan` analyzer + Jest renderer (M2, v0.3.0), a11y analyzer + report renderer (M4, v0.3.3–v0.3.9), and the Chrome extension flagship surface — audit + recorder with hardened selectors, dedup, session persistence, navigation capture, and review-gated download (M5, v0.4.x–v0.6.0) — all shipped. **The unit-test-from-source path (M2) stays in the codebase as foundation but is deferred from the v1 active path** — the v1 mission is shift-left + fail-fast on a live page, not productivity tooling for hand-writing unit tests. **M6 (`WorkflowRecording` → Playwright renderer with LLM amplification) is what's left.** M3 (CLI for unit-test gen) and M7 (VS Code) deferred from v1.
+**v1 has shipped.** All v1-path milestones are done — M0 foundations (v0.1.0), M1 `Analysis` contract artifact + `LLMProvider` seam with `BedrockAdapter` (v0.2.0), M2 Angular `TestPlan` analyzer + Jest renderer (v0.3.0), M4 a11y analyzer + report renderer (v0.3.3–v0.3.9), M5 Chrome extension audit + recorder with hardened selectors, dedup, session persistence, navigation capture, review-gated download (v0.4.x–v0.6.0), and M6 `WorkflowRecording` → Playwright renderer with LLM amplification (v0.7.0–v0.7.4). v1.0.0 cut on 2026-05-14 (build-plan DoD ticked + three-site render verification), v1.0.1 followed same-day with a new-version-script fix. Active line is now v1.x — **v1.1.0 adds user-supplied test name + description captured in the popup before recording starts; the extension's Download button now writes both a runnable `.spec.ts` and the raw `recording.json`.**
+
+**The unit-test-from-source path (M2) stays in the codebase as foundation but is deferred from the v1 active path** — the v1 mission is shift-left + fail-fast on a live page, not productivity tooling for hand-writing unit tests. M3 (CLI for unit-test gen) and M7 (VS Code) deferred from v1.
 
 ## How to read this repo
 

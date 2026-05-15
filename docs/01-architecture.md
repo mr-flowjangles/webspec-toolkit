@@ -37,7 +37,7 @@ A small interface — `LLMProvider` — with `complete(messages, schema): Promis
 
 - **TestRenderer.** Takes a `TestPlan`, emits Jest `.spec.ts`. Pure function. Templating is plain TypeScript string assembly, not a templating library — keeps the bar for contributors low and renders trivially golden-testable.
 - **ReportRenderer.** Takes an `A11yReport`, emits Markdown and JSON variants for the CLI/CI. UI surfaces (VS Code panel, Chrome popup) render their own React/HTML view from the same typed report — they don't re-parse the markdown.
-- **E2ERenderer.** Takes a `WorkflowRecording`, emits Playwright `.spec.ts`. Two-pass: (1) deterministic translation — each captured event becomes a Playwright action; (2) **optional LLM polish** — given the action trace, the LLM names the test, inserts assertions inferred from observed state changes (e.g. "after submit, expect heading 'Success' to appear"), and proposes selector consolidations. The deterministic pass is sufficient on its own; the LLM pass is value-add and skipped if no provider is configured.
+- **E2ERenderer.** Takes a `WorkflowRecording`, emits Playwright `.spec.ts`. The recording's user-supplied `name` and `description` (captured in the popup before recording starts) become the `test()` title and a leading comment in the spec. Two-pass: (1) deterministic translation — each captured event becomes a Playwright action; (2) **optional LLM polish** — given the action trace, the LLM inserts assertions inferred from observed state changes (e.g. "after submit, expect heading 'Success' to appear") and proposes selector consolidations. The deterministic pass is sufficient on its own; the LLM pass is value-add and skipped if no provider is configured.
 
 ### Surfaces (separate packages)
 

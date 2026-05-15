@@ -33,6 +33,8 @@ const TMP_DIR = join(__dirname, '.tmp');
 function buildRecording(): WorkflowRecording {
   const fileUrl = `file://${FIXTURE_PATH}`;
   return {
+    name: 'fills the form and submits it',
+    description: 'M6 integration fixture — exercises input, select, checkbox, and button via the renderer.',
     startedAt: '2026-05-12T00:00:00.000Z',
     endedAt: '2026-05-12T00:00:10.000Z',
     startUrl: fileUrl,

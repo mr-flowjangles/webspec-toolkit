@@ -40,6 +40,10 @@ export function isAuditRequest(value: unknown): value is AuditRequest {
 
 export interface RecorderStartRequest {
   type: 'recorder:start';
+  /** Human-given test name captured in the popup before recording begins. */
+  name: string;
+  /** Human-given description captured in the popup before recording begins. */
+  description: string;
 }
 
 export interface RecorderStopRequest {
@@ -62,12 +66,20 @@ export type RecorderStartResponse =
   | { ok: false; error: string };
 
 export type RecorderStopResponse =
-  | { ok: true; endedAt: string; events: RecordedEvent[] }
+  | { ok: true; endedAt: string; name: string; description: string; events: RecordedEvent[] }
   | { ok: false; error: string };
 
 export type RecorderStatusResponse =
   | { ok: true; recording: false }
-  | { ok: true; recording: true; startedAt: string; startUrl: string; eventCount: number }
+  | {
+      ok: true;
+      recording: true;
+      startedAt: string;
+      startUrl: string;
+      name: string;
+      description: string;
+      eventCount: number;
+    }
   | { ok: false; error: string };
 
 export function isRecorderStartRequest(value: unknown): value is RecorderStartRequest {
@@ -100,6 +112,10 @@ export interface RecorderSessionState {
   startedAtIso: string;
   startUrl: string;
   startedAtMs: number;
+  /** Human-given test name from the popup; preserved across content-script reloads. */
+  name: string;
+  /** Human-given description from the popup; preserved across content-script reloads. */
+  description: string;
   events: RecordedEvent[];
 }
 

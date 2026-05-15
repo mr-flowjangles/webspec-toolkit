@@ -1,0 +1,218 @@
+{
+  "name": "Create Lead — UCM NexGen",
+  "description": "Create a new Medicare lead from the My Work tasks page, sourced from a complainant, classified as beneficiary fraud.",
+  "startedAt": "2026-05-14T20:56:09.524Z",
+  "endedAt": "2026-05-14T20:56:34.780Z",
+  "startUrl": "http://app.ucm-dev.cmscloud.local/ucmnexgen/trackers/my-work/tasks",
+  "events": [
+    {
+      "t": 2898,
+      "kind": "click",
+      "selector": {
+        "preferred": "text=\"add\"",
+        "strategy": "text",
+        "fallbacks": [
+          "mat-icon.mat-icon.notranslate"
+        ]
+      },
+      "targetText": "add"
+    },
+    {
+      "t": 3926,
+      "kind": "click",
+      "selector": {
+        "preferred": "div >> nth=370",
+        "strategy": "css",
+        "fallbacks": []
+      }
+    },
+    {
+      "t": 4977,
+      "kind": "click",
+      "selector": {
+        "preferred": "div#mat-select-value-4.mat-mdc-select-value",
+        "strategy": "css",
+        "fallbacks": []
+      }
+    },
+    {
+      "t": 6087,
+      "kind": "click",
+      "selector": {
+        "preferred": "text=\"Medicare\"",
+        "strategy": "text",
+        "fallbacks": [
+          "mat-option#mat-option-10.mdc-list-item"
+        ]
+      },
+      "targetText": "Medicare"
+    },
+    {
+      "t": 6619,
+      "kind": "click",
+      "selector": {
+        "preferred": "role=button[name=\"Select Lead Source Required\"]",
+        "strategy": "role",
+        "fallbacks": [
+          "text=\"arrow_drop_down\"",
+          "button"
+        ]
+      },
+      "targetText": "arrow_drop_down"
+    },
+    {
+      "t": 7850,
+      "kind": "click",
+      "selector": {
+        "preferred": "text=\"Complainant\"",
+        "strategy": "text",
+        "fallbacks": [
+          "span.display-text"
+        ]
+      },
+      "targetText": "Complainant"
+    },
+    {
+      "t": 10023,
+      "kind": "click",
+      "selector": {
+        "preferred": "role=textbox[name=\"Lead Received Date\"]",
+        "strategy": "role",
+        "fallbacks": [
+          "input#mat-input-0.mat-datepicker-input.mdc-text-field__input"
+        ]
+      }
+    },
+    {
+      "t": 10812,
+      "kind": "click",
+      "selector": {
+        "preferred": "span >> nth=55",
+        "strategy": "css",
+        "fallbacks": []
+      }
+    },
+    {
+      "t": 11861,
+      "kind": "click",
+      "selector": {
+        "preferred": "text=\"7\"",
+        "strategy": "text",
+        "fallbacks": [
+          "span"
+        ]
+      },
+      "targetText": "7"
+    },
+    {
+      "t": 12410,
+      "kind": "click",
+      "selector": {
+        "preferred": "div#mat-select-value-5.mat-mdc-select-value",
+        "strategy": "css",
+        "fallbacks": []
+      }
+    },
+    {
+      "t": 13511,
+      "kind": "click",
+      "selector": {
+        "preferred": "text=\"Beneficiary Fraud\"",
+        "strategy": "text",
+        "fallbacks": [
+          "span.mdc-list-item__primary-text"
+        ]
+      },
+      "targetText": "Beneficiary Fraud"
+    },
+    {
+      "t": 14664,
+      "kind": "click",
+      "selector": {
+        "preferred": "div >> nth=436",
+        "strategy": "css",
+        "fallbacks": []
+      }
+    },
+    {
+      "t": 16250,
+      "kind": "change",
+      "selector": {
+        "preferred": "role=radio[name=\"No\"]",
+        "strategy": "role",
+        "fallbacks": [
+          "input#mat-radio-1-input"
+        ]
+      },
+      "value": "true"
+    },
+    {
+      "t": 17114,
+      "kind": "click",
+      "selector": {
+        "preferred": "span >> nth=74",
+        "strategy": "css",
+        "fallbacks": []
+      }
+    },
+    {
+      "t": 18564,
+      "kind": "click",
+      "selector": {
+        "preferred": "div#mat-select-value-8.mat-mdc-select-value",
+        "strategy": "css",
+        "fallbacks": []
+      }
+    },
+    {
+      "t": 19812,
+      "kind": "click",
+      "selector": {
+        "preferred": "text=\"Supervisor\"",
+        "strategy": "text",
+        "fallbacks": [
+          "span.mdc-list-item__primary-text"
+        ]
+      },
+      "targetText": "Supervisor"
+    },
+    {
+      "t": 20578,
+      "kind": "click",
+      "selector": {
+        "preferred": "text=\"Create Lead\"",
+        "strategy": "text",
+        "fallbacks": [
+          "span.mdc-button__label"
+        ]
+      },
+      "targetText": "Create Lead"
+    },
+    {
+      "t": 21758,
+      "kind": "navigate",
+      "url": "http://app.ucm-dev.cmscloud.local/ucmnexgen/record/cse/CSE-260514-00002/07e3563b-2eaa-4cf0-8c2a-65db3135af28/information",
+      "reason": "history"
+    },
+    {
+      "t": 21792,
+      "kind": "navigate",
+      "url": "http://app.ucm-dev.cmscloud.local/ucmnexgen/record/cse/CSE-260514-00002/07e3563b-2eaa-4cf0-8c2a-65db3135af28/information",
+      "reason": "history"
+    },
+    {
+      "t": 21984,
+      "kind": "navigate",
+      "url": "http://app.ucm-dev.cmscloud.local/ucmnexgen/record/cse/CSE-260514-00002/07e3563b-2eaa-4cf0-8c2a-65db3135af28/information?tab=general-information",
+      "reason": "history"
+    },
+    {
+      "t": 22043,
+      "kind": "navigate",
+      "url": "http://app.ucm-dev.cmscloud.local/ucmnexgen/record/cse/CSE-260514-00002/07e3563b-2eaa-4cf0-8c2a-65db3135af28/information?tab=general-information",
+      "reason": "history"
+    }
+  ],
+  "network": [],
+  "framework": "playwright"
+}

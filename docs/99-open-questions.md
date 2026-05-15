@@ -79,8 +79,8 @@ Keep this file living. When a decision is made, move the entry's status to "reso
 
 ## How does a recording get from the Chrome extension to a Node renderer?
 
-**Status:** resolved (v0.5.4)
-**Resolution:** Download-to-disk via `chrome.downloads`. Stop button opens a review panel showing duration / event counts / URL trail / sensitive-input warning; the user clicks **Download** to write the `recording.json` or **Discard** to drop it without writing. The file IS the artifact — `webspec record-to-spec <recording.json>` (M6) reads it directly, no special transport. The review-then-download gate addresses the "lowest-friction" concern while giving the user an out for sensitive captures. Localhost daemon / "Send to VS Code" alternatives remain available if user friction emerges in the wild.
+**Status:** resolved (v0.5.4; rendered-spec export added in v1.1.0)
+**Resolution:** Download-to-disk via `chrome.downloads`. Stop button opens a review panel showing duration / event counts / URL trail / sensitive-input warning; the user clicks **Download** to write both `recording-<ts>.spec.ts` (rendered Playwright via the M6 deterministic renderer) and `recording-<ts>.json` (raw `WorkflowRecording`), or **Discard** to drop both without writing. The two-file shape lands a runnable spec in the user's hand immediately while preserving the JSON for re-rendering (e.g. through the LLM amplifier later). `webspec record-to-spec <recording.json>` (M6) is still the path for a CLI-driven re-render. The review-then-download gate addresses the "lowest-friction" concern while giving the user an out for sensitive captures. Localhost daemon / "Send to VS Code" alternatives remain available if user friction emerges in the wild.
 
 ## What gets masked during recording? PHI? PII? Free-text fields?
 
