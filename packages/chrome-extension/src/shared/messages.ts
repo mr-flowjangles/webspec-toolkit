@@ -44,6 +44,12 @@ export interface RecorderStartRequest {
   name: string;
   /** Human-given description captured in the popup before recording begins. */
   description: string;
+  /**
+   * Optional run-as user identity. Captured in v1.2 but not yet rendered;
+   * v1.3 wires this into an auth step in the spec via project-level config.
+   * Empty string when the form was left blank.
+   */
+  runAs: string;
 }
 
 export interface RecorderStopRequest {
@@ -66,7 +72,14 @@ export type RecorderStartResponse =
   | { ok: false; error: string };
 
 export type RecorderStopResponse =
-  | { ok: true; endedAt: string; name: string; description: string; events: RecordedEvent[] }
+  | {
+      ok: true;
+      endedAt: string;
+      name: string;
+      description: string;
+      runAs: string;
+      events: RecordedEvent[];
+    }
   | { ok: false; error: string };
 
 export type RecorderStatusResponse =
@@ -78,6 +91,7 @@ export type RecorderStatusResponse =
       startUrl: string;
       name: string;
       description: string;
+      runAs: string;
       eventCount: number;
     }
   | { ok: false; error: string };
@@ -116,6 +130,8 @@ export interface RecorderSessionState {
   name: string;
   /** Human-given description from the popup; preserved across content-script reloads. */
   description: string;
+  /** Optional run-as user; preserved across content-script reloads. Empty when not set. */
+  runAs: string;
   events: RecordedEvent[];
 }
 

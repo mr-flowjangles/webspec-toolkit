@@ -4,7 +4,7 @@
 # Targets that produce no files are .PHONY so make doesn't try to track them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup build ext-build test lint format format-check ci image smoke run-spec clean version version-minor version-major
+.PHONY: help setup build ext-build test lint format format-check ci image smoke run-spec run-tests run-tests-ci clean version version-minor version-major
 
 # ---------------------------------------------------------------------------
 # Help
@@ -78,6 +78,31 @@ run-spec: ## Run a rendered Playwright spec (SPEC=path/to/spec.ts)
 	pnpm --filter @webspec/cli exec playwright test \
 	  --config "$(CURDIR)/tests/fixtures/recordings/playwright.config.ts" \
 	  "$(abspath $(SPEC))"
+
+# ---------------------------------------------------------------------------
+# Test library — open or run the saved webspec tests (v1.2)
+# ---------------------------------------------------------------------------
+# The extension writes saved tests under ~/Downloads/webspec/<slug>/ with a
+# parent playwright.config.ts at ~/Downloads/webspec/. These targets point
+# Playwright at that config so all saved tests are visible at once.
+
+WEBSPEC_LIBRARY ?= $(HOME)/Downloads/webspec
+
+run-tests: ## Open Playwright UI against the saved test library (~/Downloads/webspec/)
+	@if [ ! -f "$(WEBSPEC_LIBRARY)/playwright.config.ts" ]; then \
+	  echo "No webspec library found at $(WEBSPEC_LIBRARY)/playwright.config.ts"; \
+	  echo "Record a test in the Chrome extension and click Save to create it."; \
+	  exit 1; \
+	fi
+	pnpm --filter @webspec/cli exec playwright test --ui \
+	  --config "$(WEBSPEC_LIBRARY)/playwright.config.ts"
+
+run-tests-ci: ## Run the saved test library headlessly once (CI / batch use)
+	@if [ ! -f "$(WEBSPEC_LIBRARY)/playwright.config.ts" ]; then \
+	  echo "No webspec library found at $(WEBSPEC_LIBRARY)/playwright.config.ts"; exit 1; \
+	fi
+	pnpm --filter @webspec/cli exec playwright test \
+	  --config "$(WEBSPEC_LIBRARY)/playwright.config.ts"
 
 # ---------------------------------------------------------------------------
 # Cleanup

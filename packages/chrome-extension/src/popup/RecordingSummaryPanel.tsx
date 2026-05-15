@@ -1,21 +1,22 @@
 /**
- * Post-stop review panel (v0.5.4).
+ * Post-stop review panel (v0.5.4 → v1.2.0 rename).
  *
  * Replaces the auto-download-after-stop flow: when the user clicks Stop,
  * the popup renders this panel so they can see what they captured and
- * either Download or Discard. The recording is held in popup state until
- * one of those buttons is pressed.
+ * either Save (writes to ~/Downloads/webspec/<slug>/ — the v1.2 library
+ * layout) or Discard. The recording is held in popup state until one of
+ * those buttons is pressed.
  */
 import type { WorkflowRecording } from '@webspec/core/browser';
 import { formatDuration, summarizeRecording, type RecordingSummary, type UrlTrailEntry } from './summary.js';
 
 interface Props {
   recording: WorkflowRecording;
-  onDownload: () => void;
+  onSave: () => void;
   onDiscard: () => void;
 }
 
-export function RecordingSummaryPanel({ recording, onDownload, onDiscard }: Props): JSX.Element {
+export function RecordingSummaryPanel({ recording, onSave, onDiscard }: Props): JSX.Element {
   const summary = summarizeRecording(recording);
 
   return (
@@ -49,10 +50,10 @@ export function RecordingSummaryPanel({ recording, onDownload, onDiscard }: Prop
         <button
           type="button"
           className="trace-download-btn"
-          onClick={onDownload}
+          onClick={onSave}
           disabled={summary.eventCount === 0}
         >
-          Download recording
+          Save
         </button>
         <button
           type="button"

@@ -276,6 +276,13 @@ export const WorkflowRecordingSchema = z.object({
    * alongside `name`; required.
    */
   description: z.string().min(1),
+  /**
+   * Optional user identity the test should run as. Captured in v1.2 but not
+   * yet rendered — v1.3 wires this into an auth-injection step in the spec
+   * (see docs/08-test-library.md). Null when the form was left blank or the
+   * recording predates v1.2.
+   */
+  runAs: z.string().nullable().default(null),
   startedAt: z.string(),
   endedAt: z.string(),
   startUrl: z.string(),
