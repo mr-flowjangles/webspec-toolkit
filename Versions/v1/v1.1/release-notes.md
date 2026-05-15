@@ -1,5 +1,50 @@
 # v1.1
 
+## v1.1.2 — Test Library Design (2026-05-15)
+
+### Problem
+
+v1.1.0 + v1.1.1 closed the recording → spec hand-off, but the first real test run exposed bigger workflow gaps: downloaded files land at the top of `~/Downloads/` with timestamp-stamped names (hard to find), `make run-spec` doesn't work for arbitrary user specs (the bundled Playwright config restricts `testDir`), `npx playwright test` outside the repo fails because `@playwright/test` isn't installed there, and there's no notion of a *library* of recorded tests, no `runAs` user, no suites.
+
+Rob's mental model: the extension should *author* a test (name, description, run-as user), and that test should *show up in a place where you can see and execute it* — like Playwright's UI Mode. The v1 product as shipped doesn't deliver that workflow.
+
+### Solution
+
+Design-only PR. New `docs/08-test-library.md` captures the post-v1 stack:
+
+- **v1.2 — Test Library.** Files-on-disk are canonical at `~/Downloads/webspec/<slug>/recording.{spec.ts,json}` + per-test `playwright.config.ts`. The extension also writes a parent `~/Downloads/webspec/playwright.config.ts` (write-once) so `playwright test --ui` discovers every saved test. `make run-tests` launches that UI — **Playwright UI is the library + execution surface; we don't build an in-extension list.** The naming form gains an optional `runAs` field (captured-but-not-yet-rendered). The review-panel "Download" becomes "Save."
+- **v1.3 — Auth Injection.** `runAs` becomes functional. New `webspec.config.ts` (in the user's repo) defines the auth mechanism — defaults to header injection (`mode: 'headers'`, ModHeader-equivalent) emitting `context.setExtraHTTPHeaders({ ... })` driven by `${username}`. Also supports `cookie`, `url`, `storageState`. Secrets via `${env.NAME}`.
+- **v1.4 — Suites.** A `suite.json` at `~/Downloads/webspec/<suite-slug>/` lists `testSlugs: string[]` and renders to one `.spec.ts` with N `test()` blocks wrapped in `test.describe.serial(...)`. Suite creation is a Makefile / CLI action — keeps the extension a recorder.
+
+In-tool execution (clicking Run inside Chrome) remains parked. Playwright can't run in a Chrome extension; bringing execution in-tool requires either a localhost daemon (rejected in `99-open-questions.md`) or a cloud runner. Playwright UI fills the gap fine.
+
+### New
+
+- `docs/08-test-library.md` — full design for v1.2 / v1.3 / v1.4.
+
+### Changed
+
+- `CLAUDE.md` — "How to read this repo" gains `08-test-library.md` as item 5; current-state paragraph adds a post-v1 direction note.
+- `docs/00-overview.md` — reading order gains `08-test-library.md`; north-star direction now leads with the v1.2 → v1.4 stack.
+- `docs/01-architecture.md` — Chrome extension surface description corrected (the extension *does* bundle the deterministic E2ERenderer, contra the pre-v1.1.0 prose) and notes the v1.2+ Save-to-slug-folder direction.
+- `docs/02-contract-spec.md` — `WorkflowRecording` section notes the v1.2+ optional `runAs` field and points at `08-test-library.md`.
+- `docs/07-build-plan.md` — new "Post-v1 stack" subsection captures v1.2 / v1.3 / v1.4 milestones.
+
+### Fixed
+
+Nothing in code — this is design.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docs/08-test-library.md` | **New.** v1.2 / v1.3 / v1.4 design. |
+| `CLAUDE.md` | Reading-order entry for the new doc; current-state paragraph mentions post-v1 direction. |
+| `docs/00-overview.md` | Reading-order entry; north-star direction updated. |
+| `docs/01-architecture.md` | Chrome extension surface description corrected + v1.2+ Save direction noted. |
+| `docs/02-contract-spec.md` | `WorkflowRecording` section notes v1.2+ optional `runAs`. |
+| `docs/07-build-plan.md` | New "Post-v1 stack" subsection. |
+
 ## v1.1.1 — Fix Spec Download Extension (2026-05-15)
 
 ### Problem
