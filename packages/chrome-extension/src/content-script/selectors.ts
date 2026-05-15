@@ -40,9 +40,24 @@ const MAX_TEXT_LENGTH = 80;
  * Build a HardenedSelector for a single element. Always returns a result —
  * if nothing better is available, falls back to a basic CSS selector with
  * `strategy: 'css'`.
+ *
+ * v1.3.0 — interactive-ancestor promotion. Material-UI / Angular Material
+ * components frequently render an interactive button or menu item with a
+ * deep tree of decorative wrappers (mat-icon, ripple overlay, transparent
+ * div). The user clicks on the visual chrome; `event.target` is the deepest
+ * element, which has no role / aria-label / data-testid / textContent — so
+ * the previous logic fell straight through to a positional CSS selector
+ * like `div >> nth=369` that rotted the moment the DOM shifted. We now
+ * walk up the tree first to find the nearest interactive ancestor and
+ * harden against THAT element instead.
  */
 export function buildHardenedSelector(el: Element): HardenedSelector {
-  const css = buildBasicSelector(el);
+  const target = findInteractiveTarget(el);
+  const css = buildBasicSelector(target);
+
+  // The disambiguation/role/text helpers below all operate on `target`. We
+  // alias to preserve readability while keeping the promotion contained.
+  el = target;
 
   // 1. data-testid family
   const testId = findTestId(el);
@@ -78,6 +93,79 @@ export function buildHardenedSelector(el: Element): HardenedSelector {
 
   // 4. CSS fallback
   return { preferred: disambiguateCss(el, css), strategy: 'css', fallbacks: [] };
+}
+
+// ---------------------------------------------------------------------------
+// Interactive-ancestor promotion (v1.3.0)
+// ---------------------------------------------------------------------------
+
+/**
+ * ARIA roles that signal an interactive element worth promoting up to. If a
+ * click lands on a decorative descendant of one of these, we'd rather emit
+ * a selector for the role-bearing ancestor — its accessible name and text
+ * are typically stable, while the decorative descendant has neither.
+ */
+const INTERACTIVE_ROLES: ReadonlySet<string> = new Set([
+  'button',
+  'link',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'tab',
+  'treeitem',
+  'option',
+  'checkbox',
+  'radio',
+  'switch',
+  'combobox',
+  'listbox',
+]);
+
+const INTERACTIVE_TAGS: ReadonlySet<string> = new Set([
+  'button',
+  'a', // only when href is present — checked in isInteractive
+  'input',
+  'select',
+  'textarea',
+]);
+
+/**
+ * Cap on how far we walk up the DOM. Five levels covers the deepest
+ * decorative wrapper trees commonly seen in Material UI / Angular Material;
+ * going further risks promoting to a too-broad ancestor (a whole nav, a
+ * page section) that wouldn't represent the user's actual click intent.
+ */
+const ANCESTOR_WALK_MAX_DEPTH = 5;
+
+function isInteractive(el: Element): boolean {
+  const role = el.getAttribute('role');
+  if (role !== null && INTERACTIVE_ROLES.has(role)) return true;
+  const tag = el.tagName.toLowerCase();
+  if (!INTERACTIVE_TAGS.has(tag)) return false;
+  // <a> without href is non-interactive (just a styled span). The recorder
+  // shouldn't promote to it because Playwright's `getByRole('link')` would
+  // skip it too.
+  if (tag === 'a') return el.hasAttribute('href');
+  return true;
+}
+
+/**
+ * Walk up from `el` looking for the nearest interactive ancestor (button,
+ * menu item, link, input, etc.). Returns `el` unchanged if it's already
+ * interactive — we never promote past the user's actual target — and
+ * returns `el` if no interactive ancestor is found within the walk cap,
+ * preserving the legacy hardening behavior for those cases.
+ */
+function findInteractiveTarget(el: Element): Element {
+  if (isInteractive(el)) return el;
+  let current: Element | null = el.parentElement;
+  let depth = 0;
+  while (current !== null && depth < ANCESTOR_WALK_MAX_DEPTH) {
+    if (isInteractive(current)) return current;
+    current = current.parentElement;
+    depth += 1;
+  }
+  return el;
 }
 
 // ---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ Per-Chrome-profile, not per-repo. No CLI step. Multi-app supported via multiple 
 ### Fixed
 
 - The auth gap from v1.2 — tests recorded against authenticated Bellese apps now actually run authenticated, no terminal step required.
+- **Selector hardening for nested-text elements.** UCM live-test surfaced a recorder limitation: clicking on a deep decorative descendant of an interactive element (e.g. a `<mat-icon>` inside a `[role=menuitem]`) produced positional CSS selectors like `div >> nth=369` that broke the moment the DOM shifted. The hardener now walks up to 5 levels looking for the nearest interactive ancestor (button, link, menu item, tab, combobox, etc.) and applies the existing role+name / text / testId strategies to *that* element. Click targets that are themselves interactive are never promoted past — `<input>` still hardens against `<input>`, not its surrounding `<form>`. 8 new tests in `packages/chrome-extension/tests/selectors.test.ts` cover the promotion paths and the negative cases (already-interactive, no-ancestor, depth-exceeded, `<a>` without href).
 
 ### Files Changed
 
@@ -71,3 +72,5 @@ Per-Chrome-profile, not per-repo. No CLI step. Multi-app supported via multiple 
 | `packages/chrome-extension/vite.config.ts` | Add `settings` rollup input. |
 | `packages/chrome-extension/manifest.config.ts` | Add settings to web_accessible_resources. |
 | `docs/08-test-library.md` | v1.3 section rewritten — extension-Settings, glob URL patterns, `${runAs}` substitution, domain-aware profile matching. |
+| `packages/chrome-extension/src/content-script/selectors.ts` | Interactive-ancestor promotion: `findInteractiveTarget` walks up to 5 levels for the nearest interactive (button/link/menuitem/etc.) ancestor before hardening, so clicks on decorative descendants get a stable role+name selector instead of positional CSS. |
+| `packages/chrome-extension/tests/selectors.test.ts` | +8 tests for promotion and the negative cases. |
