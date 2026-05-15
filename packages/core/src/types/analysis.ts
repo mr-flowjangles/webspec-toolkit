@@ -277,12 +277,31 @@ export const WorkflowRecordingSchema = z.object({
    */
   description: z.string().min(1),
   /**
-   * Optional user identity the test should run as. Captured in v1.2 but not
-   * yet rendered — v1.3 wires this into an auth-injection step in the spec
-   * (see docs/08-test-library.md). Null when the form was left blank or the
-   * recording predates v1.2.
+   * Optional user identity the test should run as. Captured in v1.2; v1.3
+   * substitutes this value into the matched auth profile's `${runAs}`
+   * placeholders to produce `auth.headers`. Null when the form was left
+   * blank or the recording predates v1.2.
    */
   runAs: z.string().nullable().default(null),
+  /**
+   * Resolved auth headers for the test, baked in at save time from the
+   * matched profile (v1.3). When present, the renderer emits
+   * `context.setExtraHTTPHeaders({ ... })` between `test(` and `page.goto`.
+   * Null when no profile matched the start URL, when the user had no
+   * profiles configured, or for recordings made before v1.3.
+   *
+   * Resolved at save time — not a reference. The recording stays runnable
+   * even if the user later edits or deletes the source profile.
+   */
+  auth: z
+    .object({
+      /** Display name of the profile this was resolved from, for human reference. */
+      profileName: z.string(),
+      /** The resolved headers ready to feed `context.setExtraHTTPHeaders`. */
+      headers: z.record(z.string(), z.string()),
+    })
+    .nullable()
+    .default(null),
   startedAt: z.string(),
   endedAt: z.string(),
   startUrl: z.string(),
