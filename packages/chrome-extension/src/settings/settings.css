@@ -340,3 +340,119 @@ body {
   color: white !important;
   border-color: transparent !important;
 }
+
+/* General panel */
+
+.general-field {
+  padding: 16px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.general-field-label {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.general-field-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  opacity: 0.78;
+  line-height: 1.5;
+}
+
+.general-field-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.general-field-warn {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #c87f0a;
+  background: color-mix(in srgb, #c87f0a 8%, transparent);
+  opacity: 1;
+}
+
+.general-field-warn strong {
+  color: #c87f0a;
+}
+
+.general-folder-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.general-folder-empty {
+  flex: 1;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.general-folder-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.general-folder-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  word-break: break-all;
+}
+
+.general-folder-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.general-folder-actions button {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.general-perm {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.general-perm-ok {
+  color: #1e8449;
+  background: color-mix(in srgb, #1e8449 14%, transparent);
+}
+
+.general-perm-warn {
+  color: #c87f0a;
+  background: color-mix(in srgb, #c87f0a 14%, transparent);
+}
+
+.general-perm-err {
+  color: #c0392b;
+  background: color-mix(in srgb, #c0392b 14%, transparent);
+}
+
+.general-status-row {
+  margin-top: 10px;
+  min-height: 1em;
+}

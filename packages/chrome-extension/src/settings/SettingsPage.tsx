@@ -7,13 +7,15 @@
  */
 import { useState } from 'react';
 import { AuthProfilesPanel } from './AuthProfilesPanel.js';
+import { GeneralPanel } from './GeneralPanel.js';
 import { QueuesPanel } from './QueuesPanel.js';
 
-type SettingsTab = 'auth' | 'queues';
+type SettingsTab = 'auth' | 'queues' | 'general';
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'auth', label: 'Auth Profiles' },
   { id: 'queues', label: 'Queues' },
+  { id: 'general', label: 'General' },
 ];
 
 export function SettingsPage(): JSX.Element {
@@ -46,7 +48,9 @@ export function SettingsPage(): JSX.Element {
         role="tabpanel"
         aria-labelledby={`tab-${tab}`}
       >
-        {tab === 'auth' ? <AuthProfilesPanel /> : <QueuesPanel />}
+        {tab === 'auth' && <AuthProfilesPanel />}
+        {tab === 'queues' && <QueuesPanel />}
+        {tab === 'general' && <GeneralPanel />}
       </div>
     </main>
   );
