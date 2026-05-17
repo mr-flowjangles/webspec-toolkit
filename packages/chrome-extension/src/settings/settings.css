@@ -21,15 +21,55 @@ body {
 
 .settings-head {
   margin-bottom: 20px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .settings-head h1 {
-  margin: 0 0 6px;
+  margin: 0 0 12px;
   font-size: 22px;
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-tab {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  opacity: 0.65;
+  cursor: pointer;
+  margin-bottom: -1px; /* overlap the header border-bottom */
+}
+
+.settings-tab:hover {
+  opacity: 1;
+}
+
+.settings-tab-active {
+  opacity: 1;
+  font-weight: 600;
+  border-bottom-color: currentColor;
+}
+
+.settings-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
+
+.settings-panel {
+  display: block;
+}
+
 .settings-tagline {
-  margin: 0;
+  margin: 0 0 16px;
   font-size: 13px;
   opacity: 0.78;
   line-height: 1.5;
