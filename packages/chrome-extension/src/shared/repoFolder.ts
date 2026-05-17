@@ -133,3 +133,38 @@ export async function checkRepoPermission(handle: FileSystemDirectoryHandle): Pr
 export async function requestRepoPermission(handle: FileSystemDirectoryHandle): Promise<RepoPermission> {
   return handle.requestPermission({ mode: 'readwrite' });
 }
+
+/**
+ * Write `content` to `relativePath` (e.g. `test-cases/create-lead/recording.json`)
+ * under `rootHandle`. Creates intermediate directories as needed. Overwrites
+ * any existing file at the leaf — Test Case saves are canonical-per-slug.
+ *
+ * Throws if `relativePath` is empty, contains an empty segment (leading slash,
+ * trailing slash, `//`), or if the user's permission has been revoked.
+ */
+export async function writeFileToRepoFolder(
+  rootHandle: FileSystemDirectoryHandle,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  const parts = relativePath.split('/');
+  if (parts.length === 0 || parts.some((p) => p === '')) {
+    throw new Error(`Invalid relative path: "${relativePath}"`);
+  }
+  const fileName = parts[parts.length - 1];
+  if (fileName === undefined) throw new Error(`Invalid relative path: "${relativePath}"`);
+
+  let dir: FileSystemDirectoryHandle = rootHandle;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const segment = parts[i];
+    if (segment === undefined) throw new Error(`Invalid relative path: "${relativePath}"`);
+    dir = await dir.getDirectoryHandle(segment, { create: true });
+  }
+  const fileHandle = await dir.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable();
+  try {
+    await writable.write(content);
+  } finally {
+    await writable.close();
+  }
+}
