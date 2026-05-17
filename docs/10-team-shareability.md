@@ -148,6 +148,56 @@ Smallest thing that makes the queue model real and ships team-runnable tests:
 
 That's the v1.4 milestone.
 
+## Build-session decisions (2026-05-17)
+
+Design session with Rob pinned down the open questions from the first draft. Five of six resolved; the remaining one (slug collisions) stays deferred per the original note.
+
+### 1. Where Queue composition lives
+
+**A sibling section in the existing Settings page**, alongside "Auth Profiles". Adds a top-level nav switcher inside `packages/chrome-extension/src/settings/`. Faster to ship than a brand-new full-page surface and matches the pattern Rob already knows. New stand-alone HTML entries (a dedicated `queues/index.html`) and a detached `chrome.windows` popup were considered and rejected — neither earns the extra surface area at MVP.
+
+Open follow-up (parked, not blocking): "Settings" as the page name starts to feel off once it hosts authored content (Queues) and not just config (Auth Profiles). Revisit when a third sibling appears.
+
+### 2. Repo path configuration UX
+
+**One global "Test repo folder" setting** per Chrome profile. Single field in Settings → General. Folder picker via the File System Access API (one-time permission grant). Falls back to `~/Downloads/webspec/` if unset. The per-app-by-URL-pattern model (mirroring auth profiles' shape) was considered and rejected — adds plumbing for a multi-app case that isn't real yet.
+
+### 3. Storage / sync mechanism
+
+**GitHub is the sync layer.** The team repo IS the source of truth. No AWS service, no local SQLite. Considered and rejected:
+
+- **AWS** (DynamoDB + S3 for queues / test cases) — adds login, sync conflict resolution, infra cost. Fights the v1.4 thesis that the team repo IS the global state. Reconsider in v1.5+ only if a real cross-team need (run-result dashboards, central history) emerges.
+- **Local WASM SQLite** (in IndexedDB) — technically doable via `sql.js` or the official SQLite-WASM build with persistence to IndexedDB or OPFS. Real SQL inside the extension. But: a queue authored in your extension's IndexedDB isn't visible to a teammate's extension; the repo has to hold the manifest regardless. Adds an authoring-side DB with no shareability story.
+
+### 4. Queue artifact on disk
+
+**Two files per Queue in `<repo>/tests/`**: `queue-N-{slug}.json` (the authored manifest, source of truth) + `queue-N-{slug}.spec.ts` (the rendered Playwright output, regenerable from the manifest). Both committed. The `.json` is the editable artifact; the `.spec.ts` is what Playwright actually runs and what teammates / CI consume without needing the extension.
+
+Considered and rejected:
+
+- **Spec only with the manifest in `chrome.storage.local`** — kills shareability. Author B clones the repo, opens their extension, sees specs but cannot edit queues.
+- **Single file with the manifest as a `// @webspec-queue { ... }` header comment** — fewer files, but couples authoring to a parsing convention. Not worth the file-count savings; separate JSON is easier to review in PRs.
+
+### 5. Step role naming
+
+**Each step stores a raw `runAs` value** (the literal user code like `TTIDUMWSUP`). No new "Roles" registry. Step schema:
+
+```json
+{ "testCase": "create-lead", "runAs": "TTIDUMWSUP" }
+```
+
+The Queue composer pre-fills `runAs` from the Test Case's recorded `runAs` when a step is added; the user can override per step. At render time the step boundary emits `await context.setExtraHTTPHeaders({ ...resolvedHeaders })` using the step's `runAs` substituted through the matching auth profile.
+
+A named-role registry (`analyst → TTIDUMWSUP`, `supervisor → SUPVCODE01` in a new Settings tab) was considered and rejected: cleaner spec output, but adds a new entity and a Settings UI for ~3 codes per app. Revisit if a single team grows past handful-of-roles ergonomics.
+
+### 6. Existing `~/Downloads/webspec/` library
+
+**Leave it alone.** With a configured Test repo folder, new saves write to the repo. With no repo configured, saves continue to `~/Downloads/webspec/` as today. No migration tool — if a user wants their pre-v1.4 recordings in the repo, they copy them by hand.
+
+### Still deferred
+
+- **Slug collisions for Test Cases.** What happens when two authors both save `create-lead`? Deferred until multi-author is a real scenario. v1.4 ships single-author; the collision is theoretical.
+
 ## What v1.4 deliberately does NOT do
 
 - **Reusable Test Cases across queues.** If Queue A and Queue B both use `create-lead`, the body is duplicated in both spec files. Painful at 8+ queues; ship anyway and let the duplication signal earn the v1.5 redesign.
@@ -165,14 +215,13 @@ In rough priority order (final order earned by Rob's lived experience with v1.4)
 3. **AI variation amplification.** Same `LLMProvider` / `BedrockAdapter` seam used today for negative-scenario generation, extended to positive variations: "Here's `create-lead`. Generate 10 variants exercising every dropdown / radio / required-field combination." One Test Case → ten Queues.
 4. **CI surface.** Once a team repo exists with a Playwright config, GitHub Actions / similar runs queues directly. webspec involvement is zero. Probably a doc + a sample workflow file, not a build artifact.
 
-## Open questions for the v1.4 build session
+## Implementation-detail questions for the build session
 
-1. **Where in the extension does Queue composition live?** New top-level tab next to ⚙ Settings? A "Queues" sub-page? A new window?
-2. **Queue manifest format.** JSON file alongside the spec (`queue-1.json` + `queue-1.spec.ts`)? Or inferable from the spec alone? Probably JSON — needed for re-rendering after changes.
-3. **Repo path configuration UX.** Reuse the auth-profiles Settings model? Chrome file-system access API needs a one-time permission grant per folder.
-4. **Slug collisions for Test Cases.** What if Rob and another author both save `create-lead`? Author prefix? Folder per author? Defer until multi-author actually happens?
-5. **Where does role config live for queues?** Per-step in the queue manifest (most flexible) vs per-Test-Case default (less verbose). Probably per-step, with Test Case's recorded role as the default.
-6. **What about the existing `~/Downloads/webspec/` library?** Keep it as a fallback / staging area? Migration script? Probably: leave it alone, new saves with a repo configured go to the repo, no migration.
+Smaller items that don't change the design shape but need answers when code starts:
+
+- **Iterations input placement** — where on the composer the `iterations` field lives (queue-level header? footer near Save?). Defer to first composer mockup.
+- **Re-render behavior on Test Case edit** — when a recorded Test Case changes, do queues using it auto-regenerate their `.spec.ts`, or stay stale until the user opens the queue and saves? Lean lazy; user is in control.
+- **Bootstrap files in an empty repo** — what gets scaffolded on first save (`package.json`, `playwright.config.ts`, `.gitignore`, `README.md`), and whether the user gets a confirmation prompt before webspec writes them.
 
 ## Position relative to other docs
 
@@ -182,4 +231,4 @@ In rough priority order (final order earned by Rob's lived experience with v1.4)
 
 ## Status
 
-**Active design — implementation starts after this doc settles with Rob.** The v1.4 milestone in `docs/07-build-plan.md` should be updated to point here and renamed from "Suites" to "Queues + Team Shareability."
+**Design locked, implementation queued (2026-05-17).** Big-shape decisions (composer location, repo path, sync mechanism, queue artifact, step role naming, existing library) are pinned in the "Build-session decisions" section above. Implementation-detail questions remain and will be settled during the build. The v1.4 milestone in `docs/07-build-plan.md` should be updated to point here and renamed from "Suites" to "Queues + Team Shareability."
