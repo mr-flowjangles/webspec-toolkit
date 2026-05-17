@@ -1,76 +1,185 @@
-# 10 — Team Shareability (mission-level constraint, design pending)
+# 10 — Team Shareability + Queue Model (v1.4 design)
 
 ## Why this exists
 
-End-of-day on 2026-05-15, after wrapping v1.2 + v1.3 + parking the planning-surface flavors in `docs/09`, Rob surfaced an overall goal that none of the existing docs name:
+End-of-day on 2026-05-15, Rob surfaced an overall goal that none of the existing docs named:
 
 > "If I create the unit test cases, everyone needs to be able to run them."
 
-This is a **mission-level expansion** of the v1 brief, not a feature addition. The original mission (`docs/mission.md`) framed shift-left as a single-developer activity: a dev records on their own browser, runs locally, ships better code. The lived experience using v1.2/v1.3 surfaces something bigger — a recorded test is most valuable when other people can re-run it on their machines, on CI, on a teammate's review, on a QA pass.
+That looked at first like a small shareability fix (move files from Downloads to a git repo). The next design session (2026-05-16) walked deeper and revealed something bigger: **webspec is on its way to being a workflow engine**. Recordings aren't disposable scripts; they're building blocks. Test runs aren't one-shots; they're compositions. The shareability requirement is real, but it's the *visible* part of a deeper shape shift in the product.
 
-Every design assumption we've baked in needs re-examination with this lens.
+This doc supersedes the v1.4 "Suites" milestone in `docs/08-test-library.md`. Suites as a concept don't go away — they're a subset of what queues do.
 
-## What "shareable" implies
+## What changed from the first draft of this doc
 
-A teammate needs to be able to:
+The original `docs/10` proposed switching auth from save-time resolution (literal user code baked into the spec) to run-time substitution (`process.env.UID`), under the theory that each teammate needs to run as themselves. **That analysis was wrong.**
 
-1. **Get the test files** without manual file-copying — clone a repo, pull a folder, run an installer.
-2. **Run them** without the original recorder being involved. Includes Playwright install, env setup, auth config bootstrap.
-3. **Authenticate as themselves** — their own ModHeader user code, not Rob's. The test scaffolding needs to support per-runner identity.
-4. **Trust the result** — pass/fail is unambiguous. No "well it worked on Rob's machine."
-5. **Contribute back** — add their own tests to the same shared collection without stepping on each other.
+Rob clarified: the user codes (e.g. `TTIDUMWSUP`) are **shared role credentials**, not personal identity. Case analysts share a code. Supervisors share a different code. CMS users share another. Anyone running a test *wants* to authenticate as the role the test was recorded against. So:
 
-That's a real set of requirements. The current v1.3 architecture meets none of them cleanly.
+- **Save-time bake stays.** The renderer can keep emitting `await context.setExtraHTTPHeaders({ uid: 'TTIDUMWSUP' })` as a literal.
+- **No `process.env.UID` substitution needed** for v1.4. If a future scenario needs per-runner identity (rare), the `${env.NAME}` syntax already reserved in v1.3's design doc can be activated then.
 
-## Where current design fails
+The PHI question (`99-open-questions.md`) also resolves cleanly: Bellese intends to seed and test against **synthetic data**, so `recording.json` is commit-safe.
 
-| v1.2 / v1.3 assumption | Why it breaks team shareability |
+## The new mental model: Test Cases and Queues
+
+Two new first-class concepts. Both are named exactly the way Rob talks about them.
+
+### Test Case
+
+An **atomic recording** — one continuous browser session capturing one named action. Examples:
+
+- `create-lead`
+- `fill-lead-details`
+- `cancel-lead`
+- `approve-lead`
+- `create-opt`
+- `fill-opt`
+
+A Test Case is what the Chrome extension records today (it's `recording.json` + the rendered `.spec.ts`). The shift is that a Test Case is no longer treated as a finished test — it's a **module**, intended for composition.
+
+For v1.4 MVP, Test Cases are **not yet reusable across queues** — if Queue A and Queue B both need `create-lead`, the Test Case is recorded once but its body gets duplicated into both queue specs. Reuse comes in v1.5+ when Test Cases become importable helpers.
+
+### Queue
+
+An **ordered composition of Test Cases** that runs as one unit. A Queue has:
+
+| Property | Description |
 |---|---|
-| Library lives at `~/Downloads/webspec/<slug>/` | Not version-controlled, not shareable. Every teammate would manually copy folders. |
-| Parent `playwright.config.ts` is write-once in Downloads | Different from teammate's. Not portable. Customizations don't propagate. |
-| `make run-tests` runs from the *repo* against the *Downloads* path | Implies the user has cloned `webspec-toolkit`. Federal contractors / QA folk likely don't. |
-| Auth profiles in `chrome.storage.local` per Chrome profile | Each teammate has to re-create profiles by hand. The HEADER STRUCTURE is shared but the URLs + user codes might differ. |
-| `recording.auth.headers` baked in at save time with literal values | Rob's user code (`TTIDUMWSUP`) gets baked into the spec. Teammate runs it → still authenticated as Rob, not themselves. |
-| Slug collision = silent overwrite | Two teammates saving "create-lead" tests stomp on each other. |
+| `id` / name | What the queue is called. Becomes the spec filename. |
+| `steps` | Ordered list of Test Case refs. |
+| `roleByStep` | Per-step auth role (which role/header-set runs that step). |
+| `inputs` | Optional starting state. E.g. `record_id` for queues that don't start from zero. |
+| `iterations` | Number of times to run the whole queue. Default 1. Set to 100 to seed 100 records. |
 
-The last one is the killer: **the rendered spec literally contains Rob's user code as a string literal**, because v1.3 resolved `${runAs}` at save time. That makes the spec authenticated-as-Rob anywhere it runs. Wrong for a shared world.
+Examples Rob walked through:
 
-## Implications for the post-v1 stack
+```
+Queue 1: full lead flow
+  steps: [create-lead, fill-details, create-opt, fill-opt, approve]
+  roles: [analyst, analyst, analyst, analyst, supervisor]
+  iterations: 1
 
-The v1.3+ docs (`docs/08-test-library.md`, `docs/09-test-planning-surface.md`) need to be revisited. Specific shifts to consider:
+Queue 2: create + cancel
+  steps: [create-lead, cancel-lead]
+  roles: [analyst, analyst]
+  iterations: 1
 
-1. **Tests live in a git repo, not Downloads.** A team-shared `tests-repo/` (or similar) checked into source control. Each Bellese product team has one. The extension's Save writes there instead of (or alongside) Downloads. Implies: the extension needs to know the repo location, or the user moves files in manually, or we ship a Sync action.
-2. **Resolve `${runAs}` at RUN time, not save time.** The rendered spec should reference an env var: `await context.setExtraHTTPHeaders({ uid: process.env.UID ?? '' });`. The recording's `runAs` becomes a *default* the test runner can override. Each teammate sets their own `UID` env when running. This was actually in the v1.3 design doc as `${env.NAME}` syntax — we deferred it for v1.3.0. It now needs to come forward.
-3. **Auth profiles need a shareable form too.** Profile *structure* (headers template, URL pattern) is shared; profile *values* (specific user codes, secrets) are per-teammate. Probably: profile bundle becomes a JSON file checkin-able to the team repo; users import it via the Settings tab and supply their own substitutions.
-4. **Slug uniqueness.** Naming becomes a coordination problem. Either prefixed slugs (per-author, per-feature-branch) or git tracks who-owns-what.
-5. **A CI surface.** Once tests are in a repo, GitHub Actions / similar wants to run them. `make run-tests-ci` already exists from v1.2 but assumes the Downloads path; needs to take an explicit dir.
-6. **Onboarding.** "How does someone new run these tests?" needs a documented answer (probably a README in the team repo, generated by webspec or hand-authored, with the env-var list).
+Queue 3: supervisor opens existing record
+  steps: [open-lead, approve-lead]
+  roles: [supervisor, supervisor]
+  inputs: { record_id: <passed in> }
+  iterations: 1
 
-## Existing seams that already help
+Queue 4: bulk seed
+  steps: [create-lead, fill-details, create-opt, fill-opt]
+  roles: [analyst, analyst, analyst, analyst]
+  iterations: 100
+```
 
-- `WorkflowRecording.runAs` is already separate from the resolved `auth.headers` — easy to redesign to keep `runAs` as a name/default and resolve at run time.
-- The library layout (`<slug>/recording.spec.ts` + `recording.json` + `playwright.config.ts`) is already plain files that *could* live in any directory. The hardcode is `~/Downloads/webspec/` — making it configurable is a small change.
-- Playwright already supports env-var-driven config — no new mechanism needed.
+### How a Queue renders to Playwright
 
-## Open questions
+One queue → one `.spec.ts` file. `test.describe.serial` keeps a single browser context across steps (so state flows forward); a `for` loop wraps the describe for iterations > 1; role switches emit a fresh `setExtraHTTPHeaders` call at the step boundary.
 
-1. **Single team-shared repo or per-app repos?** Bellese has many apps. One repo per app (UCM, X, Y) feels right but means more setup. A single monorepo of all webspec tests across all Bellese apps is simpler but couples deploys.
-2. **Where does the team-repo path get configured?** Per Chrome profile (extension setting), per-host (env var), or by convention (look for `webspec-tests/` walking up from cwd)?
-3. **How do auth profiles travel?** Import/export JSON via the Settings tab? Auto-load from the team repo if present? Each teammate hand-creates?
-4. **What about the recording itself — should it ever leave Rob's machine?** Recordings can contain PHI/PII per `99-open-questions.md`. Pushing them to a shared repo is a compliance question, not just a workflow one. Probably: only commit the *rendered spec*, never `recording.json`, unless the team explicitly opts in.
-5. **CI authentication.** GitHub Actions can't run a Chrome extension. CI runs the rendered specs directly via Playwright. So the spec needs to be standalone-runnable with env-driven auth. Confirms #2 above.
+```ts
+// queue-1-full-lead.spec.ts
+test.describe.serial('Queue 1 — full lead flow', () => {
+  let leadId: string;
 
-## Position relative to v1.4
+  test('1. Create lead (analyst)', async ({ page, context }) => {
+    await context.setExtraHTTPHeaders({ uid: 'CASE_ANALYST_CODE' });
+    // ... inlined create-lead body
+    leadId = /* extracted from URL */;
+  });
 
-`v1.4 — Suites` is the next built milestone in `docs/08`. **Reading this doc, v1.4 may not be the right next milestone.** Team-shareability is more foundational; suites assume the library shape is settled. Open question for the next planning session: do team-shareability work before suites?
+  test('2. Fill details (analyst)', async ({ page }) => {
+    // ... inlined fill-details body, uses leadId
+  });
 
-Probably yes. A suite that doesn't run on a teammate's machine is just bigger broken plumbing.
+  // steps 3, 4 same shape...
+
+  test('5. Approve (supervisor)', async ({ page, context }) => {
+    await context.setExtraHTTPHeaders({ uid: 'SUPERVISOR_CODE' });
+    // ... inlined approve body
+  });
+});
+```
+
+For `iterations: 100`, the renderer emits a `for` loop wrapping the `describe.serial` (each iteration = fresh chain, fresh record).
+
+## What ships to git
+
+A team-shared per-app test repo. One repo per Bellese app (e.g. `ucm-tests`, not a monorepo across apps).
+
+```
+ucm-tests/
+├── package.json                       # @playwright/test + minimal deps
+├── pnpm-lock.yaml                     # reproducible install
+├── playwright.config.ts               # standard Playwright config, testDir = 'tests'
+├── .gitignore                         # node_modules, test-results, playwright-report
+├── README.md                          # how to install + run (auto-generated)
+├── test-cases/                        # the atomic recordings (source of truth)
+│   ├── create-lead/
+│   │   ├── recording.json
+│   │   └── recording.spec.ts          # standalone-runnable version (optional)
+│   ├── fill-lead-details/
+│   ├── cancel-lead/
+│   └── ...
+└── tests/                             # the composed queues (what Playwright runs)
+    ├── queue-1-full-lead.spec.ts
+    ├── queue-2-create-cancel.spec.ts
+    ├── queue-3-supervisor-approve.spec.ts
+    └── queue-4-seed-100.spec.ts
+```
+
+A teammate clones, runs `pnpm install`, runs `pnpm exec playwright test` (or opens Playwright UI). Done. **They do not need the Chrome extension.** The extension is purely the authoring surface.
+
+## v1.4 MVP scope
+
+Smallest thing that makes the queue model real and ships team-runnable tests:
+
+1. **Compose Queue action in the extension.** Some UI surface (TBD: new tab, or extension of Settings) where you:
+   - See the list of recorded Test Cases.
+   - Create a Queue: name it, drag Test Cases into order, set role per step, set iterations, optionally declare inputs.
+   - Save the Queue.
+2. **Renderer takes a Queue manifest and emits one `.spec.ts`** with the structure shown above (inlined Test Case bodies, no reuse yet).
+3. **Configurable repo path.** A "Test repo folder" setting (per Chrome profile) — Save writes to `<repo>/test-cases/` and `<repo>/tests/` instead of Downloads. Falls back to Downloads if unset.
+4. **Bootstrap files.** When writing to an empty repo, webspec scaffolds `package.json`, `playwright.config.ts`, `.gitignore`, `README.md` once.
+
+That's the v1.4 milestone.
+
+## What v1.4 deliberately does NOT do
+
+- **Reusable Test Cases across queues.** If Queue A and Queue B both use `create-lead`, the body is duplicated in both spec files. Painful at 8+ queues; ship anyway and let the duplication signal earn the v1.5 redesign.
+- **Cross-recording inputs/outputs.** No wiring `leadId` produced by one Test Case into a different Queue's first step. For v1.4, inputs are flat values declared at the Queue level (e.g. a `record_id` constant the queue uses).
+- **AI-generated variations.** Banked for v1.5+.
+- **Test Case editing.** Re-record to update; no in-place editor.
+- **Queue-level assertions** beyond what each Test Case already asserts.
+
+## v1.5+ futures
+
+In rough priority order (final order earned by Rob's lived experience with v1.4):
+
+1. **Reusable Test Cases.** Each Test Case becomes an importable helper function: `import { createLead } from '../test-cases/create-lead'`. Queue specs become recipe files, not big inlined chunks. Edit `create-lead` once → every Queue using it gets the fix.
+2. **Input/output wiring.** Test Cases declare their outputs (`createLead → { leadId }`) and inputs. The Queue composer wires them. Enables Queue 3-style "start at step 5 with a record passed from step 4."
+3. **AI variation amplification.** Same `LLMProvider` / `BedrockAdapter` seam used today for negative-scenario generation, extended to positive variations: "Here's `create-lead`. Generate 10 variants exercising every dropdown / radio / required-field combination." One Test Case → ten Queues.
+4. **CI surface.** Once a team repo exists with a Playwright config, GitHub Actions / similar runs queues directly. webspec involvement is zero. Probably a doc + a sample workflow file, not a build artifact.
+
+## Open questions for the v1.4 build session
+
+1. **Where in the extension does Queue composition live?** New top-level tab next to ⚙ Settings? A "Queues" sub-page? A new window?
+2. **Queue manifest format.** JSON file alongside the spec (`queue-1.json` + `queue-1.spec.ts`)? Or inferable from the spec alone? Probably JSON — needed for re-rendering after changes.
+3. **Repo path configuration UX.** Reuse the auth-profiles Settings model? Chrome file-system access API needs a one-time permission grant per folder.
+4. **Slug collisions for Test Cases.** What if Rob and another author both save `create-lead`? Author prefix? Folder per author? Defer until multi-author actually happens?
+5. **Where does role config live for queues?** Per-step in the queue manifest (most flexible) vs per-Test-Case default (less verbose). Probably per-step, with Test Case's recorded role as the default.
+6. **What about the existing `~/Downloads/webspec/` library?** Keep it as a fallback / staging area? Migration script? Probably: leave it alone, new saves with a repo configured go to the repo, no migration.
+
+## Position relative to other docs
+
+- **`docs/08-test-library.md`** — the v1.4 "Suites" section is superseded by this doc. v1.2 (on-disk library) and v1.3 (auth profiles) still authoritative.
+- **`docs/09-test-planning-surface.md`** — Flavor B (notes on existing recordings) overlaps with the Queue composer UI; some of that polish may fall out naturally. Flavor A (plan-before-record) and Flavor C (compose from prose) remain parked; revisit after v1.4.
+- **`docs/99-open-questions.md`** — PHI question resolves (synthetic data); env-var auth substitution stays deferred.
 
 ## Status
 
-**Parked, design pending.** The next planning session should pick this up before any more v1.x work. Specifically:
-
-- Resolve the open questions above with Rob.
-- Decide whether `recording.auth.headers` switches from save-time resolution to run-time `process.env.X` substitution. (Likely yes — backward-incompatible change but small enough to absorb.)
-- Decide on the team-repo shape and where the extension writes.
-- Then update `docs/08` and `docs/09` and re-prioritize the build plan.
+**Active design — implementation starts after this doc settles with Rob.** The v1.4 milestone in `docs/07-build-plan.md` should be updated to point here and renamed from "Suites" to "Queues + Team Shareability."
