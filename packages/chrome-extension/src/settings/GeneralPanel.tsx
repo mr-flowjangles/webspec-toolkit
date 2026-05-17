@@ -101,9 +101,12 @@ export function GeneralPanel(): JSX.Element {
       <div className="general-field">
         <h2 className="general-field-label">Test repo folder</h2>
         <p className="general-field-hint">
-          Where webspec writes Test Cases and Queue specs. Falls back to <code>~/Downloads/webspec/</code> if unset.
-          Pointing this at your team's cloned <code>*-tests</code> repo lets teammates pull and run with no
-          extension required.
+          Where webspec writes your Test Cases and Queue specs. Point this at a project folder you
+          own — typically a cloned (or about-to-be-cloned) team-tests repo like <code>~/code/ucm-tests</code>.
+        </p>
+        <p className="general-field-hint general-field-warn">
+          <strong>Chrome blocks Desktop, Downloads, and Documents</strong> from being picked here.
+          If you don't have a folder yet, run <code>mkdir ~/code/ucm-tests</code> in a terminal, then click below.
         </p>
 
         {loading ? (

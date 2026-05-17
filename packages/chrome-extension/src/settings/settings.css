@@ -371,6 +371,18 @@ body {
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
+.general-field-warn {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #c87f0a;
+  background: color-mix(in srgb, #c87f0a 8%, transparent);
+  opacity: 1;
+}
+
+.general-field-warn strong {
+  color: #c87f0a;
+}
+
 .general-folder-row {
   display: flex;
   gap: 12px;

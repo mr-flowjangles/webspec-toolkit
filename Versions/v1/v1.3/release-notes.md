@@ -19,6 +19,8 @@ How it works:
 
 No save-time integration in this patch — the setting is purely surfaced and persisted. Hooking Test Case + Queue saves through the configured handle lands in subsequent patches.
 
+**First-run copy guidance:** Chrome blocks `Desktop`, `Downloads`, and `Documents` from `showDirectoryPicker` for security. The empty state explicitly calls this out, points the user at a concrete location (`~/code/ucm-tests`), and gives them the `mkdir` command to run if they don't have a folder yet. Surfaced after first-use feedback showed the default macOS user folders are all blocklisted and the silent rejection was confusing.
+
 The File System Access API types aren't yet in TypeScript's `lib.dom.d.ts`, so a minimal `src/global.d.ts` adds ambient declarations for `Window.showDirectoryPicker`, `FileSystemHandle.queryPermission`, and `FileSystemHandle.requestPermission` rather than pulling in `@types/wicg-file-system-access`.
 
 ### New
