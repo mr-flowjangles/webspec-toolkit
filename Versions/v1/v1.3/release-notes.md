@@ -1,5 +1,48 @@
 # v1.3
 
+## v1.3.2 — Settings Queues Tab Scaffold (2026-05-17)
+
+### Problem
+
+`docs/10` (v1.3.1) locked in that the Queue composer lives as a sibling section in the existing Settings page, but the Settings page was still a single-purpose Auth Profiles surface. Before any real Queue UI can land, the page needs a tab shell so subsequent v1.4 patches have a place to mount their components.
+
+### Solution
+
+Refactored `SettingsPage` into a tab shell that hosts two sibling panels:
+
+- **`AuthProfilesPanel`** — extracted verbatim from the old `SettingsPage` (same state, same logic, same persistence). Tagline moved inside the panel since it's auth-specific.
+- **`QueuesPanel`** — placeholder panel introducing the Queue concept with a "Coming in v1.4" callout pointing at `docs/10-team-shareability.md`.
+
+The shell owns only the active-tab state. Tabs use ARIA `tablist` / `tab` / `tabpanel` roles with keyboard focus styling.
+
+No behavior change for Auth Profiles — the same component renders, just routed through the shell.
+
+### New
+
+- `packages/chrome-extension/src/settings/AuthProfilesPanel.tsx` — auth profiles UI, extracted from the old `SettingsPage`.
+- `packages/chrome-extension/src/settings/QueuesPanel.tsx` — placeholder for the v1.4 Queue composer.
+- `.settings-tabs` / `.settings-tab` / `.settings-tab-active` / `.settings-panel` styles in `settings.css`.
+
+### Changed
+
+- `packages/chrome-extension/src/settings/SettingsPage.tsx` — now a tab shell. Renders the `<h1>` + tab nav, then mounts the active panel inside an ARIA `tabpanel`.
+- `settings-head` gains a bottom border the active tab visually overlaps.
+- H1 changed from "webspec — Auth Profiles" to "webspec" (the tab handles the section name).
+
+### Fixed
+
+- N/A (scaffold; no behavior change.)
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/settings/SettingsPage.tsx` | Rewritten as a tab shell. |
+| `packages/chrome-extension/src/settings/AuthProfilesPanel.tsx` | **New** — auth profiles UI, extracted. |
+| `packages/chrome-extension/src/settings/QueuesPanel.tsx` | **New** — placeholder. |
+| `packages/chrome-extension/src/settings/settings.css` | Added tab styles; updated `.settings-head` and `.settings-tagline`. |
+| `Versions/v1/v1.3/release-notes.md` | This entry. |
+
 ## v1.3.1 — Queues Design Decisions (2026-05-17)
 
 ### Problem
