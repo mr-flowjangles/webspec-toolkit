@@ -29,6 +29,7 @@ The File System Access API types aren't yet in TypeScript's `lib.dom.d.ts`, so a
 - `packages/chrome-extension/src/settings/GeneralPanel.tsx` — General Settings tab with the Test repo folder field.
 - `packages/chrome-extension/src/global.d.ts` — ambient File System Access API types.
 - `.general-*` styles in `settings.css` (field card, folder name pill, permission chip, action buttons).
+- `packages/chrome-extension/tests/repoFolder.test.ts` — 9 unit tests covering the `loadRepoFolderInfo` read path: empty storage, well-formed payload, malformed payloads (non-object, null, missing/wrong-typed `name`, missing/wrong-typed `setAt`), and a `chrome.storage.local.get` rejection. The handle / IndexedDB / permission paths are deliberately uncovered — they're thin pass-throughs to Chrome APIs that only surface real bugs against a real browser.
 
 ### Changed
 
