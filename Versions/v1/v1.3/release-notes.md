@@ -1,5 +1,52 @@
 # v1.3
 
+## v1.3.3 — Test Repo Folder Setting (2026-05-17)
+
+### Problem
+
+Per the v1.3.1 design decision, every save-to-repo flow (Test Cases, Queue manifests, Queue specs) needs a configured target folder. The Settings page got its tab scaffold in v1.3.2, but no surface yet exists for picking that folder or persisting it across sessions. Without this setting, the v1.4 build can't move past authoring.
+
+### Solution
+
+A new **General** tab in the Settings page hosts the global "Test repo folder" field — webspec's first File System Access API integration.
+
+How it works:
+
+1. User clicks **Choose folder…** → `window.showDirectoryPicker({ mode: 'readwrite' })` opens the native folder dialog.
+2. On selection, the `FileSystemDirectoryHandle` is persisted to IndexedDB (object store `repoFolder`, key `current`) because handles cannot be serialized to `chrome.storage.local`. A small `RepoFolderInfo` shape (`{ name, setAt }`) is mirrored to `chrome.storage.local` under `webspec.repoFolder` for cheap reads from anywhere in the extension that only needs the display name.
+3. The panel queries `handle.queryPermission({ mode: 'readwrite' })` on load and surfaces the status as a colored chip (✓ granted / ! permission needed / × denied). When Chrome demotes a previously-granted handle to `prompt` after a restart, a **Re-grant access** button calls `requestPermission` to restore it.
+4. **Change…** re-opens the picker; the × button clears both IndexedDB and `chrome.storage.local` (with a confirm prompt explaining the fallback to `~/Downloads/webspec/`).
+
+No save-time integration in this patch — the setting is purely surfaced and persisted. Hooking Test Case + Queue saves through the configured handle lands in subsequent patches.
+
+The File System Access API types aren't yet in TypeScript's `lib.dom.d.ts`, so a minimal `src/global.d.ts` adds ambient declarations for `Window.showDirectoryPicker`, `FileSystemHandle.queryPermission`, and `FileSystemHandle.requestPermission` rather than pulling in `@types/wicg-file-system-access`.
+
+### New
+
+- `packages/chrome-extension/src/shared/repoFolder.ts` — IndexedDB + `chrome.storage.local` accessors for the repo-folder handle and metadata.
+- `packages/chrome-extension/src/settings/GeneralPanel.tsx` — General Settings tab with the Test repo folder field.
+- `packages/chrome-extension/src/global.d.ts` — ambient File System Access API types.
+- `.general-*` styles in `settings.css` (field card, folder name pill, permission chip, action buttons).
+
+### Changed
+
+- `packages/chrome-extension/src/settings/SettingsPage.tsx` — `SettingsTab` extended to `'auth' | 'queues' | 'general'`; **General** added as the third tab.
+
+### Fixed
+
+- N/A (additive patch.)
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/shared/repoFolder.ts` | **New** — storage module. |
+| `packages/chrome-extension/src/settings/GeneralPanel.tsx` | **New** — panel UI. |
+| `packages/chrome-extension/src/global.d.ts` | **New** — FS Access ambient types. |
+| `packages/chrome-extension/src/settings/SettingsPage.tsx` | Added third tab + panel route. |
+| `packages/chrome-extension/src/settings/settings.css` | Added `.general-*` styles. |
+| `Versions/v1/v1.3/release-notes.md` | This entry. |
+
 ## v1.3.2 — Settings Queues Tab Scaffold (2026-05-17)
 
 ### Problem
