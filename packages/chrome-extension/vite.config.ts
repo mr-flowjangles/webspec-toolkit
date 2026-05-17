@@ -14,11 +14,13 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       // The popup, service worker, and content script are auto-discovered
-      // by @crxjs/vite-plugin from the manifest. The report tab HTML is
-      // listed in `web_accessible_resources` only — that doesn't mark it
-      // as a build entry, so we add it here so its main.tsx gets bundled.
+      // by @crxjs/vite-plugin from the manifest. The report and settings
+      // tab HTMLs are listed in `web_accessible_resources` only — that
+      // doesn't mark them as build entries, so we add them here so their
+      // main.tsx gets bundled.
       input: {
         report: resolve(here, 'src/report/index.html'),
+        settings: resolve(here, 'src/settings/index.html'),
       },
     },
   },

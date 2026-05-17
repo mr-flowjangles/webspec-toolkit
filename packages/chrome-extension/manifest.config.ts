@@ -32,7 +32,7 @@ export default defineManifest({
   permissions: ['activeTab', 'storage', 'downloads', 'webNavigation'],
   web_accessible_resources: [
     {
-      resources: ['src/report/index.html'],
+      resources: ['src/report/index.html', 'src/settings/index.html'],
       matches: ['<all_urls>'],
     },
   ],

@@ -42,13 +42,23 @@ export function renderPlaywrightSpec(
   opts: RenderE2EOptions = {},
 ): string {
   const testName = opts.testName ?? recording.name;
+  const auth = recording.auth ?? null;
+  const hasAuth = auth !== null && Object.keys(auth.headers).length > 0;
+  const fixtures = hasAuth ? '{ page, context }' : '{ page }';
   const lines: string[] = [];
 
   lines.push("import { expect, test } from '@playwright/test';");
   lines.push('');
-  lines.push(`test(${quote(testName)}, async ({ page }) => {`);
+  lines.push(`test(${quote(testName)}, async (${fixtures}) => {`);
   for (const descLine of recording.description.split('\n')) {
     lines.push(`  // ${descLine}`);
+  }
+  if (hasAuth && auth !== null) {
+    lines.push(`  await context.setExtraHTTPHeaders({`);
+    for (const [name, value] of Object.entries(auth.headers)) {
+      lines.push(`    ${quote(name)}: ${quote(value)},`);
+    }
+    lines.push(`  });`);
   }
   lines.push(`  await page.goto(${quote(recording.startUrl)});`);
 

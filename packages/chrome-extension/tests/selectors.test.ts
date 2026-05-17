@@ -176,6 +176,120 @@ describe('buildHardenedSelector — text normalization', () => {
   });
 });
 
+describe('buildHardenedSelector — interactive-ancestor promotion (v1.3.0)', () => {
+  // Helper: render markup and return a deep descendant by selector.
+  function deep(markup: string, querySelector: string): Element {
+    document.body.innerHTML = markup;
+    const found = document.body.querySelector(querySelector);
+    if (found === null) throw new Error(`deep(): no element matches ${querySelector}`);
+    return found;
+  }
+
+  it('promotes a click on a decorative <mat-icon> up to its enclosing menu item', () => {
+    // Recreates the UCM "Lead (CSE)" case: click lands on a deep icon /
+    // decorative element inside a [role=menuitem]. Pre-v1.3, hardening
+    // emitted a positional css selector against the icon; now it promotes
+    // up and uses the menu item's role + accessible name.
+    const target = deep(
+      `<div role="menuitem" aria-label="Lead (CSE)">
+         <span><mat-icon>data_object</mat-icon></span>
+         <span>Lead (CSE)</span>
+       </div>`,
+      'mat-icon',
+    );
+    const sel = buildHardenedSelector(target);
+    expect(sel.strategy).toBe('role');
+    expect(sel.preferred).toContain('role=menuitem');
+    expect(sel.preferred).toContain('Lead (CSE)');
+  });
+
+  it('promotes a click on a span inside a <button> up to the button', () => {
+    const target = deep(
+      '<button aria-label="Save changes"><span class="ripple"></span><span>Save</span></button>',
+      'span.ripple',
+    );
+    const sel = buildHardenedSelector(target);
+    expect(sel.strategy).toBe('role');
+    expect(sel.preferred).toContain('role=button');
+    expect(sel.preferred).toContain('Save changes');
+  });
+
+  it('does not over-promote when the click target is already interactive', () => {
+    // The <input> is interactive in its own right — we MUST NOT walk up to
+    // the form, or we'd start emitting form-scoped selectors that don't
+    // describe the user's actual click target.
+    const target = deep(
+      '<form><input type="text" aria-label="Email" /></form>',
+      'input',
+    );
+    const sel = buildHardenedSelector(target);
+    expect(sel.strategy).toBe('role');
+    expect(sel.preferred).toBe('role=textbox[name="Email"]');
+  });
+
+  it('promotes through multiple decorative wrappers (up to depth 5)', () => {
+    const target = deep(
+      `<button aria-label="Open">
+         <div><div><div><div><span class="x"></span></div></div></div></div>
+       </button>`,
+      'span.x',
+    );
+    const sel = buildHardenedSelector(target);
+    expect(sel.strategy).toBe('role');
+    expect(sel.preferred).toBe('role=button[name="Open"]');
+  });
+
+  it('stops walking past depth 5 — falls back to the original target when the interactive ancestor is too far', () => {
+    // Six wrappers between span and button → exceeds the cap; the original
+    // span has no useful selector, so we land on the css fallback.
+    const target = deep(
+      `<button aria-label="Buried">
+         <div><div><div><div><div><div><span class="x"></span></div></div></div></div></div></div>
+       </button>`,
+      'span.x',
+    );
+    const sel = buildHardenedSelector(target);
+    expect(sel.strategy).toBe('css');
+    expect(sel.preferred).toBe('span.x');
+  });
+
+  it('falls back to the original element when no interactive ancestor exists', () => {
+    const target = deep(
+      '<div class="card"><span class="label">hi</span></div>',
+      'span.label',
+    );
+    const sel = buildHardenedSelector(target);
+    // Text strategy on the span itself — pre-existing behavior, undisturbed.
+    expect(sel.strategy).toBe('text');
+    expect(sel.preferred).toBe('text="hi"');
+  });
+
+  it('skips <a> without href (not interactive per ARIA)', () => {
+    const target = deep(
+      '<a class="anchor-no-href"><button aria-label="Real button"><span class="x"></span></button></a>',
+      'span.x',
+    );
+    const sel = buildHardenedSelector(target);
+    // Walks past the <a> (no href) and lands on <button>.
+    expect(sel.strategy).toBe('role');
+    expect(sel.preferred).toBe('role=button[name="Real button"]');
+  });
+
+  it('promotes to a [role=tab] ancestor', () => {
+    const target = deep(
+      `<div role="tablist">
+         <div role="tab" aria-label="Settings">
+           <span class="tab-icon"></span>
+         </div>
+       </div>`,
+      'span.tab-icon',
+    );
+    const sel = buildHardenedSelector(target);
+    expect(sel.strategy).toBe('role');
+    expect(sel.preferred).toBe('role=tab[name="Settings"]');
+  });
+});
+
 describe('buildBasicSelector — used as the css fallback', () => {
   it('emits tag#id.class form when id and class are stable', () => {
     const el = html('<input id="search" class="search-box primary" />');

@@ -37,3 +37,17 @@ export {
 // Test library — slug derivation for the v1.2 on-disk layout
 // (~/Downloads/webspec/<slug>/). See docs/08-test-library.md.
 export { deriveSlug } from './library/slug.js';
+
+// v1.3 auth profiles — match the active tab's URL against configured profiles
+// and resolve `${runAs}` placeholders into ready-to-emit HTTP headers.
+export {
+  AuthHeaderSchema,
+  AuthProfileSchema,
+  AuthProfileListSchema,
+  matchProfile,
+  resolveProfileHeaders,
+  type AuthHeader,
+  type AuthProfile,
+  type AuthProfileList,
+} from './library/auth-profile.js';
+export { matchesUrlGlob } from './library/url-glob.js';

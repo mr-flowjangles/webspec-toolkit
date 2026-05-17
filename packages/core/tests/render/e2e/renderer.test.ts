@@ -31,6 +31,8 @@ function recording(events: RecordedEvent[], startUrl = 'https://example.com'): W
   return {
     name: 'recorded workflow',
     description: 'Test recording from renderer unit tests.',
+    runAs: null,
+    auth: null,
     startedAt: '2026-05-12T00:00:00.000Z',
     endedAt: '2026-05-12T00:00:10.000Z',
     startUrl,
@@ -74,6 +76,60 @@ describe('renderPlaywrightSpec — header and scaffold', () => {
   it('honors a custom test name override', () => {
     const named = renderPlaywrightSpec(recording([]), { testName: 'login then logout' });
     expect(named).toContain(`test('login then logout', async ({ page }) => {`);
+  });
+});
+
+describe('renderPlaywrightSpec — auth injection', () => {
+  it('omits the auth block when recording.auth is null', () => {
+    const out = renderPlaywrightSpec(recording([]));
+    expect(out).not.toContain('setExtraHTTPHeaders');
+    expect(out).toContain(`async ({ page }) => {`);
+  });
+
+  it('emits setExtraHTTPHeaders + adds context fixture when auth is present', () => {
+    const out = renderPlaywrightSpec({
+      ...recording([]),
+      auth: { profileName: 'UCM Dev', headers: { uid: 'TTIDUMWSUP' } },
+    });
+    expect(out).toContain(`async ({ page, context }) => {`);
+    expect(out).toContain(`await context.setExtraHTTPHeaders({`);
+    expect(out).toContain(`'uid': 'TTIDUMWSUP',`);
+    expect(out).toContain(`});`);
+  });
+
+  it('emits the auth block between the description comment and page.goto', () => {
+    const out = renderPlaywrightSpec({
+      ...recording([]),
+      auth: { profileName: 'UCM Dev', headers: { uid: 'TTIDUMWSUP' } },
+    });
+    const descIdx = out.indexOf('// Test recording from renderer unit tests.');
+    const authIdx = out.indexOf('setExtraHTTPHeaders');
+    const gotoIdx = out.indexOf("page.goto");
+    expect(descIdx).toBeGreaterThan(-1);
+    expect(authIdx).toBeGreaterThan(descIdx);
+    expect(gotoIdx).toBeGreaterThan(authIdx);
+  });
+
+  it('emits multiple headers in stable order', () => {
+    const out = renderPlaywrightSpec({
+      ...recording([]),
+      auth: {
+        profileName: 'Acme',
+        headers: { uid: 'JOE', role: 'admin', env: 'dev' },
+      },
+    });
+    expect(out).toContain(`'uid': 'JOE',`);
+    expect(out).toContain(`'role': 'admin',`);
+    expect(out).toContain(`'env': 'dev',`);
+  });
+
+  it('treats an empty headers map as no-auth', () => {
+    const out = renderPlaywrightSpec({
+      ...recording([]),
+      auth: { profileName: 'Empty', headers: {} },
+    });
+    expect(out).not.toContain('setExtraHTTPHeaders');
+    expect(out).toContain(`async ({ page }) => {`);
   });
 });
 

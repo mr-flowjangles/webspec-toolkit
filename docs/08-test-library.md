@@ -171,82 +171,117 @@ Optional so existing recordings (the v1.1.x fixtures and any captures users made
 
 ---
 
-## v1.3 — Auth Injection
+## v1.3 — Domain-Aware Auth Profiles
 
 ### The model
 
-Most Bellese / federal apps in scope use a **header-injection** dev backdoor (ModHeader-style). The browser sends `X-User-Id: joe` (or whatever the app expects) on every request, the app reads that header, and the user is "authenticated" without ever hitting the login UI.
+Most Bellese / federal apps in scope use a **header-injection** dev backdoor (ModHeader-style). The browser sends `uid: TTIDUMWSUP` (or whatever the app expects) on every request, the app reads that header, and the user is "authenticated" without ever hitting the login UI.
 
-In Playwright the equivalent is `context.setExtraHTTPHeaders({ ... })`, called once at the start of the test. The rendered spec gets that call driven by `recording.runAs`.
+In Playwright the equivalent is `context.setExtraHTTPHeaders({ ... })`, called once at the start of the test. The rendered spec gets that call when the recording's URL matches a configured auth profile.
 
-### Project config — `webspec.config.ts`
+**Configuration lives in the extension, not in a repo.** v1.2 first-use showed the workflow is browser-centric — there isn't always a "Bellese repo" the user is driving from. Requiring `webspec.config.ts` somewhere on disk meant going to a terminal to add auth, which defeats the point. The v1.3 shape: profiles live in `chrome.storage.local`, edited via a new Settings page in the extension, matched against the active tab's URL at recording-start time.
 
-Lives at the repo root (next to `package.json`). Optional — if absent, the renderer just emits the recorded flow with no auth setup, same as v1.2.
+### Profile shape
 
 ```ts
-// webspec.config.ts
-import { defineConfig } from '@webspec/core/config';
-
-export default defineConfig({
-  auth: {
-    mode: 'headers',
-    headers: {
-      'X-User-Id': '${username}',
-      'X-User-Role': 'tester',
-    },
-  },
-});
+interface AuthProfile {
+  id: string;              // generated uuid
+  name: string;            // display label, e.g. "UCM Dev"
+  urlPattern: string;      // glob, e.g. "http://app.ucm-dev.cmscloud.local/*"
+  headers: Array<{ name: string; value: string }>;
+}
 ```
 
-Supported modes (extensible):
+Stored as `AuthProfile[]` under a single `chrome.storage.local` key. Header values support `${runAs}` substitution — the recording's `runAs` field is interpolated at save time.
 
-| `mode` | What the renderer emits | When to use |
-|---|---|---|
-| `headers` | `context.setExtraHTTPHeaders({ ... })` with `${username}` substituted | ModHeader-style dev backdoors. Default. |
-| `cookie` | `context.addCookies([{ name, value, domain, ... }])` | Apps where session is identified by a cookie. |
-| `url` | An initial `page.goto(template)` before the recorded flow | Apps with `/dev/login?user=X` impersonation endpoints. |
-| `storageState` | `test.use({ storageState: '<path>' })` | Standard Playwright pattern; pre-baked auth state JSON. |
+Example for UCM:
 
-Multiple modes are NOT mixable in v1.3 — one auth mechanism per project. Composite auth comes later if real apps demand it.
+```
+Name:    UCM Dev
+URL:     http://app.ucm-dev.cmscloud.local/*
+Headers:
+  uid    ${runAs}
+```
+
+### URL pattern matching
+
+Glob style — `*` matches zero or more characters of any kind. Simple, predictable, no regex anxiety. Implementation: convert the pattern to a regex internally (`*` → `.*`, escape everything else), test against the active tab's URL.
+
+If multiple profiles match the same URL, pick the longest pattern (most specific wins). If none match, the recording is captured without auth — the spec runs anonymously, which is fine for public sites and a clear failure mode for authenticated ones.
+
+### Lifecycle
+
+1. **Setup (once).** User opens Settings (new tab from the popup), adds a profile.
+2. **Record-start.** Popup queries the active tab's URL, looks up profiles in `chrome.storage.local`, finds the best match. The matched profile name is displayed in the naming form ("Auth: UCM Dev") — or "No auth profile matches" if nothing matched.
+3. **Save.** The matched profile's headers are resolved (substituting `${runAs}` with the recording's `runAs` field) and baked into the `WorkflowRecording.auth` field.
+4. **Render.** When `recording.auth` is present, the renderer emits `await context.setExtraHTTPHeaders({ ... })` between the `test(` opener and `page.goto`.
+
+### Contract change — `WorkflowRecording.auth`
+
+```ts
+auth: z.object({
+  profileName: z.string(),                 // for human reference in the JSON
+  headers: z.record(z.string(), z.string()),  // resolved, ready to emit
+}).nullable().default(null),
+```
+
+Resolved at save time, baked into the recording. The spec is self-contained — running it doesn't require the original profile to still exist. If the user changes the profile later, they re-record or re-render via the CLI.
 
 ### What the renderer emits
 
-For `mode: 'headers'`, given `recording.runAs === 'joe'`:
+For a recording with `auth: { profileName: 'UCM Dev', headers: { uid: 'TTIDUMWSUP' } }`:
 
 ```ts
 import { expect, test } from '@playwright/test';
 
-test('Create Lead — UCM NexGen', async ({ page, context }) => {
-  // Create a new Medicare lead from the My Work tasks page...
+test('Create Lead', async ({ page, context }) => {
+  // Creating a Lead
   await context.setExtraHTTPHeaders({
-    'X-User-Id': 'joe',
-    'X-User-Role': 'tester',
+    'uid': 'TTIDUMWSUP',
   });
   await page.goto('http://app.ucm-dev.cmscloud.local/...');
   // ... recorded flow
 });
 ```
 
-If `recording.runAs === null` (recording didn't specify a user, OR project has no auth config), the auth block is omitted entirely.
+If `recording.auth === null`, the auth block is omitted entirely. Same code path as v1.2 recordings without a matched profile.
 
-### Where `webspec.config.ts` lives
+### Settings page UI
 
-Two reasonable homes:
+Opens from a new "Settings" button on the popup's idle screen. Same pattern as the audit-report and library tabs: `chrome.tabs.create({ url: chrome.runtime.getURL('src/settings/index.html') })`.
 
-- **In the user's repo** alongside source — versioned with the app code so each Bellese repo can pin its own auth shape. Best for the multi-app reality.
-- **In `~/Downloads/webspec/`** alongside the test library — global to the user, simpler but doesn't model per-app differences.
+Layout:
 
-Leaning the first. The extension's Save action looks for `webspec.config.*` walking up from the user's cwd / project; if not found, asks the user where to put one (or skips auth emission entirely).
+```
+┌─────────────────────────────────────────────────────────┐
+│ webspec / Settings — Auth Profiles      [+ Add profile] │
+├─────────────────────────────────────────────────────────┤
+│ UCM Dev                                      [Edit] [×] │
+│   http://app.ucm-dev.cmscloud.local/*                   │
+│   uid → ${runAs}                                        │
+├─────────────────────────────────────────────────────────┤
+│ UCM Test                                     [Edit] [×] │
+│   http://app.ucm-test.cmscloud.local/*                  │
+│   uid → ${runAs}                                        │
+└─────────────────────────────────────────────────────────┘
+```
+
+Add/Edit opens an inline form: name input + URL pattern input + N header rows (add row, remove row). Delete prompts for confirmation.
+
+### Modes deferred
+
+v1.3 ships **headers only**. The original design admitted `cookie`, `url`, and `storageState` modes — those are deferred until real Bellese apps demand them. The contract reserves the seam (profile gains an `mode` field eventually, defaulting to `'headers'`) but v1.3.0 hardcodes header injection.
 
 ### Secrets
 
-Header values can interpolate environment variables via `${env.NAME}` — e.g., `'Authorization': 'Bearer ${env.DEV_BEARER_TOKEN}'`. The renderer emits `process.env.DEV_BEARER_TOKEN`; if the env var is missing at run time, Playwright fails with a clear message. Credentials never live in `recording.json`.
+`${env.NAME}` substitution for secret values lands when an actual Bellese app needs it. UCM uses a raw user code, not a secret. The contract reserves the syntax (any `${env.X}` in a header value would emit `process.env.X` rather than the literal) but v1.3.0 doesn't implement it.
 
 ### Open questions for v1.3
 
-1. **Per-recording header override.** Does a recording sometimes need a header beyond `runAs`? (E.g., one test needs `X-Feature-Flag: true`.) Probably extend `WorkflowRecording` with `authOverrides: Record<string, string> | null`, or punt to v1.5.
-2. **Config discovery.** How does the *extension* know where `webspec.config.ts` is, given that the extension lives in the browser and the config lives in a repo on disk? Possibly: the extension doesn't — the *renderer* (running in the user's repo via the CLI when they re-render) is what reads the config. The extension's deterministic render gets no auth; the CLI's re-render does. Compromise that needs validation.
-3. **First-class ModHeader import.** Read a ModHeader profile JSON export to bootstrap `webspec.config.ts`. Nice-to-have, deferred.
+1. **No-match warning vs. silent.** When the user starts recording on a URL that doesn't match any profile, do we (a) show a non-blocking warning in the naming form, (b) block until they pick a profile or "No auth", or (c) silently proceed unauthenticated? Leaning (a). Public sites and pre-prod environments are real cases where no auth is correct.
+2. **Profile editing during a recording.** What if the user opens Settings and edits the matched profile mid-recording? The captured `recording.auth` was resolved at start-time; subsequent edits don't retroactively change a recording. Document this; not a bug.
+3. **Per-recording header override.** Does a recording sometimes need a header beyond what the profile gives? (E.g., one test wants `X-Feature-Flag: true`.) Probably extend the naming form with an "Additional headers" section in v1.5. v1.3 keeps it profile-driven.
+4. **First-class ModHeader import.** Read a ModHeader profile JSON export to bootstrap a webspec profile. Nice-to-have for onboarding, deferred.
 
 ---
 

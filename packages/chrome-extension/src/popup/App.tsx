@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
   deriveSlug,
+  matchProfile,
   normalizeAxeResults,
   renderA11yReportMarkdown,
   renderPlaywrightSpec,
+  resolveProfileHeaders,
 } from '@webspec/core/browser';
-import type { A11yReport, WorkflowRecording } from '@webspec/core/browser';
+import type { A11yReport, AuthProfile, WorkflowRecording } from '@webspec/core/browser';
 import type {
   AuditRequest,
   AuditResponse,
@@ -16,6 +18,7 @@ import type {
   RecorderStopRequest,
   RecorderStopResponse,
 } from '../shared/messages.js';
+import { loadProfiles } from '../shared/profiles.js';
 import { NamingForm } from './NamingForm.js';
 import { ReportView } from './ReportView.js';
 import { RecordingSummaryPanel } from './RecordingSummaryPanel.js';
@@ -28,8 +31,20 @@ type AuditStatus =
 
 type RecorderStatus =
   | { kind: 'idle' }
-  | { kind: 'naming'; name: string; description: string; runAs: string }
-  | { kind: 'starting'; name: string; description: string; runAs: string }
+  | {
+      kind: 'naming';
+      name: string;
+      description: string;
+      runAs: string;
+      matchedProfile: AuthProfile | null;
+    }
+  | {
+      kind: 'starting';
+      name: string;
+      description: string;
+      runAs: string;
+      matchedProfile: AuthProfile | null;
+    }
   | {
       kind: 'recording';
       startedAt: string;
@@ -37,6 +52,7 @@ type RecorderStatus =
       name: string;
       description: string;
       runAs: string;
+      matchedProfile: AuthProfile | null;
       tabId: number;
     }
   | { kind: 'stopping' }
@@ -83,7 +99,7 @@ export function App(): JSX.Element {
     await chrome.tabs.create({ url });
   }
 
-  function handleRecordToggle(): void {
+  async function handleRecordToggle(): Promise<void> {
     if (recorder.kind === 'recording') {
       void stopAndReviewRecording(
         recorder.tabId,
@@ -92,6 +108,7 @@ export function App(): JSX.Element {
         recorder.name,
         recorder.description,
         recorder.runAs,
+        recorder.matchedProfile,
       );
       return;
     }
@@ -99,15 +116,25 @@ export function App(): JSX.Element {
       setRecorder({ kind: 'idle' });
       return;
     }
-    setRecorder({ kind: 'naming', name: '', description: '', runAs: '' });
+    // Idle → naming: match the active tab against configured auth profiles
+    // so the form can show which profile (if any) will apply.
+    const matched = await getMatchedProfileForActiveTab();
+    setRecorder({
+      kind: 'naming',
+      name: '',
+      description: '',
+      runAs: '',
+      matchedProfile: matched,
+    });
   }
 
   async function startRecording(
     name: string,
     description: string,
     runAs: string,
+    matchedProfile: AuthProfile | null,
   ): Promise<void> {
-    setRecorder({ kind: 'starting', name, description, runAs });
+    setRecorder({ kind: 'starting', name, description, runAs, matchedProfile });
     try {
       const { tabId, url } = await activeHttpTab();
       const request: RecorderStartRequest = {
@@ -128,6 +155,7 @@ export function App(): JSX.Element {
         name,
         description,
         runAs,
+        matchedProfile,
         tabId,
       });
     } catch (err) {
@@ -145,6 +173,7 @@ export function App(): JSX.Element {
     fallbackName: string,
     fallbackDescription: string,
     fallbackRunAs: string,
+    matchedProfile: AuthProfile | null,
   ): Promise<void> {
     setRecorder({ kind: 'stopping' });
     try {
@@ -164,11 +193,23 @@ export function App(): JSX.Element {
       // downstream consumers (renderer, future test report) can short-circuit
       // on a single nullish check.
       const runAs = rawRunAs.trim() === '' ? null : rawRunAs.trim();
+      // Resolve the matched auth profile against runAs at this stop moment.
+      // We do it here (not at save) so that re-entering review doesn't have
+      // to re-resolve, and so the WorkflowRecording is fully self-contained
+      // when handed to RecordingSummaryPanel / the renderer.
+      const auth =
+        matchedProfile === null
+          ? null
+          : {
+              profileName: matchedProfile.name,
+              headers: resolveProfileHeaders(matchedProfile, runAs ?? ''),
+            };
 
       const recording: WorkflowRecording = {
         name,
         description,
         runAs,
+        auth,
         startedAt,
         endedAt: response.endedAt,
         startUrl,
@@ -252,7 +293,7 @@ export function App(): JSX.Element {
         </button>
         <button
           type="button"
-          onClick={handleRecordToggle}
+          onClick={() => void handleRecordToggle()}
           disabled={auditRunning || recorder.kind === 'starting' || recorder.kind === 'stopping'}
           className={recording ? 'recording-btn' : ''}
         >
@@ -266,6 +307,16 @@ export function App(): JSX.Element {
                   ? 'Cancel'
                   : 'Record workflow'}
         </button>
+        <button
+          type="button"
+          className="settings-btn"
+          onClick={() => void openSettingsTab()}
+          disabled={auditRunning || recorderBusy}
+          aria-label="Open settings"
+          title="Settings — auth profiles"
+        >
+          ⚙
+        </button>
       </div>
 
       {recorder.kind === 'naming' && (
@@ -273,11 +324,18 @@ export function App(): JSX.Element {
           name={recorder.name}
           description={recorder.description}
           runAs={recorder.runAs}
+          matchedProfile={recorder.matchedProfile}
           onChange={(name, description, runAs) =>
-            setRecorder({ kind: 'naming', name, description, runAs })
+            setRecorder({
+              kind: 'naming',
+              name,
+              description,
+              runAs,
+              matchedProfile: recorder.matchedProfile,
+            })
           }
           onStart={(name, description, runAs) =>
-            void startRecording(name, description, runAs)
+            void startRecording(name, description, runAs, recorder.matchedProfile)
           }
         />
       )}
@@ -332,7 +390,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v1.2.0 — test library</p>
+        <p className="meta">v1.3.0 — domain-aware auth profiles</p>
       </footer>
     </main>
   );
@@ -361,6 +419,13 @@ async function hydrateRecorderStatus(
       request,
     );
     if (response.ok && response.recording) {
+      // Re-match the auth profile against the recording's start URL (not the
+      // current tab URL, which may have changed during the recording). v1.3
+      // doesn't persist the matched profile across content-script restarts —
+      // we accept the small risk that a profile edited mid-recording could
+      // shift the match. Document in 08-test-library.md (open question 2).
+      const profiles = await loadProfiles();
+      const matchedProfile = matchProfile(profiles, response.startUrl);
       setRecorder({
         kind: 'recording',
         startedAt: response.startedAt,
@@ -368,12 +433,36 @@ async function hydrateRecorderStatus(
         name: response.name,
         description: response.description,
         runAs: response.runAs,
+        matchedProfile,
         tabId: tab.id,
       });
     }
   } catch {
     // Content script not loaded or messaging blocked; stay idle.
   }
+}
+
+/**
+ * Best-effort: read the active tab's URL, load configured auth profiles
+ * from chrome.storage.local, and return the matching profile (or null).
+ * Used at recording-start so the naming form can show which profile will
+ * apply. Failures (no active tab, non-http URL, storage error) all
+ * resolve to null — the user records without auth.
+ */
+async function getMatchedProfileForActiveTab(): Promise<AuthProfile | null> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url || !/^https?:/i.test(tab.url)) return null;
+    const profiles = await loadProfiles();
+    return matchProfile(profiles, tab.url);
+  } catch {
+    return null;
+  }
+}
+
+async function openSettingsTab(): Promise<void> {
+  const url = chrome.runtime.getURL('src/settings/index.html');
+  await chrome.tabs.create({ url });
 }
 
 async function activeHttpTab(): Promise<{ tabId: number; url: string }> {
