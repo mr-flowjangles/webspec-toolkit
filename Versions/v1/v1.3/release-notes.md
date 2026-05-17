@@ -1,5 +1,44 @@
 # v1.3
 
+## v1.3.1 — Queues Design Decisions (2026-05-17)
+
+### Problem
+
+`docs/10-team-shareability.md` settled the v1.4 mission (Test Cases + Queues + team-runnable specs in a shared git repo) but left six open questions for the build session, including the big-shape ones: where Queue composition lives in the extension, how the repo path is configured, what storage actually syncs across teammates, and how step roles get named. Without answering those, v1.4 implementation can't start without a code-time fork in the road.
+
+### Solution
+
+Held a focused design session and locked five of the six. Captured in a new **Build-session decisions (2026-05-17)** section in `docs/10`, with rationale and rejected alternatives for each:
+
+1. **Queue composer = sibling section in the existing Settings page.** Reuses `packages/chrome-extension/src/settings/`; faster ship than a new HTML entry or detached window.
+2. **Repo path = one global "Test repo folder"** setting per Chrome profile, picker via the File System Access API, fallback to `~/Downloads/webspec/`. Per-app-by-URL-pattern model considered and rejected — premature.
+3. **Sync = GitHub.** The team repo IS the source of truth. No AWS service, no local SQLite. WASM SQLite (sql.js / SQLite-WASM in IndexedDB) explicitly evaluated for the "queryable authoring DB" use case and rejected because manifests have to live in the repo regardless.
+4. **Queue artifact = two files** in `<repo>/tests/` — `queue-N-{slug}.json` (source of truth) + `queue-N-{slug}.spec.ts` (regenerable). Manifest-as-header-comment and manifest-in-`chrome.storage.local` shapes both rejected.
+5. **Step role = raw `runAs` value** on each step. No new "Roles" registry; the auth profile's `${runAs}` substitution already covers it. Composer pre-fills `runAs` from the Test Case's recorded value and lets the user override per step.
+6. **Existing `~/Downloads/webspec/`** library is left alone. New saves with a repo configured go to the repo; users hand-copy if they want to migrate old recordings.
+
+The remaining open item (slug collisions between authors saving the same Test Case name) stays deferred because v1.4 ships single-author. Three implementation-detail questions (iterations input placement, re-render behavior on Test Case edit, bootstrap-files confirmation UX) were moved into a new "Implementation-detail questions" section in `docs/10` and will be settled at build time.
+
+### New
+
+- `docs/10-team-shareability.md` § Build-session decisions (2026-05-17) — full record of the five locked decisions with rejected alternatives.
+- `docs/10-team-shareability.md` § Implementation-detail questions for the build session — replaces the prior open-questions section with the smaller items that don't change the design shape.
+
+### Changed
+
+- `docs/10-team-shareability.md` § Status — flipped from "active design" to "design locked, implementation queued."
+
+### Fixed
+
+- N/A (docs-only patch.)
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docs/10-team-shareability.md` | Added Build-session decisions section. Replaced Open questions with shorter Implementation-detail questions. Updated Status. |
+| `Versions/v1/v1.3/release-notes.md` | This entry. |
+
 ## v1.3.0 — Domain-Aware Auth Profiles (2026-05-15)
 
 ### Problem
