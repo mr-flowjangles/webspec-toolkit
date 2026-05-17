@@ -1,5 +1,48 @@
 # v1.3
 
+## v1.3.4 — Test Case Storage Shift (2026-05-17)
+
+### Problem
+
+v1.3.3 added the "Test repo folder" setting, but no save flow consumed it — every recording still landed in `~/Downloads/webspec/<slug>/` via `chrome.downloads`. The setting was inert. This patch makes Test Case saves the first real consumer of the configured `FileSystemDirectoryHandle`, completing the loop on the v1.3.1 design (`docs/10` § Build-session decisions → 2. Repo path).
+
+### Solution
+
+`handleSaveRecording` in the popup now branches before falling through to the v1.2 Downloads path:
+
+1. **Try repo write first.** `trySaveToRepo` loads the saved handle from IndexedDB (via `loadRepoFolderHandle`), checks `queryPermission`, re-prompts if `prompt` (the Save click is a user gesture — `requestPermission` is allowed mid-handler), and on `granted` writes:
+   - `<repo>/test-cases/<slug>/recording.spec.ts`
+   - `<repo>/test-cases/<slug>/recording.json`
+   - `<repo>/test-cases/<slug>/playwright.config.ts` (per-test, so the test is runnable standalone before the parent `playwright.config.ts` bootstrap lands in a later patch).
+2. **Fall back to Downloads.** When no folder is configured, or Chrome refused the readwrite grant, the legacy `chrome.downloads` flow runs unchanged — `~/Downloads/webspec/<slug>/` plus the write-once parent `playwright.config.ts`. No behavior change for users who haven't configured a repo.
+3. **Success message reflects the path.** The recorder's `saved` state now carries a `location: { kind: 'downloads' } | { kind: 'repo'; folderName }` discriminator, and the popup renders the corresponding path: `<folderName>/test-cases/<slug>/` for repo saves, the original `~/Downloads/webspec/<slug>/` for the fallback.
+
+The actual file writes are routed through a new `writeFileToRepoFolder(rootHandle, relativePath, content)` helper that walks each path segment with `getDirectoryHandle(..., { create: true })`, gets the leaf file with `getFileHandle(..., { create: true })`, opens a writable, writes, and closes (in a `try/finally` so a mid-write throw still releases the handle). Empty paths, leading slashes, and doubled slashes are rejected up front.
+
+### New
+
+- `writeFileToRepoFolder` in `packages/chrome-extension/src/shared/repoFolder.ts` — generic File System Access writer with intermediate-directory creation, path-segment validation, and guaranteed writable close on error.
+- `trySaveToRepo` in `packages/chrome-extension/src/popup/App.tsx` — local helper that orchestrates load handle → check permission → request if prompt → write three files.
+- 7 new tests in `tests/repoFolder.test.ts` covering `writeFileToRepoFolder`: single-file write, nested-directory creation, directory reuse on a second write, path-validation (empty / leading slash / doubled slash), and writable close even when `write()` throws. Total tests: 45/45.
+
+### Changed
+
+- `RecorderStatus.saved` now includes a `location: { kind: 'downloads' } | { kind: 'repo'; folderName: string }` field.
+- The popup's "Saved to …" message branches on `location`. Repo saves drop the `make run-tests` tip (the user's team repo has its own run setup) and say "Run Playwright from your repo." instead.
+
+### Fixed
+
+- N/A (additive patch; v1.2 Downloads fallback is unchanged.)
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/shared/repoFolder.ts` | Added `writeFileToRepoFolder`. |
+| `packages/chrome-extension/src/popup/App.tsx` | Added `trySaveToRepo`; branched `handleSaveRecording`; extended `saved` state with `location`; conditional success copy. |
+| `packages/chrome-extension/tests/repoFolder.test.ts` | Added writer test suite (7 cases). |
+| `Versions/v1/v1.3/release-notes.md` | This entry. |
+
 ## v1.3.3 — Test Repo Folder Setting (2026-05-17)
 
 ### Problem

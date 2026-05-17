@@ -19,9 +19,17 @@ import type {
   RecorderStopResponse,
 } from '../shared/messages.js';
 import { loadProfiles } from '../shared/profiles.js';
+import {
+  checkRepoPermission,
+  loadRepoFolderHandle,
+  requestRepoPermission,
+  writeFileToRepoFolder,
+} from '../shared/repoFolder.js';
 import { NamingForm } from './NamingForm.js';
 import { ReportView } from './ReportView.js';
 import { RecordingSummaryPanel } from './RecordingSummaryPanel.js';
+
+type SaveLocation = { kind: 'downloads' } | { kind: 'repo'; folderName: string };
 
 type AuditStatus =
   | { kind: 'idle' }
@@ -58,7 +66,7 @@ type RecorderStatus =
   | { kind: 'stopping' }
   | { kind: 'error'; message: string }
   | { kind: 'review'; recording: WorkflowRecording }
-  | { kind: 'saved'; slug: string; events: number }
+  | { kind: 'saved'; slug: string; events: number; location: SaveLocation }
   | { kind: 'discarded' };
 
 export function App(): JSX.Element {
@@ -239,31 +247,38 @@ export function App(): JSX.Element {
     }
     try {
       const spec = renderPlaywrightSpec(recording);
-      const dir = `webspec/${slug}`;
+      const recordingJson = JSON.stringify(recording, null, 2);
 
-      // Per-test files: overwrite. The user named the same slug; this is
-      // their canonical place for it. v1.2.0 takes the silent-overwrite
-      // default per docs/08-test-library.md open question (1); a confirm
-      // step can land in v1.2.1 if it bites.
+      // v1.3.4: prefer the configured Test repo folder if available.
+      const repoResult = await trySaveToRepo(slug, spec, recordingJson);
+      if (repoResult.kind === 'wrote') {
+        setRecorder({
+          kind: 'saved',
+          slug,
+          events: recording.events.length,
+          location: { kind: 'repo', folderName: repoResult.folderName },
+        });
+        return;
+      }
+
+      // Fallback: v1.2 Downloads flow. Per-test files overwrite (canonical
+      // slug); parent playwright.config.ts is write-once via search history.
+      const dir = `webspec/${slug}`;
       await writeToWebspec(`${dir}/recording.spec.ts`, spec, 'application/octet-stream');
-      await writeToWebspec(
-        `${dir}/recording.json`,
-        JSON.stringify(recording, null, 2),
-        'application/json',
-      );
+      await writeToWebspec(`${dir}/recording.json`, recordingJson, 'application/json');
       await writeToWebspec(
         `${dir}/playwright.config.ts`,
         PER_TEST_PLAYWRIGHT_CONFIG,
         'application/octet-stream',
       );
-
-      // Parent config: write-once. Skip if we've ever written it from this
-      // extension before (chrome.downloads.search is best-effort but adequate
-      // — the worst case is one orphan uniquify'd file if the user later
-      // deletes our prior write).
       await ensureParentPlaywrightConfig();
 
-      setRecorder({ kind: 'saved', slug, events: recording.events.length });
+      setRecorder({
+        kind: 'saved',
+        slug,
+        events: recording.events.length,
+        location: { kind: 'downloads' },
+      });
     } catch (err) {
       setRecorder({
         kind: 'error',
@@ -369,9 +384,19 @@ export function App(): JSX.Element {
 
       {recorder.kind === 'saved' && (
         <p className="recorder-success" role="status">
-          Saved to <code>~/Downloads/webspec/{recorder.slug}/</code> ({recorder.events}{' '}
-          event{recorder.events === 1 ? '' : 's'}). Run <code>make run-tests</code> to
-          open Playwright UI.
+          {recorder.location.kind === 'repo' ? (
+            <>
+              Saved to <code>{recorder.location.folderName}/test-cases/{recorder.slug}/</code>{' '}
+              ({recorder.events} event{recorder.events === 1 ? '' : 's'}). Run Playwright from
+              your repo.
+            </>
+          ) : (
+            <>
+              Saved to <code>~/Downloads/webspec/{recorder.slug}/</code> ({recorder.events}{' '}
+              event{recorder.events === 1 ? '' : 's'}). Run <code>make run-tests</code> to
+              open Playwright UI.
+            </>
+          )}
         </p>
       )}
 
@@ -556,6 +581,40 @@ export default defineConfig({
   use: { headless: false },
 });
 `;
+
+/**
+ * Save a Test Case to the user's configured Test repo folder (v1.3.4+).
+ *
+ * Resolves to:
+ *   - `{ kind: 'wrote', folderName }` — files written to `<repo>/test-cases/<slug>/`.
+ *   - `{ kind: 'no-handle' }` — user hasn't configured a folder; caller falls back to Downloads.
+ *   - `{ kind: 'denied' }` — folder is set but Chrome refused readwrite. Caller falls
+ *     back to Downloads; the Settings → General page can re-grant.
+ *
+ * Permission re-request is allowed here because the Save click is a user
+ * gesture — Chrome lets us call `requestPermission` mid-handler.
+ */
+async function trySaveToRepo(
+  slug: string,
+  spec: string,
+  recordingJson: string,
+): Promise<{ kind: 'wrote'; folderName: string } | { kind: 'no-handle' } | { kind: 'denied' }> {
+  const handle = await loadRepoFolderHandle();
+  if (handle === null) return { kind: 'no-handle' };
+
+  let perm = await checkRepoPermission(handle);
+  if (perm === 'prompt') {
+    perm = await requestRepoPermission(handle);
+  }
+  if (perm !== 'granted') return { kind: 'denied' };
+
+  const dir = `test-cases/${slug}`;
+  await writeFileToRepoFolder(handle, `${dir}/recording.spec.ts`, spec);
+  await writeFileToRepoFolder(handle, `${dir}/recording.json`, recordingJson);
+  await writeFileToRepoFolder(handle, `${dir}/playwright.config.ts`, PER_TEST_PLAYWRIGHT_CONFIG);
+
+  return { kind: 'wrote', folderName: handle.name };
+}
 
 /**
  * Write a file under ~/Downloads/<relative-path> with explicit overwrite.
