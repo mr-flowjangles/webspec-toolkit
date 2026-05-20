@@ -1,5 +1,67 @@
 # v1.4
 
+## v1.4.1 — Queue Spec Renderer (2026-05-20)
+
+### Problem
+
+v1.4.0 shipped the Queue composer + manifest storage, but Saving a Queue produced only `queue-N-{slug}.json`. A teammate cloning the repo couldn't run anything — Playwright doesn't execute manifests; it needs `.spec.ts` source. The renderer is the second of v1.4's four MVP deliverables (`docs/10-team-shareability.md` § "v1.4 MVP scope" item 2).
+
+### Solution
+
+New pure renderer in `@webspec/core` plus a save-time wire-up that emits `queue-N-{slug}.spec.ts` alongside the manifest on every Save.
+
+**Renderer (`packages/core/src/render/queue/renderer.ts`).** Public `renderQueueSpec({ queue, recordings, authProfiles }): string`. Output shape (locked by `docs/10` § "How a Queue renders to Playwright"):
+
+- File-header comment naming the queue.
+- `import { expect, test } from '@playwright/test';`
+- One `test.describe.serial(queue.name, () => { ... })` — `.serial` keeps step order and reuses the browser context across steps.
+- Optional `const <name> = '<value>';` lines at the top of the describe block, one per declared `queue.inputs[]` entry. v1.4 MVP only declares the constants; reuse + cross-step wiring is v1.5+.
+- One `test('Step N — <testCase> (as <runAs>)' + ' × <iterations>' if > 1, async (...) => { ... })` per step — clear per-step failure attribution.
+- Step bodies inline the recording: description as a leading comment, `await page.goto(recording.startUrl)`, then each `RecordedEvent` re-emitted through the existing `renderEvent` helper (now exported from `render/e2e/renderer.ts`). **No copy-paste of action translation** — the queue renderer composes with the existing event-emit code.
+- `iterations > 1` wraps the step body in `for (let i = 0; i < <N>; i++) { ... }`.
+- **Header-switching:** each step resolves headers via `matchProfile(authProfiles, recording.startUrl)` + `resolveProfileHeaders(profile, step.runAs)`, canonicalises the result, and emits `await context.setExtraHTTPHeaders({ ... })` only when the resolved headers differ from the prior step's. The `context` fixture is added to the `async ({ ... })` destructure only on steps that emit the call (otherwise just `{ page }`).
+- Throws a clear error naming the step index + missing slug if `recordings` lacks an entry for any `step.testCase`.
+
+**Save wire-up (`packages/chrome-extension/src/shared/queues.ts`).** Two new helpers:
+
+- `loadRecordingsForQueue(rootHandle, queue)` — reads each unique `step.testCase` slug from `<repo>/test-cases/<slug>/recording.json`, returns the map `renderQueueSpec` expects. Throws with a specific message (missing directory, missing file, unparseable JSON) so the UI can surface what to fix.
+- `saveQueueWithSpec(rootHandle, position, queue, authProfiles)` — runs `loadRecordingsForQueue` → `renderQueueSpec` → writes both the manifest (`saveQueueManifest`) and the spec (`<repo>/tests/queue-N-{slug}.spec.ts`). Returns the two paths. **The spec is overwritten on every Save** — the manifest is the editable source; never hand-edit the spec.
+
+`QueuesPanel.tsx` now loads `AuthProfileList` via `loadProfiles()` at Save time and calls `saveQueueWithSpec` instead of `saveQueueManifest` alone. The tagline copy updated to reflect that Save produces both files.
+
+**Re-exports (`packages/core/src/browser.ts` + `index.ts`).** `renderQueueSpec` + `RenderQueueSpecArgs` for the extension to consume. `renderEvent` (the previously-private helper in `render/e2e/renderer.ts`) is now exported with a doc comment explaining the reuse pathway.
+
+### New
+
+- `packages/core/src/render/queue/renderer.ts` — `renderQueueSpec` pure function (140 lines).
+- `packages/core/tests/render/queue/renderer.test.ts` — 19 tests: scaffold (file header + imports + describe.serial), single-step inlining (goto + actions + description comment), two-step happy-path snapshot, header-switching matrix (same runAs → 1 call, different runAs → 2 calls, context fixture appearance conditional on the call), iterations (for-loop + title suffix), inputs (const declarations), error cases (missing slug → throws with step index).
+- `packages/chrome-extension/src/shared/queues.ts` — added `loadRecordingsForQueue` + `saveQueueWithSpec`.
+
+Total tests: 341/341 passing (+19 renderer).
+
+### Changed
+
+- `packages/core/src/render/e2e/renderer.ts` — `renderEvent` switched from `function` to `export function` so the queue renderer can reuse it without duplicating event-to-Playwright translation. No behavior change to the existing recording renderer; all 31 e2e renderer tests untouched.
+- `packages/core/src/browser.ts` / `packages/core/src/index.ts` — re-export `renderQueueSpec` + `RenderQueueSpecArgs`.
+- `packages/chrome-extension/src/settings/QueuesPanel.tsx` — Save calls `saveQueueWithSpec` (was `saveQueueManifest`); tagline updated.
+
+### Fixed
+
+- N/A (additive).
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/core/src/render/queue/renderer.ts` | **New** — `renderQueueSpec`. |
+| `packages/core/src/render/e2e/renderer.ts` | Exported `renderEvent` for reuse. |
+| `packages/core/src/browser.ts` | Re-exports renderer. |
+| `packages/core/src/index.ts` | Re-exports renderer + Queue types. |
+| `packages/core/tests/render/queue/renderer.test.ts` | **New** — 19 renderer tests. |
+| `packages/chrome-extension/src/shared/queues.ts` | Added `loadRecordingsForQueue` + `saveQueueWithSpec`. |
+| `packages/chrome-extension/src/settings/QueuesPanel.tsx` | Wired Save to also emit the spec; tagline updated. |
+| `Versions/v1/v1.4/release-notes.md` | This entry. |
+
 ## v1.4.0 — Queue Composer (2026-05-20)
 
 ### Problem

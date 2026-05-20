@@ -67,3 +67,7 @@ export {
   type Queue,
   type QueueList,
 } from './library/queue.js';
+export {
+  renderQueueSpec,
+  type RenderQueueSpecArgs,
+} from './render/queue/renderer.js';

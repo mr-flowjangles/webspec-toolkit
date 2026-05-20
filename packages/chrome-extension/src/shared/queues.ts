@@ -3,9 +3,9 @@
  *
  * The composer needs to (a) list every Test Case the user has saved (each
  * lives in `<repo>/test-cases/<slug>/`) and (b) read / write Queue manifests
- * under `<repo>/tests/queue-<n>-<slug>.json`. The rendered Playwright spec
- * file (`queue-<n>-<slug>.spec.ts`) is the renderer's concern in v1.4.1; this
- * module is the manifest layer only.
+ * under `<repo>/tests/queue-<n>-<slug>.json`. v1.4.1 added (c) rendering the
+ * Queue to a Playwright spec written alongside the manifest as
+ * `queue-<n>-<slug>.spec.ts`.
  *
  * All operations go through a `FileSystemDirectoryHandle` — the same handle
  * the Settings → General "Test repo folder" picker stashes in IndexedDB.
@@ -14,7 +14,11 @@
 import {
   QueueSchema,
   queueManifestFilename,
+  queueSpecFilename,
+  renderQueueSpec,
+  type AuthProfileList,
   type Queue,
+  type WorkflowRecording,
 } from '@webspec/core/browser';
 import { writeFileToRepoFolder } from './repoFolder.js';
 
@@ -153,4 +157,70 @@ export async function saveQueueManifest(
   const relPath = `tests/${queueManifestFilename(position, queue.slug)}`;
   await writeFileToRepoFolder(root, relPath, JSON.stringify(queue, null, 2) + '\n');
   return relPath;
+}
+
+/**
+ * Read each Test Case slug referenced by a Queue and return the parsed
+ * `WorkflowRecording`s as a Map keyed by slug — the shape `renderQueueSpec`
+ * consumes. Throws if a referenced slug has no `recording.json` on disk, or
+ * if the file fails schema validation: the spec render can't proceed with
+ * a hole in the recordings.
+ */
+export async function loadRecordingsForQueue(
+  root: FileSystemDirectoryHandle,
+  queue: Queue,
+): Promise<Map<string, WorkflowRecording>> {
+  const testCasesDir = await tryGetDirectory(root, 'test-cases');
+  if (testCasesDir === null) {
+    throw new Error(
+      `No test-cases/ directory under the configured Test repo folder; cannot render Queue "${queue.name}".`,
+    );
+  }
+  const slugs = new Set(queue.steps.map((s) => s.testCase));
+  const out = new Map<string, WorkflowRecording>();
+  for (const slug of slugs) {
+    const dir = await tryGetDirectory(testCasesDir, slug);
+    if (dir === null) {
+      throw new Error(
+        `Test Case "${slug}" referenced by Queue "${queue.name}" is missing from <repo>/test-cases/.`,
+      );
+    }
+    const raw = await readFileText(dir, 'recording.json');
+    if (raw === null) {
+      throw new Error(
+        `Test Case "${slug}" has no recording.json — re-save it from the extension popup.`,
+      );
+    }
+    try {
+      out.set(slug, JSON.parse(raw) as WorkflowRecording);
+    } catch (err) {
+      throw new Error(
+        `Test Case "${slug}" has an unreadable recording.json: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  return out;
+}
+
+/**
+ * Save the Queue manifest AND render+write the Playwright spec alongside it.
+ * Returns the two paths that were written so the UI can report them.
+ *
+ * Two-file output keeps the manifest as the editable source of truth and
+ * the spec as the regenerable file Playwright actually runs (per docs/10
+ * § 4 "Queue artifact on disk"). The spec is overwritten on every Save —
+ * the manifest is the editable artifact; never hand-edit the spec.
+ */
+export async function saveQueueWithSpec(
+  root: FileSystemDirectoryHandle,
+  position: number,
+  queue: Queue,
+  authProfiles: AuthProfileList,
+): Promise<{ manifestPath: string; specPath: string }> {
+  const recordings = await loadRecordingsForQueue(root, queue);
+  const specSource = renderQueueSpec({ queue, recordings, authProfiles });
+  const manifestPath = await saveQueueManifest(root, position, queue);
+  const specRelPath = `tests/${queueSpecFilename(position, queue.slug)}`;
+  await writeFileToRepoFolder(root, specRelPath, specSource);
+  return { manifestPath, specPath: specRelPath };
 }

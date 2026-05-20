@@ -22,10 +22,11 @@ import {
   listQueues,
   listTestCases,
   nextQueuePosition,
-  saveQueueManifest,
+  saveQueueWithSpec,
   type StoredQueue,
   type TestCaseSummary,
 } from '../shared/queues.js';
+import { loadProfiles } from '../shared/profiles.js';
 
 type LoadState =
   | { kind: 'loading' }
@@ -102,7 +103,8 @@ export function QueuesPanel(): JSX.Element {
       return;
     }
     try {
-      await saveQueueManifest(handle, position, queue);
+      const authProfiles = await loadProfiles();
+      await saveQueueWithSpec(handle, position, queue, authProfiles);
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 1500);
       setEditor({ kind: 'closed' });
@@ -116,8 +118,9 @@ export function QueuesPanel(): JSX.Element {
     <section className="settings-panel" aria-labelledby="queues-heading">
       <p id="queues-heading" className="settings-tagline">
         Compose Test Cases into ordered <strong>Queues</strong>. Each step picks a Test Case and a{' '}
-        <code>runAs</code> value; the Queue saves to <code>&lt;repo&gt;/tests/</code> as a manifest
-        your team commits. The rendered Playwright spec lands in a follow-up patch.
+        <code>runAs</code> value. Save writes both a <code>queue-N-&lt;slug&gt;.json</code> manifest
+        and a runnable <code>queue-N-&lt;slug&gt;.spec.ts</code> to{' '}
+        <code>&lt;repo&gt;/tests/</code> for your team to commit and run.
       </p>
 
       {load.kind === 'loading' && <p className="settings-empty">Loading…</p>}
