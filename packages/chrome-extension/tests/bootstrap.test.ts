@@ -12,6 +12,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  BOOTSTRAP_GITHUB_WORKFLOW,
   BOOTSTRAP_GITIGNORE,
   BOOTSTRAP_PACKAGE_JSON,
   BOOTSTRAP_PLAYWRIGHT_CONFIG,
@@ -160,7 +161,7 @@ describe('ensureBootstrap', () => {
     expect(Array.from(root.childFiles.keys())).toEqual(['package.json']);
   });
 
-  it('calls confirm and writes all four files when the user confirms', async () => {
+  it('calls confirm and writes all five scaffold files when the user confirms', async () => {
     const root = makeFakeDir('ucm-tests');
     const confirm = vi.fn(async () => true);
 
@@ -168,9 +169,13 @@ describe('ensureBootstrap', () => {
 
     expect(result).toEqual({ wrote: true });
     expect(confirm).toHaveBeenCalledTimes(1);
+    // Four files at the repo root + the workflow nested under .github/workflows/.
     expect(Array.from(root.childFiles.keys()).sort()).toEqual(
       ['.gitignore', 'README.md', 'package.json', 'playwright.config.ts'].sort(),
     );
+    const githubDir = root.childDirs.get('.github');
+    const workflowsDir = githubDir?.childDirs.get('workflows');
+    expect(workflowsDir?.childFiles.get('playwright.yml')).toBeDefined();
   });
 
   it("calls confirm, writes nothing, and returns 'declined' when the user says no", async () => {
@@ -197,6 +202,11 @@ describe('ensureBootstrap', () => {
     ]);
     expect(root.childFiles.get('.gitignore')?.writable.written).toEqual([BOOTSTRAP_GITIGNORE]);
     expect(root.childFiles.get('README.md')?.writable.written).toEqual([BOOTSTRAP_README]);
+    const workflow = root.childDirs
+      .get('.github')
+      ?.childDirs.get('workflows')
+      ?.childFiles.get('playwright.yml');
+    expect(workflow?.writable.written).toEqual([BOOTSTRAP_GITHUB_WORKFLOW]);
   });
 });
 
@@ -244,5 +254,29 @@ describe('bootstrap templates', () => {
     expect(BOOTSTRAP_README).toContain('npm run test:ui');
     expect(BOOTSTRAP_README).toContain('test-cases/');
     expect(BOOTSTRAP_README).toContain('tests/');
+  });
+
+  it('README documents the CI workflow + secrets caveat', () => {
+    expect(BOOTSTRAP_README).toContain('## CI');
+    expect(BOOTSTRAP_README).toContain('.github/workflows/playwright.yml');
+    expect(BOOTSTRAP_README).toContain('Secrets caveat');
+    expect(BOOTSTRAP_README).toContain('never commit production credentials');
+  });
+
+  it('GitHub workflow runs Playwright on push + PR with chromium + uploads the report', () => {
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('name: Playwright tests');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('on:');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('push:');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('pull_request:');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('workflow_dispatch');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('actions/checkout@v4');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('actions/setup-node@v4');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('node-version: 20');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('npm ci');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('npx playwright install --with-deps chromium');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('npm test');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('actions/upload-artifact@v4');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('playwright-report');
+    expect(BOOTSTRAP_GITHUB_WORKFLOW).toContain('if: always()');
   });
 });

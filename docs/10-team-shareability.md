@@ -252,14 +252,61 @@ Imports are deduped at the top of the Queue spec — one `import` per unique Tes
 
 **Out of scope for v1.5.0.** No input/output wiring between Test Cases — the helper signature is fixed at `{ page, context }`. That's v1.5.1+. No slug rename UI; no Test Case in-place editor. No AI variation amplification — separate milestone.
 
+## v1.5.1 — CI Surface (design locked, 2026-05-20)
+
+Closes the team-shareability loop: a teammate clones the repo, GitHub Actions runs the Test Cases + Queues on every push and PR, webspec is not in the loop. The repo runs itself.
+
+**Approach.** Add a fifth scaffold file to the v1.4.2 bootstrap set: `.github/workflows/playwright.yml`. Same `BOOTSTRAP_*` template constant pattern, same `ensureBootstrap` confirmed-write flow, same self-heal-on-first-save semantics. The confirm prompt copy gains a fifth bullet so users see the workflow before agreeing to write.
+
+**Workflow shape.**
+
+```yaml
+name: Playwright tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+```
+
+Triggers: `push` + `pull_request` to `main` and `workflow_dispatch` (manual reruns). Chromium-only — Firefox + WebKit add ~10 min and aren't part of v1's golden-path mission. The Playwright HTML report uploads as a job artifact regardless of pass/fail so a failed run is debuggable from the Actions tab.
+
+**README update.** `BOOTSTRAP_README` gets a `## CI` section: brief description of when the workflow runs, link to the Actions tab once it exists, and the secrets caveat (see below).
+
+**Secrets out of scope for v1.5.1.** Recorded auth headers live in `recording.json` (committed) and in `setExtraHTTPHeaders` calls inside the rendered specs (committed). For CI against a public site or a sandbox where the baked headers are safe to commit, this Just Works. For CI against an environment where those headers contain real credentials, the user needs to (a) replace baked values with `${{ secrets.UID }}` style references in the workflow or specs by hand, or (b) wait for a v1.6+ "secrets-aware rewriter" that's a real design problem because it has to know which auth-profile header values to template out vs leave alone. v1.5.1 ships the workflow as-is; the README's CI section calls the secrets gap out so users with credential-bearing recordings know to look at it before pushing to a public repo.
+
+**Re-scaffold semantics.** `needsBootstrap` still keys off `package.json` — the workflow file is part of the v1.5.1 bootstrap set, not a separate signal. A repo bootstrapped pre-v1.5.1 (has `package.json` but no `.github/workflows/playwright.yml`) won't get the workflow auto-added; the user needs to delete `package.json`, re-trigger a save to re-bootstrap, OR copy the workflow from a freshly bootstrapped repo. We considered making the workflow a separate "needs CI bootstrap" check but rejected it as premature — pre-v1.5.1 users are a single-author edge case and a doc note is enough.
+
+**Out of scope for v1.5.1.** No secret rewriting. No matrix builds (browser × Node version). No incremental "run only changed Queues" — Playwright's own sharding/changed-files handling is a v1.7+ optimization. No Bellese-internal GitHub Enterprise variant (this is for `github.com` per the toolkit's standing rules).
+
 ## v1.5+ futures
 
 In rough priority order (final order earned by lived experience with v1.4 + v1.5):
 
-1. **Reusable Test Cases.** ✅ Design locked (this doc, above) — implementation in v1.5.0.
-2. **Input/output wiring.** Test Cases declare their outputs (`createLead → { leadId }`) and inputs. The Queue composer wires them. Enables Queue 3-style "start at step 5 with a record passed from step 4."
-3. **AI variation amplification.** Same `LLMProvider` / `BedrockAdapter` seam used today for negative-scenario generation, extended to positive variations: "Here's `create-lead`. Generate 10 variants exercising every dropdown / radio / required-field combination." One Test Case → ten Queues.
-4. **CI surface.** Once a team repo exists with a Playwright config, GitHub Actions / similar runs queues directly. webspec involvement is zero. Probably a doc + a sample workflow file, not a build artifact.
+1. **Reusable Test Cases.** ✅ Design locked above — shipped in v1.5.0.
+2. **CI surface.** ✅ Design locked above — shipped in v1.5.1.
+3. **Input/output wiring.** Test Cases declare their outputs (`createLead → { leadId }`) and inputs. The Queue composer wires them. Enables Queue 3-style "start at step 5 with a record passed from step 4."
+4. **AI variation amplification.** Same `LLMProvider` / `BedrockAdapter` seam used today for negative-scenario generation, extended to positive variations: "Here's `create-lead`. Generate 10 variants exercising every dropdown / radio / required-field combination." One Test Case → ten Queues.
+5. **Secrets-aware workflow rewriter** (was banked from v1.5.1). Auth-profile headers whose values look like credentials get templated to `${{ secrets.NAME }}` references in the rendered workflow / specs, with the user prompted to add the corresponding secret in GitHub. Probably surfaces in the Settings → Auth Profiles editor as a "treat as secret" toggle per header.
 
 ## Implementation-detail questions for the build session
 

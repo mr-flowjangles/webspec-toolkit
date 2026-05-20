@@ -627,7 +627,7 @@ async function trySaveToRepo(
     confirm: async () =>
       confirm(
         `webspec wants to scaffold a Playwright project in "${handle.name}" so your team can run the tests.\n\n` +
-          `It will create: package.json, playwright.config.ts, .gitignore, README.md.\n\n` +
+          `It will create: package.json, playwright.config.ts, .gitignore, README.md, and .github/workflows/playwright.yml.\n\n` +
           `Continue?`,
       ),
   });
