@@ -91,3 +91,9 @@ export {
   renderQueueSpec,
   type RenderQueueSpecArgs,
 } from './render/queue/renderer.js';
+
+// v1.5.0 Test Case helper-module renderer.
+export {
+  renderTestCaseModule,
+  renderTestCaseSpec,
+} from './render/test-case/renderer.js';

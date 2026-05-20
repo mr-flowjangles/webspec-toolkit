@@ -29,3 +29,26 @@ export function deriveSlug(name: string): string {
   // the truncation boundary (e.g. "abc-def-ghi" truncated to "abc-def-" → "abc-def").
   return slug.slice(0, MAX_SLUG_LENGTH).replace(/-+$/, '');
 }
+
+/**
+ * Turn a slug into a valid JavaScript identifier suitable for an
+ * `import { run as <id> } from '...'` alias in a generated Queue spec.
+ *
+ * Rules:
+ *   - Split on dashes, camelCase the resulting words (`create-lead` → `createLead`).
+ *   - If the first character would be a digit (slug started with a digit),
+ *     prefix with `_` to keep the identifier valid.
+ *   - Empty input returns `_` (fallback — shouldn't happen with derived slugs
+ *     since `deriveSlug` strips empties, but defensive).
+ *
+ * Browser-safe (pure string ops). v1.5.0+.
+ */
+export function slugToIdentifier(slug: string): string {
+  if (slug === '') return '_';
+  const parts = slug.split('-').filter((p) => p !== '');
+  if (parts.length === 0) return '_';
+  const head = parts[0]!;
+  const tail = parts.slice(1).map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+  const id = head + tail.join('');
+  return /^[0-9]/.test(id) ? `_${id}` : id;
+}

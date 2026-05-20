@@ -36,7 +36,8 @@ export {
 
 // Test library — slug derivation for the v1.2 on-disk layout
 // (~/Downloads/webspec/<slug>/). See docs/08-test-library.md.
-export { deriveSlug } from './library/slug.js';
+// v1.5.0 adds `slugToIdentifier` for Queue specs' import aliases.
+export { deriveSlug, slugToIdentifier } from './library/slug.js';
 
 // v1.3 auth profiles — match the active tab's URL against configured profiles
 // and resolve `${runAs}` placeholders into ready-to-emit HTTP headers.
@@ -71,3 +72,11 @@ export {
   renderQueueSpec,
   type RenderQueueSpecArgs,
 } from './render/queue/renderer.js';
+
+// v1.5.0 Test Case helper-module renderer — emits the importable `recording.ts`
+// + the thin `recording.spec.ts` wrapper. See `docs/10-team-shareability.md`
+// § "v1.5.0 — Reusable Test Cases".
+export {
+  renderTestCaseModule,
+  renderTestCaseSpec,
+} from './render/test-case/renderer.js';
