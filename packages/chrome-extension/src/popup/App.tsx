@@ -25,6 +25,7 @@ import {
   requestRepoPermission,
   writeFileToRepoFolder,
 } from '../shared/repoFolder.js';
+import { ensureBootstrap } from '../shared/bootstrap.js';
 import { NamingForm } from './NamingForm.js';
 import { ReportView } from './ReportView.js';
 import { RecordingSummaryPanel } from './RecordingSummaryPanel.js';
@@ -607,6 +608,20 @@ async function trySaveToRepo(
     perm = await requestRepoPermission(handle);
   }
   if (perm !== 'granted') return { kind: 'denied' };
+
+  // v1.4.2: on the first save into a fresh repo, scaffold the four bootstrap
+  // files (package.json, playwright.config.ts, .gitignore, README.md) so a
+  // teammate can clone + `npm install` + `npm test` without further setup.
+  // The confirm guard exists because we're writing files the user didn't
+  // explicitly ask for — see docs/10-team-shareability.md.
+  await ensureBootstrap(handle, {
+    confirm: async () =>
+      confirm(
+        `webspec wants to scaffold a Playwright project in "${handle.name}" so your team can run the tests.\n\n` +
+          `It will create: package.json, playwright.config.ts, .gitignore, README.md.\n\n` +
+          `Continue?`,
+      ),
+  });
 
   const dir = `test-cases/${slug}`;
   await writeFileToRepoFolder(handle, `${dir}/recording.spec.ts`, spec);
