@@ -16,6 +16,7 @@ import {
   queueManifestFilename,
   queueSpecFilename,
   renderQueueSpec,
+  renderTestCaseModule,
   type AuthProfileList,
   type Queue,
   type WorkflowRecording,
@@ -203,24 +204,57 @@ export async function loadRecordingsForQueue(
 }
 
 /**
+ * v1.5.0 self-heal: ensure each referenced Test Case has a `recording.ts`
+ * helper module on disk. Test Cases saved pre-v1.5.0 have only the
+ * inlined `recording.spec.ts`; this renders the new helper from
+ * `recording.json` for any missing one so the Queue's import-based spec
+ * can resolve. No-op when the helper already exists.
+ *
+ * Returns the slugs that were regenerated (for UI reporting if useful).
+ */
+export async function ensureTestCaseHelpers(
+  root: FileSystemDirectoryHandle,
+  recordings: Map<string, WorkflowRecording>,
+): Promise<string[]> {
+  const testCasesDir = await tryGetDirectory(root, 'test-cases');
+  if (testCasesDir === null) return [];
+  const written: string[] = [];
+  for (const [slug, recording] of recordings) {
+    const dir = await tryGetDirectory(testCasesDir, slug);
+    if (dir === null) continue; // missing dir is loadRecordingsForQueue's problem
+    const existing = await readFileText(dir, 'recording.ts');
+    if (existing !== null) continue;
+    const helper = renderTestCaseModule(recording);
+    await writeFileToRepoFolder(root, `test-cases/${slug}/recording.ts`, helper);
+    written.push(slug);
+  }
+  return written;
+}
+
+/**
  * Save the Queue manifest AND render+write the Playwright spec alongside it.
- * Returns the two paths that were written so the UI can report them.
+ * Returns the paths written so the UI can report them.
  *
  * Two-file output keeps the manifest as the editable source of truth and
  * the spec as the regenerable file Playwright actually runs (per docs/10
  * § 4 "Queue artifact on disk"). The spec is overwritten on every Save —
  * the manifest is the editable artifact; never hand-edit the spec.
+ *
+ * v1.5.0: before rendering, ensures every referenced Test Case has a
+ * `recording.ts` helper module on disk (self-heals legacy pre-v1.5.0
+ * Test Cases that only have the inlined spec).
  */
 export async function saveQueueWithSpec(
   root: FileSystemDirectoryHandle,
   position: number,
   queue: Queue,
   authProfiles: AuthProfileList,
-): Promise<{ manifestPath: string; specPath: string }> {
+): Promise<{ manifestPath: string; specPath: string; healedHelpers: string[] }> {
   const recordings = await loadRecordingsForQueue(root, queue);
+  const healedHelpers = await ensureTestCaseHelpers(root, recordings);
   const specSource = renderQueueSpec({ queue, recordings, authProfiles });
   const manifestPath = await saveQueueManifest(root, position, queue);
   const specRelPath = `tests/${queueSpecFilename(position, queue.slug)}`;
   await writeFileToRepoFolder(root, specRelPath, specSource);
-  return { manifestPath, specPath: specRelPath };
+  return { manifestPath, specPath: specRelPath, healedHelpers };
 }

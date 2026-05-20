@@ -4,7 +4,8 @@ import {
   matchProfile,
   normalizeAxeResults,
   renderA11yReportMarkdown,
-  renderPlaywrightSpec,
+  renderTestCaseModule,
+  renderTestCaseSpec,
   resolveProfileHeaders,
 } from '@webspec/core/browser';
 import type { A11yReport, AuthProfile, WorkflowRecording } from '@webspec/core/browser';
@@ -247,11 +248,17 @@ export function App(): JSX.Element {
       return;
     }
     try {
-      const spec = renderPlaywrightSpec(recording);
+      // v1.5.0: each Test Case ships as TWO TS files. `recording.ts` is the
+      // importable helper module (exports `run({ page, context })`) — Queues
+      // consume it, the standalone spec consumes it. `recording.spec.ts` is
+      // the thin wrapper that calls run() inside one test() so the Test Case
+      // stays standalone-runnable.
+      const helperModule = renderTestCaseModule(recording);
+      const spec = renderTestCaseSpec(recording);
       const recordingJson = JSON.stringify(recording, null, 2);
 
       // v1.3.4: prefer the configured Test repo folder if available.
-      const repoResult = await trySaveToRepo(slug, spec, recordingJson);
+      const repoResult = await trySaveToRepo(slug, helperModule, spec, recordingJson);
       if (repoResult.kind === 'wrote') {
         setRecorder({
           kind: 'saved',
@@ -265,6 +272,7 @@ export function App(): JSX.Element {
       // Fallback: v1.2 Downloads flow. Per-test files overwrite (canonical
       // slug); parent playwright.config.ts is write-once via search history.
       const dir = `webspec/${slug}`;
+      await writeToWebspec(`${dir}/recording.ts`, helperModule, 'application/octet-stream');
       await writeToWebspec(`${dir}/recording.spec.ts`, spec, 'application/octet-stream');
       await writeToWebspec(`${dir}/recording.json`, recordingJson, 'application/json');
       await writeToWebspec(
@@ -597,6 +605,7 @@ export default defineConfig({
  */
 async function trySaveToRepo(
   slug: string,
+  helperModule: string,
   spec: string,
   recordingJson: string,
 ): Promise<{ kind: 'wrote'; folderName: string } | { kind: 'no-handle' } | { kind: 'denied' }> {
@@ -623,7 +632,13 @@ async function trySaveToRepo(
       ),
   });
 
+  // v1.5.0: write the helper module (recording.ts) alongside the thin spec
+  // wrapper. Queues import the helper; the spec wraps it for standalone
+  // runs. The per-test playwright.config.ts keeps the Test Case runnable in
+  // isolation; the repo-root config (from v1.4.2 bootstrap) is what teams
+  // actually run.
   const dir = `test-cases/${slug}`;
+  await writeFileToRepoFolder(handle, `${dir}/recording.ts`, helperModule);
   await writeFileToRepoFolder(handle, `${dir}/recording.spec.ts`, spec);
   await writeFileToRepoFolder(handle, `${dir}/recording.json`, recordingJson);
   await writeFileToRepoFolder(handle, `${dir}/playwright.config.ts`, PER_TEST_PLAYWRIGHT_CONFIG);

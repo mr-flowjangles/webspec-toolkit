@@ -206,11 +206,57 @@ A named-role registry (`analyst → TTIDUMWSUP`, `supervisor → SUPVCODE01` in 
 - **Test Case editing.** Re-record to update; no in-place editor.
 - **Queue-level assertions** beyond what each Test Case already asserts.
 
+## v1.5.0 — Reusable Test Cases (design locked, 2026-05-20)
+
+Closes v1.4's acknowledged duplication: Queue specs stop inlining Test Case bodies and start importing them. Single source of truth per Test Case.
+
+**File layout** under `<repo>/test-cases/<slug>/`:
+
+```
+recording.json          # raw WorkflowRecording (source of truth, unchanged)
+recording.ts            # NEW — exports `async function run({ page, context })` (helper module, the body)
+recording.spec.ts       # CHANGED — thin wrapper that imports `run`, applies recorded auth, calls it inside one test()
+playwright.config.ts    # per-test config (unchanged, makes the spec standalone-runnable)
+```
+
+The recording stays standalone-runnable (`recording.spec.ts` still passes against `npx playwright test`). The helper is the single source of truth — Queues consume it via import.
+
+**Helper signature.** `export async function run({ page, context }: { page: Page; context: BrowserContext }): Promise<void>`. Named export (more discoverable in editors than default). Body: `await page.goto(recording.startUrl)` + each `RecordedEvent` re-emitted via the existing `renderEvent` helper. Does NOT touch headers — auth is the caller's concern (the standalone spec sets them from `recording.auth`; Queue specs set them per step's resolved profile).
+
+**Queue renderer change.** Step bodies emit:
+
+```ts
+import { run as createLead } from '../test-cases/create-lead/recording.js';
+// ...
+test('Step 1 — create-lead (as ANALYST01)', async ({ page, context }) => {
+  await context.setExtraHTTPHeaders({ uid: 'ANALYST01' });
+  await createLead({ page, context });
+});
+```
+
+Iterations wrap the helper call, not the inlined events:
+
+```ts
+for (let i = 0; i < 100; i++) {
+  await createLead({ page, context });
+}
+```
+
+Imports are deduped at the top of the Queue spec — one `import` per unique Test Case slug, regardless of how many steps reference it. The local alias is a slug-derived camelCase identifier (e.g. `create-lead` → `createLead`).
+
+**Path resolution.** Queue specs live at `<repo>/tests/queue-N-{slug}.spec.ts`; Test Case helpers live at `<repo>/test-cases/{slug}/recording.ts`. The import path is always `../test-cases/{slug}/recording.js` (NodeNext / ESM extension — Playwright's TS loader resolves `.js` → `.ts` source).
+
+**Tradeoff acknowledged.** Imports add coupling: rename a Test Case slug in `chrome.storage.local` and existing Queue specs break until re-rendered. Mitigated by Queues re-rendering only at user Save (no implicit auto-regenerate; user always sees current truth before commit). Renaming is already explicitly post-MVP — Test Case "editing" is re-record only.
+
+**Migration / self-heal.** Existing Test Cases saved before v1.5.0 have `recording.spec.ts` (the old inlined shape) but no `recording.ts`. The Queue Save flow self-heals: before rendering, it scans the Queue's referenced slugs and writes `recording.ts` from `recording.json` for any missing helper. No standalone migration tool — saves and Queue renders fix the layout automatically. The popup's own Test Case save (post-v1.5.0) writes both `recording.ts` and the new `recording.spec.ts` shape.
+
+**Out of scope for v1.5.0.** No input/output wiring between Test Cases — the helper signature is fixed at `{ page, context }`. That's v1.5.1+. No slug rename UI; no Test Case in-place editor. No AI variation amplification — separate milestone.
+
 ## v1.5+ futures
 
-In rough priority order (final order earned by Rob's lived experience with v1.4):
+In rough priority order (final order earned by lived experience with v1.4 + v1.5):
 
-1. **Reusable Test Cases.** Each Test Case becomes an importable helper function: `import { createLead } from '../test-cases/create-lead'`. Queue specs become recipe files, not big inlined chunks. Edit `create-lead` once → every Queue using it gets the fix.
+1. **Reusable Test Cases.** ✅ Design locked (this doc, above) — implementation in v1.5.0.
 2. **Input/output wiring.** Test Cases declare their outputs (`createLead → { leadId }`) and inputs. The Queue composer wires them. Enables Queue 3-style "start at step 5 with a record passed from step 4."
 3. **AI variation amplification.** Same `LLMProvider` / `BedrockAdapter` seam used today for negative-scenario generation, extended to positive variations: "Here's `create-lead`. Generate 10 variants exercising every dropdown / radio / required-field combination." One Test Case → ten Queues.
 4. **CI surface.** Once a team repo exists with a Playwright config, GitHub Actions / similar runs queues directly. webspec involvement is zero. Probably a doc + a sample workflow file, not a build artifact.

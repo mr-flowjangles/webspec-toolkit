@@ -1,7 +1,8 @@
 /**
  * Golden tests for renderQueueSpec — Queue manifest + recording map →
- * `.spec.ts` source string. Pins the v1.4 queue renderer output shape
- * (test.describe.serial, per-step test(), iteration loops, header-switching).
+ * `.spec.ts` source string. Pins the v1.5.0 import-based queue renderer
+ * (imports `run` from each Test Case helper module, calls it inside
+ * test() blocks instead of inlining recorded events).
  */
 import { describe, expect, it } from 'vitest';
 import { renderQueueSpec } from '../../../src/render/queue/renderer.js';
@@ -14,9 +15,7 @@ import type { AuthProfile } from '../../../src/library/auth-profile.js';
 import type { Queue, QueueStep } from '../../../src/library/queue.js';
 
 // ---------------------------------------------------------------------------
-// Fixture helpers — shaped to look like the recorder's output without the
-// noise of a full DOM trace. Mirrors what `tests/render/e2e/renderer.test.ts`
-// uses so behavior stays consistent across renderers.
+// Fixture helpers
 // ---------------------------------------------------------------------------
 
 function roleSelector(role: string, name: string): HardenedSelector {
@@ -72,10 +71,6 @@ const UCM_DEV_PROFILE: AuthProfile = {
 };
 
 function step(testCase: string, runAs: string, iterations = 1): QueueStep {
-  // v1.4.0 contract: iterations is optional. The renderer only emits a for-loop
-  // when iterations > 1, so we omit the field for the default-1 case so the
-  // fixture matches the on-disk manifest shape (manifests drop the field when
-  // the user accepts the default).
   return iterations > 1 ? { testCase, runAs, iterations } : { testCase, runAs };
 }
 
@@ -125,6 +120,61 @@ describe('renderQueueSpec — scaffold', () => {
   });
 });
 
+describe('renderQueueSpec — imports', () => {
+  it('emits one import per unique Test Case slug with a camelCase alias', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        step('create-lead', 'ANALYST01'),
+        step('fill-details', 'ANALYST01'),
+      ]),
+      recordings: recordingMap([
+        ['create-lead', CREATE_LEAD],
+        ['fill-details', FILL_DETAILS],
+      ]),
+      authProfiles: [],
+    });
+    expect(out).toContain(
+      `import { run as createLead } from '../test-cases/create-lead/recording.js';`,
+    );
+    expect(out).toContain(
+      `import { run as fillDetails } from '../test-cases/fill-details/recording.js';`,
+    );
+  });
+
+  it('dedupes imports when a slug is used by multiple steps', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        step('create-lead', 'ANALYST01'),
+        step('create-lead', 'ANALYST01'),
+      ]),
+      recordings: recordingMap([['create-lead', CREATE_LEAD]]),
+      authProfiles: [],
+    });
+    const importMatches =
+      out.match(/import \{ run as createLead \}/g) ?? [];
+    expect(importMatches.length).toBe(1);
+  });
+
+  it('sorts imports alphabetically by slug for stable diffs', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        // Z first in step order, A second — imports should still be A then Z.
+        step('z-step', 'X'),
+        step('a-step', 'X'),
+      ]),
+      recordings: recordingMap([
+        ['z-step', recording('z-step', [])],
+        ['a-step', recording('a-step', [])],
+      ]),
+      authProfiles: [],
+    });
+    const idxA = out.indexOf("from '../test-cases/a-step/recording.js'");
+    const idxZ = out.indexOf("from '../test-cases/z-step/recording.js'");
+    expect(idxA).toBeGreaterThan(-1);
+    expect(idxA).toBeLessThan(idxZ);
+  });
+});
+
 describe('renderQueueSpec — single step', () => {
   const out = renderQueueSpec({
     queue: queue([step('create-lead', 'ANALYST01')]),
@@ -134,21 +184,14 @@ describe('renderQueueSpec — single step', () => {
 
   it('emits one test() block named with step number, testCase, and runAs', () => {
     expect(out).toContain(
-      `test("Step 1 — create-lead (as ANALYST01)", async ({ page }) => {`,
+      `test("Step 1 — create-lead (as ANALYST01)", async ({ page, context }) => {`,
     );
   });
 
-  it('inlines the recording goto + actions', () => {
-    expect(out).toContain(
-      `await page.goto('http://app.ucm-dev.cmscloud.local/ucmnexgen/trackers/my-work/tasks');`,
-    );
-    expect(out).toContain(
-      `await page.getByRole('button', { name: 'Add Lead' }).click();`,
-    );
-  });
-
-  it('inlines the recording description as a comment in the step body', () => {
-    expect(out).toContain(`// Recording for create-lead.`);
+  it('calls the imported helper instead of inlining events', () => {
+    expect(out).toContain('await createLead({ page, context });');
+    expect(out).not.toContain('page.goto');
+    expect(out).not.toContain('getByRole');
   });
 
   it('omits setExtraHTTPHeaders when no auth profile matches', () => {
@@ -180,21 +223,20 @@ describe('renderQueueSpec — two-step happy path', () => {
     expect(out).toMatchInlineSnapshot(`
       "// Queue: Test Queue
       import { expect, test } from '@playwright/test';
+      import { run as createLead } from '../test-cases/create-lead/recording.js';
+      import { run as fillDetails } from '../test-cases/fill-details/recording.js';
+      void expect;
 
       test.describe.serial('Test Queue', () => {
         test("Step 1 — create-lead (as ANALYST01)", async ({ page, context }) => {
           await context.setExtraHTTPHeaders({
             'uid': 'ANALYST01',
           });
-          // Recording for create-lead.
-          await page.goto('http://app.ucm-dev.cmscloud.local/ucmnexgen/trackers/my-work/tasks');
-          await page.getByRole('button', { name: 'Add Lead' }).click();
+          await createLead({ page, context });
         });
 
-        test("Step 2 — fill-details (as ANALYST01)", async ({ page }) => {
-          // Recording for fill-details.
-          await page.goto('http://app.ucm-dev.cmscloud.local/ucmnexgen/trackers/my-work/tasks');
-          await page.getByRole('textbox', { name: 'First Name' }).fill('Jane');
+        test("Step 2 — fill-details (as ANALYST01)", async ({ page, context }) => {
+          await fillDetails({ page, context });
         });
       });
       "
@@ -237,7 +279,7 @@ describe('renderQueueSpec — header switching', () => {
     expect(out).toContain(`'uid': 'SUPERVISOR99',`);
   });
 
-  it('adds the context fixture only on steps that emit setExtraHTTPHeaders', () => {
+  it('always destructures { page, context } since the helper needs both', () => {
     const out = renderQueueSpec({
       queue: queue([
         step('create-lead', 'ANALYST01'),
@@ -249,17 +291,13 @@ describe('renderQueueSpec — header switching', () => {
       ]),
       authProfiles: [UCM_DEV_PROFILE],
     });
-    expect(out).toContain(
-      `test("Step 1 — create-lead (as ANALYST01)", async ({ page, context }) => {`,
-    );
-    expect(out).toContain(
-      `test("Step 2 — fill-details (as ANALYST01)", async ({ page }) => {`,
-    );
+    const matches = out.match(/async \(\{ page, context \}\)/g) ?? [];
+    expect(matches.length).toBe(2);
   });
 });
 
 describe('renderQueueSpec — iterations', () => {
-  it('wraps the step body in a for loop when iterations > 1', () => {
+  it('wraps the helper call in a for loop when iterations > 1', () => {
     const out = renderQueueSpec({
       queue: queue([step('create-lead', 'ANALYST01', 3)]),
       recordings: recordingMap([['create-lead', CREATE_LEAD]]),
@@ -267,14 +305,7 @@ describe('renderQueueSpec — iterations', () => {
     });
     expect(out).toContain(`for (let i = 0; i < 3; i++) {`);
     expect(out).toContain(`"Step 1 — create-lead (as ANALYST01) × 3"`);
-    // Goto + action live inside the loop.
-    const idxFor = out.indexOf('for (let i = 0;');
-    const idxGoto = out.indexOf('await page.goto');
-    const idxAction = out.indexOf(`getByRole('button', { name: 'Add Lead' })`);
-    const idxLoopClose = out.indexOf('    }', idxFor);
-    expect(idxGoto).toBeGreaterThan(idxFor);
-    expect(idxAction).toBeGreaterThan(idxGoto);
-    expect(idxLoopClose).toBeGreaterThan(idxAction);
+    expect(out).toContain(`      await createLead({ page, context });`);
   });
 
   it('does not wrap when iterations is 1', () => {
@@ -315,7 +346,9 @@ describe('renderQueueSpec — inputs', () => {
       recordings: recordingMap([['create-lead', CREATE_LEAD]]),
       authProfiles: [],
     });
-    expect(out).not.toContain(`const `);
+    // Only the inputs-only `const ...` lines would appear in the body;
+    // confirm none made it through.
+    expect(out).not.toMatch(/^\s+const \w+ =/m);
   });
 });
 

@@ -12,13 +12,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ensureTestCaseHelpers,
   listQueues,
   listTestCases,
+  loadRecordingsForQueue,
   nextQueuePosition,
   saveQueueManifest,
+  saveQueueWithSpec,
   type StoredQueue,
 } from '../src/shared/queues.js';
-import type { Queue } from '@webspec/core/browser';
+import type { Queue, WorkflowRecording } from '@webspec/core/browser';
 
 interface FakeWritable {
   written: string[];
@@ -297,5 +300,128 @@ describe('saveQueueManifest', () => {
     const file = root.childDirs.get('tests')?.childFiles.get('queue-1-seed-leads.json');
     const parsed = JSON.parse(file!.content);
     expect(parsed.name).toBe('Seed Leads (v2)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v1.5.0 — Test Case helper self-heal at Queue render time.
+// ---------------------------------------------------------------------------
+
+const SAMPLE_RECORDING: WorkflowRecording = {
+  name: 'Create Lead',
+  description: 'Creates a lead.',
+  runAs: null,
+  auth: null,
+  startedAt: '2026-05-20T00:00:00.000Z',
+  endedAt: '2026-05-20T00:00:05.000Z',
+  startUrl: 'http://app.ucm-dev.cmscloud.local/x',
+  events: [
+    {
+      t: 100,
+      kind: 'click',
+      selector: { preferred: 'role=button[name="Go"]', strategy: 'role', fallbacks: [] },
+    },
+  ],
+  network: [],
+  framework: 'playwright',
+};
+
+describe('ensureTestCaseHelpers', () => {
+  it('writes recording.ts when missing', async () => {
+    const root = makeFakeDir('repo');
+    const tc = await root.getDirectoryHandle('test-cases', { create: true });
+    await tc.getDirectoryHandle('create-lead', { create: true });
+
+    const recordings = new Map([['create-lead', SAMPLE_RECORDING]]);
+    const written = await ensureTestCaseHelpers(asHandle(root), recordings);
+
+    expect(written).toEqual(['create-lead']);
+    const dir = root.childDirs.get('test-cases')?.childDirs.get('create-lead');
+    const helper = dir?.childFiles.get('recording.ts');
+    expect(helper).toBeDefined();
+    expect(helper!.content).toContain('export async function run');
+    expect(helper!.content).toContain('@playwright/test');
+  });
+
+  it('does NOT overwrite an existing recording.ts (the user may have edited it)', async () => {
+    const root = makeFakeDir('repo');
+    const tc = await root.getDirectoryHandle('test-cases', { create: true });
+    const dir = await tc.getDirectoryHandle('create-lead', { create: true });
+    dir.childFiles.set(
+      'recording.ts',
+      makeFakeFile('recording.ts', '// hand-edited\nexport async function run() {}'),
+    );
+
+    const recordings = new Map([['create-lead', SAMPLE_RECORDING]]);
+    const written = await ensureTestCaseHelpers(asHandle(root), recordings);
+
+    expect(written).toEqual([]);
+    const helper = dir.childFiles.get('recording.ts');
+    expect(helper!.content).toBe('// hand-edited\nexport async function run() {}');
+  });
+
+  it('returns an empty list when test-cases/ does not exist (loadRecordingsForQueue will throw first)', async () => {
+    const root = makeFakeDir('repo');
+    const recordings = new Map([['create-lead', SAMPLE_RECORDING]]);
+    expect(await ensureTestCaseHelpers(asHandle(root), recordings)).toEqual([]);
+  });
+});
+
+describe('loadRecordingsForQueue', () => {
+  it('returns recordings for every referenced slug', async () => {
+    const root = makeFakeDir('repo');
+    const tc = await root.getDirectoryHandle('test-cases', { create: true });
+    const dir = await tc.getDirectoryHandle('create-lead', { create: true });
+    dir.childFiles.set(
+      'recording.json',
+      makeFakeFile('recording.json', JSON.stringify(SAMPLE_RECORDING)),
+    );
+
+    const queue: Queue = {
+      ...VALID_QUEUE,
+      steps: [{ testCase: 'create-lead', runAs: 'X' }],
+    };
+    const recordings = await loadRecordingsForQueue(asHandle(root), queue);
+    expect(recordings.size).toBe(1);
+    expect(recordings.get('create-lead')?.name).toBe('Create Lead');
+  });
+
+  it('throws when a referenced Test Case has no recording.json', async () => {
+    const root = makeFakeDir('repo');
+    const tc = await root.getDirectoryHandle('test-cases', { create: true });
+    await tc.getDirectoryHandle('create-lead', { create: true }); // dir but no file
+
+    const queue: Queue = {
+      ...VALID_QUEUE,
+      steps: [{ testCase: 'create-lead', runAs: 'X' }],
+    };
+    await expect(loadRecordingsForQueue(asHandle(root), queue)).rejects.toThrow(/no recording\.json/);
+  });
+});
+
+describe('saveQueueWithSpec — self-heal integration', () => {
+  it('writes the spec, the manifest, AND the missing helper module', async () => {
+    const root = makeFakeDir('repo');
+    const tc = await root.getDirectoryHandle('test-cases', { create: true });
+    const dir = await tc.getDirectoryHandle('seed-leads', { create: true });
+    dir.childFiles.set(
+      'recording.json',
+      makeFakeFile('recording.json', JSON.stringify(SAMPLE_RECORDING)),
+    );
+
+    const queue: Queue = { ...VALID_QUEUE, steps: [{ testCase: 'seed-leads', runAs: 'X' }] };
+    const result = await saveQueueWithSpec(asHandle(root), 1, queue, []);
+
+    expect(result.manifestPath).toBe('tests/queue-1-seed-leads.json');
+    expect(result.specPath).toBe('tests/queue-1-seed-leads.spec.ts');
+    expect(result.healedHelpers).toEqual(['seed-leads']);
+
+    const spec = root.childDirs.get('tests')?.childFiles.get('queue-1-seed-leads.spec.ts');
+    expect(spec).toBeDefined();
+    expect(spec!.content).toContain(`import { run as seedLeads } from '../test-cases/seed-leads/recording.js';`);
+
+    const helper = dir.childFiles.get('recording.ts');
+    expect(helper).toBeDefined();
+    expect(helper!.content).toContain('export async function run');
   });
 });

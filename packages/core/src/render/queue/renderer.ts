@@ -1,22 +1,44 @@
 /**
- * QueueRenderer — pure function: Queue + recordings + auth profiles
- * → Playwright `.spec.ts` source for the whole queue.
+ * QueueRenderer — pure function: Queue → Playwright `.spec.ts` source for the
+ * whole queue.
  *
- * v1.4 MVP renderer. Composes one `test.describe.serial(...)` per queue with
- * one `test()` per step (clear failure attribution; the describe.serial
- * preserves order and shares the browser context across steps). Test Case
- * bodies are inlined verbatim — no reuse yet (v1.5+ activates Test Cases as
- * importable helpers). Iteration loops wrap a step's body when
- * `step.iterations > 1`.
+ * **v1.5.0 shape (import-based).** Step bodies no longer inline the recorded
+ * events. Each step imports `run` from the corresponding Test Case helper
+ * module (`<repo>/test-cases/<slug>/recording.ts` — see
+ * `renderTestCaseModule`) under a slug-derived alias and calls it inside
+ * `test()`. Edit the Test Case once → every Queue using it gets the fix.
  *
- * Header-switching semantics: each step resolves its auth headers via
+ * Layout produced:
+ *
+ *     // Queue: <name>
+ *     import { expect, test } from '@playwright/test';
+ *     import { run as createLead } from '../test-cases/create-lead/recording.js';
+ *     import { run as fillDetails } from '../test-cases/fill-details/recording.js';
+ *
+ *     test.describe.serial('<name>', () => {
+ *       const record_id = '...';            // queue.inputs[] as constants
+ *
+ *       test('Step 1 — create-lead (as ANALYST01)', async ({ page, context }) => {
+ *         await context.setExtraHTTPHeaders({ uid: 'ANALYST01' });
+ *         await createLead({ page, context });
+ *       });
+ *
+ *       test('Step 2 — fill-details (as ANALYST01) × 3', async ({ page, context }) => {
+ *         for (let i = 0; i < 3; i++) {
+ *           await fillDetails({ page, context });
+ *         }
+ *       });
+ *     });
+ *
+ * Header-switching semantics: each step resolves auth via
  * `matchProfile(authProfiles, recording.startUrl)` + `resolveProfileHeaders`,
- * then emits `await context.setExtraHTTPHeaders({ ... })` only when the
- * resolved headers differ from the prior step's. The first step with auth
- * always emits a fresh call.
+ * and emits `setExtraHTTPHeaders` only when the resolved headers differ
+ * from the prior step's. The renderer still needs each step's
+ * `WorkflowRecording` because `recording.startUrl` drives the profile
+ * match — even though the events themselves now live in the imported
+ * helper module, not in the spec.
  *
- * See `docs/10-team-shareability.md` § "How a Queue renders to Playwright"
- * for the locked output shape.
+ * See `docs/10-team-shareability.md` § "v1.5.0 — Reusable Test Cases".
  */
 import type { WorkflowRecording } from '../../types/analysis.js';
 import type { Queue, QueueStep } from '../../library/queue.js';
@@ -25,13 +47,16 @@ import {
   resolveProfileHeaders,
   type AuthProfileList,
 } from '../../library/auth-profile.js';
-import { renderEvent } from '../e2e/renderer.js';
+import { slugToIdentifier } from '../../library/slug.js';
 
 export interface RenderQueueSpecArgs {
   queue: Queue;
   /**
    * Map of `QueueStep.testCase` slug → the recorded `WorkflowRecording` for
-   * that Test Case. Throws if a step references a slug that isn't present.
+   * that Test Case. Required for the recording's `startUrl` (drives auth
+   * profile matching) — the events themselves aren't read by the renderer
+   * anymore (v1.5.0+); they live in the helper module the spec imports.
+   * Throws if a step references a slug that isn't present.
    */
   recordings: Map<string, WorkflowRecording>;
   authProfiles: AuthProfileList;
@@ -40,15 +65,39 @@ export interface RenderQueueSpecArgs {
 export function renderQueueSpec(args: RenderQueueSpecArgs): string {
   const { queue, recordings, authProfiles } = args;
 
+  // First pass: validate every step's slug has a recording, and build the
+  // dedup'd map of slug → identifier for the import block.
+  const slugToAlias = new Map<string, string>();
+  queue.steps.forEach((step, idx) => {
+    if (!recordings.has(step.testCase)) {
+      throw new Error(
+        `renderQueueSpec: no recording supplied for step ${idx + 1} (testCase='${step.testCase}'). ` +
+          `Make sure the recordings map contains an entry for every step.testCase slug in the queue.`,
+      );
+    }
+    if (!slugToAlias.has(step.testCase)) {
+      slugToAlias.set(step.testCase, slugToIdentifier(step.testCase));
+    }
+  });
+
   const lines: string[] = [];
   lines.push(`// Queue: ${queue.name}`);
   lines.push("import { expect, test } from '@playwright/test';");
+  // Stable import order — sorted by slug so a Queue's spec stays
+  // diff-friendly across resaves regardless of step ordering.
+  const sortedSlugs = [...slugToAlias.keys()].sort();
+  for (const slug of sortedSlugs) {
+    const alias = slugToAlias.get(slug)!;
+    lines.push(`import { run as ${alias} } from '../test-cases/${slug}/recording.js';`);
+  }
+  // expect is re-exported so a developer can hand-edit assertions around
+  // the helper calls without an extra import. Mark intentionally unused.
+  lines.push('void expect;');
   lines.push('');
   lines.push(`test.describe.serial(${quote(queue.name)}, () => {`);
 
-  // Inputs become constants at the top of the describe block. v1.4 MVP only
-  // declares them; the inlined Test Case bodies don't reference them yet
-  // (reuse + wiring is a v1.5+ concern).
+  // Inputs become constants at the top of the describe block. v1.5.0 still
+  // only declares them — input/output wiring is v1.5.1+.
   if (queue.inputs.length > 0) {
     for (const input of queue.inputs) {
       lines.push(`  const ${input.name} = ${quote(input.value)};`);
@@ -57,63 +106,38 @@ export function renderQueueSpec(args: RenderQueueSpecArgs): string {
   }
 
   // Header-switching: compare resolved headers across step boundaries so we
-  // only emit a setExtraHTTPHeaders call when they actually change. Serialised
-  // to a canonical JSON form so { a:1, b:2 } and { b:2, a:1 } compare equal.
+  // only emit a setExtraHTTPHeaders call when they actually change.
   let prevHeadersKey: string | null = null;
 
   queue.steps.forEach((step, idx) => {
-    const recording = recordings.get(step.testCase);
-    if (recording === undefined) {
-      throw new Error(
-        `renderQueueSpec: no recording supplied for step ${idx + 1} (testCase='${step.testCase}'). ` +
-          `Make sure the recordings map contains an entry for every step.testCase slug in the queue.`,
-      );
-    }
-
+    const recording = recordings.get(step.testCase)!;
+    const alias = slugToAlias.get(step.testCase)!;
     const headers = resolveStepHeaders(authProfiles, recording, step);
-    const headersChanged =
-      headers !== null && canonicalKey(headers) !== prevHeadersKey;
-    const needsContext = headersChanged;
+    const headersChanged = headers !== null && canonicalKey(headers) !== prevHeadersKey;
 
     if (idx > 0) lines.push('');
-    const fixtures = needsContext ? '{ page, context }' : '{ page }';
     const title = stepTitle(idx, step);
-    lines.push(`  test(${quote(title)}, async (${fixtures}) => {`);
-
-    const body: string[] = [];
+    lines.push(`  test(${quote(title)}, async ({ page, context }) => {`);
 
     if (headersChanged && headers !== null) {
-      body.push(`await context.setExtraHTTPHeaders({`);
+      lines.push(`    await context.setExtraHTTPHeaders({`);
       for (const [name, value] of Object.entries(headers)) {
-        body.push(`  ${quote(name)}: ${quote(value)},`);
+        lines.push(`      ${quote(name)}: ${quote(value)},`);
       }
-      body.push(`});`);
-    }
-
-    // Inline the recording: description as a comment, goto(startUrl), then
-    // each captured event re-emitted via the e2e renderer's helper.
-    for (const descLine of recording.description.split('\n')) {
-      body.push(`// ${descLine}`);
-    }
-    body.push(`await page.goto(${quote(recording.startUrl)});`);
-    for (const event of recording.events) {
-      for (const line of renderEvent(event)) body.push(line);
+      lines.push(`    });`);
     }
 
     const iterations = step.iterations ?? 1;
     if (iterations > 1) {
       lines.push(`    for (let i = 0; i < ${iterations}; i++) {`);
-      for (const line of body) lines.push(`      ${line}`);
+      lines.push(`      await ${alias}({ page, context });`);
       lines.push(`    }`);
     } else {
-      for (const line of body) lines.push(`    ${line}`);
+      lines.push(`    await ${alias}({ page, context });`);
     }
 
     lines.push('  });');
 
-    // Update tracker. If this step had no resolved headers at all, leave the
-    // tracker as-is — a downstream step with the same null-headers state will
-    // not re-emit either. If it had resolved headers, remember them.
     if (headers !== null) {
       prevHeadersKey = canonicalKey(headers);
     }
@@ -130,11 +154,6 @@ export function renderQueueSpec(args: RenderQueueSpecArgs): string {
  * the recording's `startUrl` (no auth to inject); otherwise the resolved
  * `{ header: value }` record from `resolveProfileHeaders` substituted with
  * the step's `runAs`.
- *
- * Note: this matches against the *recording's* startUrl, mirroring the v1.3
- * extension which matches at record-start time. The step's `runAs` then drives
- * the `${runAs}` substitution, which can differ per step (analyst on step 1,
- * supervisor on step 5, etc.).
  */
 function resolveStepHeaders(
   authProfiles: AuthProfileList,
@@ -160,13 +179,7 @@ function canonicalKey(headers: Record<string, string>): string {
   return JSON.stringify(keys.map((k) => [k, headers[k]]));
 }
 
-// ---------------------------------------------------------------------------
-// String literal quoting — kept in sync with `render/e2e/renderer.ts`. Both
-// renderers want the same Playwright-Codegen-style single-quote-default,
-// JSON.stringify fallback. Duplicated rather than re-exported to keep the
-// e2e renderer's surface narrow.
-// ---------------------------------------------------------------------------
-
+// String literal quoting — same rules as the other renderers.
 function quote(value: string): string {
   if (/^[\x20-\x26\x28-\x5b\x5d-\x7e]*$/.test(value) && !value.includes("'")) {
     return `'${value}'`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveSlug } from '../../src/library/slug.js';
+import { deriveSlug, slugToIdentifier } from '../../src/library/slug.js';
 
 describe('deriveSlug', () => {
   it('lowercases', () => {
@@ -43,5 +43,32 @@ describe('deriveSlug', () => {
     expect(deriveSlug(null)).toBe('');
     // @ts-expect-error — verifying defensive guard
     expect(deriveSlug(undefined)).toBe('');
+  });
+});
+
+describe('slugToIdentifier', () => {
+  it('converts kebab-case to camelCase', () => {
+    expect(slugToIdentifier('create-lead')).toBe('createLead');
+    expect(slugToIdentifier('approve-lead-and-close')).toBe('approveLeadAndClose');
+  });
+
+  it('leaves a single-word slug as-is (already valid identifier)', () => {
+    expect(slugToIdentifier('login')).toBe('login');
+  });
+
+  it('preserves digits in the middle and tail', () => {
+    expect(slugToIdentifier('step-2-fill')).toBe('step2Fill');
+  });
+
+  it('prefixes with _ when the slug starts with a digit', () => {
+    expect(slugToIdentifier('1-step')).toBe('_1Step');
+  });
+
+  it('returns _ for an empty slug (defensive)', () => {
+    expect(slugToIdentifier('')).toBe('_');
+  });
+
+  it('handles slugs with empty segments (e.g. from trailing dash artifacts)', () => {
+    expect(slugToIdentifier('create--lead')).toBe('createLead');
   });
 });
