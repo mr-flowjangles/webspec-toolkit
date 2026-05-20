@@ -29,11 +29,22 @@ v1 ships a **browser-based shift-left companion**: a Chrome extension that recor
 - **M7 — VS Code extension.** Deferred to post-v1. Browser-first means browser-only in v1.
 - **M8 — Second LLM adapter + parity test.** Deferred. The `LLMProvider` seam is proven structurally; adding a second adapter is post-v1 unless a customer-procurement constraint forces it.
 
-### Post-v1 stack (designed in `docs/08-test-library.md`, not yet implemented)
+### Post-v1 stack
 
-- **v1.2 — Test Library.** Per-test slug folder under `~/Downloads/webspec/<slug>/`, each containing `recording.spec.ts` + `recording.json` + a per-test `playwright.config.ts`. A parent `~/Downloads/webspec/playwright.config.ts` is written-once so `playwright test --ui` discovers every saved test. Naming form gains an optional `runAs` field (captured-but-not-yet-rendered). The extension's review-panel "Download" becomes "Save" (writes the slug folder). New `make run-tests` shortcut launches Playwright UI against the parent config — **that is the library + execution surface; we do not build an in-extension list.**
-- **v1.3 — Auth Injection.** `runAs` becomes functional. New `webspec.config.ts` (in the user's repo) defines the auth mode — defaults to header injection (`mode: 'headers'`, ModHeader-equivalent) emitting `context.setExtraHTTPHeaders({ ... })` with `${username}` substituted from `recording.runAs`. Also supports `cookie`, `url`, and `storageState` modes. Secrets via `${env.NAME}` interpolation; never in the recording.
-- **v1.4 — Queues + Team Shareability** (supersedes the original "Suites" design). Authoritative spec: `docs/10-team-shareability.md`. Recordings become reusable **Test Cases**; **Queues** are ordered compositions with per-step role, optional `inputs`, and `iterations` (e.g. iterations: 100 to bulk-seed records). One Queue → one `.spec.ts` (`test.describe.serial` + `for` loop + role-switch `setExtraHTTPHeaders` at step boundaries) shipped to a per-app team git repo (e.g. `ucm-tests`). Queue composition is an **extension** action (a new compose-queue UI), not a Makefile/CLI one — the original "extension stays a recorder" stance is dropped because composition is an authoring activity. MVP inlines Test Case bodies into each Queue spec; reuse + AI variation amplification land in v1.5+.
+**Shipped:**
+
+- ✅ **v1.2 — Test Library.** Per-test slug folder under `~/Downloads/webspec/<slug>/`, each containing `recording.spec.ts` + `recording.json` + a per-test `playwright.config.ts`. A parent `~/Downloads/webspec/playwright.config.ts` is written-once so `playwright test --ui` discovers every saved test. Naming form gains an optional `runAs` field. The extension's review-panel "Download" becomes "Save". New `make run-tests` shortcut launches Playwright UI against the parent config — **that is the library + execution surface; we do not build an in-extension list.** Designed in `docs/08-test-library.md`. Shipped at **v1.2.0**.
+- ✅ **v1.3 — Auth Injection (Domain-Aware Auth Profiles).** Settings tab managing `AuthProfile`s — name + URL glob + N header rows with `${runAs}` substitution — stored in `chrome.storage.local`. Popup matches the active tab URL at record-start; resolved headers bake into `WorkflowRecording.auth` and emit as `await context.setExtraHTTPHeaders({ ... })` in the rendered spec. Designed in `docs/08-test-library.md`. Shipped at **v1.3.0**. Repo-folder picker (Settings → General) shipped at **v1.3.3**; Test Case Saves landing in `<repo>/test-cases/<slug>/` shipped at **v1.3.4**.
+- ✅ **v1.4 — Queues + Team Shareability** (supersedes the original "Suites" design). Recordings become reusable **Test Cases**; **Queues** are ordered compositions with per-step `runAs`, optional `inputs`, and `iterations`. One Queue → one `.spec.ts` (`test.describe.serial` + `for` loop + role-switch `setExtraHTTPHeaders` at step boundaries) shipped to a per-app team git repo. Queue composition is an **extension** action (Settings → Queues), not a Makefile/CLI one. MVP inlines Test Case bodies into each Queue spec. Authoritative spec: `docs/10-team-shareability.md`. Shipped at **v1.4.0** (composer + manifest), **v1.4.1** (renderer), **v1.4.2** (repo bootstrap files). Reuse + AI variation amplification land in v1.5+.
+
+**Next — v1.5+ (ranked, final order earned by lived experience with v1.4):**
+
+1. **Reusable Test Cases.** Each Test Case becomes an importable helper: `import { createLead } from '../test-cases/create-lead'`. Queue specs become recipe files, not big inlined chunks. Edit `create-lead` once → every Queue using it gets the fix.
+2. **Input/output wiring.** Test Cases declare outputs (`createLead → { leadId }`) and Queues wire them between steps. Needs #1 first.
+3. **AI variation amplification.** Same `LLMProvider` / `BedrockAdapter` seam, extended to positive variations: one Test Case → ten Queue variants exercising dropdown / radio / required-field combinations.
+4. **CI surface.** Sample GitHub Actions workflow + a doc. Smallest; webspec involvement is zero.
+
+See `docs/10-team-shareability.md` § "v1.5+ futures" for the rationale on ordering.
 
 ---
 
