@@ -1,5 +1,76 @@
 # v1.5
 
+## v1.5.1 — CI Surface (2026-05-20)
+
+### Problem
+
+v1.4 + v1.5.0 made the Test repo "team-runnable" in shape (`npm install && npm test` works once a teammate clones), but no team actually runs tests by manually pulling and typing commands. The natural surface is CI — push to `main` or open a PR and the tests just run. `docs/10` § "v1.5+ futures" had this as #4 ("doc + a sample workflow file, not a build artifact") and it's the smallest unit between the current state and "the team is actually using this."
+
+### Solution
+
+A fifth scaffold file in the v1.4.2 bootstrap set: `.github/workflows/playwright.yml`. Same `BOOTSTRAP_*` template pattern, same `ensureBootstrap` confirmed-write flow.
+
+**Workflow shape** (`BOOTSTRAP_GITHUB_WORKFLOW` in `packages/chrome-extension/src/shared/bootstrap.ts`):
+
+- Triggers: `push` + `pull_request` to `main`, plus `workflow_dispatch` for manual reruns.
+- Single `ubuntu-latest` job, 30-min timeout.
+- `actions/checkout@v4` → `actions/setup-node@v4` (Node 20) → `npm ci` → `npx playwright install --with-deps chromium` → `npm test`.
+- `actions/upload-artifact@v4` with `if: always()` uploads the Playwright HTML report (`playwright-report/`) for 14 days, regardless of pass/fail. A failed CI run is debuggable from the Actions tab without rerunning locally.
+- **Chromium only.** Firefox + WebKit add ~10 min and aren't part of v1's golden-path mission. The matrix-build option is banked for v1.7+.
+
+**`ensureBootstrap` now writes a fifth file.** The `.github/workflows/` intermediate directory is created on the fly by `writeFileToRepoFolder` (the v1.3.4 helper handles nested directory creation already).
+
+**Confirm prompt copy updated.** Both save sites (popup `trySaveToRepo` and `QueuesPanel persist`) now list five files in the confirmation: `package.json, playwright.config.ts, .gitignore, README.md, and .github/workflows/playwright.yml`. No change to when the prompt fires (still gated on `needsBootstrap`, still keyed off the absence of `package.json` at repo root).
+
+**README CI section.** `BOOTSTRAP_README` gains a `## CI` section that:
+
+- Describes what the workflow does (runs on push + PR to `main`, plus on-demand) and how to read the report artifact.
+- Calls out the secrets caveat explicitly — recorded auth headers are committed in `recording.json` and in the `setExtraHTTPHeaders` calls in the rendered specs. The caveat documents the two options for credential-bearing recordings: hand-edit the workflow / specs to use `${{ secrets.NAME }}` references and add the secret in GitHub, OR keep CI scoped to a sandbox / synthetic-data environment.
+- Flags that production credentials should NEVER be committed and that an automated "secrets-aware rewriter" is on the post-v1.5 roadmap.
+
+**Out of scope (v1.6+).** No secret rewriting — the workflow runs recordings as-is. No matrix builds. No incremental "run only changed Queues." No GitHub Enterprise variant — the toolkit's standing rule is `github.com` only.
+
+**Re-scaffold caveat.** `needsBootstrap` still keys off `package.json`. A repo bootstrapped pre-v1.5.1 (has `package.json`, no workflow) won't get the workflow auto-added on the next save — same migration model as the rest of the bootstrap set. Documented in `docs/10` § "v1.5.1 — CI Surface" → "Re-scaffold semantics."
+
+**Design captured.** `docs/10-team-shareability.md` gained a "v1.5.1 — CI Surface (design locked, 2026-05-20)" section above the futures list. The futures list moved CI to ✅ and demoted Input/output wiring + AI variation amplification one slot each. A new bullet 5 records the deferred secrets-aware rewriter idea.
+
+### New
+
+- `BOOTSTRAP_GITHUB_WORKFLOW` template constant in `packages/chrome-extension/src/shared/bootstrap.ts` — the Playwright Actions workflow.
+- `BOOTSTRAP_README` gains a `## CI` section (workflow description + secrets caveat).
+- `packages/chrome-extension/tests/bootstrap.test.ts` gains 2 template-content tests (README CI section, workflow shape — checkout v4, setup-node v4, Node 20, npm ci, playwright install chromium, upload-artifact, `if: always()`).
+- `docs/10-team-shareability.md` § "v1.5.1 — CI Surface (design locked, 2026-05-20)".
+
+Total tests: 381/381 passing (+2 over v1.5.0).
+
+### Changed
+
+- `packages/chrome-extension/src/shared/bootstrap.ts` — `ensureBootstrap` writes a fifth file at `.github/workflows/playwright.yml`.
+- `packages/chrome-extension/src/popup/App.tsx` + `packages/chrome-extension/src/settings/QueuesPanel.tsx` — confirm prompt lists five files instead of four.
+- `packages/chrome-extension/tests/bootstrap.test.ts` — `ensureBootstrap` "writes all" test renamed and updated to assert five files (four at root + nested workflow); "matches template constants" test asserts the workflow contents too.
+- `docs/10-team-shareability.md` § "v1.5+ futures" — CI surface promoted to ✅ shipped; secrets-aware rewriter added as a new line item.
+
+### Fixed
+
+- N/A (additive).
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docs/10-team-shareability.md` | New v1.5.1 design section; updated futures list. |
+| `packages/chrome-extension/src/shared/bootstrap.ts` | Added `BOOTSTRAP_GITHUB_WORKFLOW`; `ensureBootstrap` writes 5 files; README updated with CI section. |
+| `packages/chrome-extension/src/popup/App.tsx` | Confirm prompt mentions 5 files. |
+| `packages/chrome-extension/src/settings/QueuesPanel.tsx` | Same. |
+| `packages/chrome-extension/tests/bootstrap.test.ts` | Updated for 5-file scaffold; added 2 new template tests. |
+| `Versions/v1/v1.5/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- Manual verification carries forward: fresh empty folder → save → 5 files appear (including `.github/workflows/playwright.yml`); push the repo to GitHub → Actions tab shows the workflow running and uploading the report.
+- The workflow assumes the repo is on `github.com` (the toolkit's standing rule). A GitHub Enterprise variant isn't a planned feature.
+- Pre-v1.5.1 repos won't auto-add the workflow on next save (no signal — `package.json` exists). Workaround: delete `package.json` and re-trigger a save, or copy the workflow from a fresh scaffold. Banked for the "secrets-aware rewriter" milestone, which will need a broader re-scaffold story anyway.
+
 ## v1.5.0 — Reusable Test Cases (2026-05-20)
 
 ### Problem
