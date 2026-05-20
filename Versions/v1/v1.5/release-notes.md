@@ -1,5 +1,73 @@
 # v1.5
 
+## v1.5.3 — Integration Tests for v1.5 Renderers (2026-05-20)
+
+### Problem
+
+The v1.5.0 helper-module renderer + the rewritten Queue renderer were covered by unit tests (snapshots of the emitted strings, schema validation, error cases), but nothing actually compiled and ran the generated TypeScript. A typo in the renderer that produced syntactically-broken code would have passed every existing test and only surfaced when a user ran `npx playwright test` against the rendered output. The existing M6 integration test (`render-and-run.integration.test.ts`) closes that loop, but only for the old v0.7.0 inline path (`renderPlaywrightSpec`) — not for the new v1.5 surfaces.
+
+### Solution
+
+New `packages/cli/tests/integration/render-v1-5-helpers.integration.test.ts` with three integration tests that render the v1.5 outputs to a temp directory, lay them out in the exact on-disk shape the extension produces, and run `npx playwright test` against them:
+
+1. **Test Case helper-module path.** `renderTestCaseModule` writes `recording.ts`; `renderTestCaseSpec` writes the thin `recording.spec.ts` wrapper that imports `run` from `./recording.js`. Runs against the `form.html` fixture from M6. Confirms the generated module compiles, the spec resolves the import (Playwright TS loader handles `.js` → `.ts`), and the recorded events execute.
+2. **Queue renderer happy path.** Two recordings (`fills-the-form` + `submits-the-form`) become two Test Case helper modules, then `renderQueueSpec` produces `tests/queue-1-form-smoke.spec.ts` that imports both via slug-derived camelCase aliases (`fillsTheForm`, `submitsTheForm`). Playwright runs the queue spec; both step `test()` blocks pass.
+3. **Iterations.** A Queue with `iterations: 3` on its single step renders the `for (let i = 0; i < 3; i++)` wrapper around the helper call. Sanity-checks the rendered source for the loop and confirms the spec runs.
+
+All three tests share the same `tests/fixtures/playwright-target/form.html` fixture as M6 so we didn't have to author new HTML. The temp dir layout mirrors what the extension writes to a real repo:
+
+```
+.tmp-v1-5/
+├── helper-module/
+│   ├── playwright.config.ts
+│   └── test-cases/fills-the-form/
+│       ├── recording.ts
+│       └── recording.spec.ts
+├── queue/
+│   ├── playwright.config.ts
+│   ├── test-cases/fills-the-form/recording.ts
+│   ├── test-cases/submits-the-form/recording.ts
+│   └── tests/queue-1-form-smoke.spec.ts
+└── queue-iterations/
+    ├── playwright.config.ts
+    ├── test-cases/submits-the-form/recording.ts
+    └── tests/queue-1-iterated-submit.spec.ts
+```
+
+Each test gets a fresh sub-directory so a failure leaves a debuggable artifact behind without poisoning the next run. Same per-test timeout (60s) as M6.
+
+**Test setup.** The shared `writeTestCase` helper handles the `test-cases/<slug>/` write so the two body tests don't repeat layout boilerplate. The `runPlaywright` + `failWithRunnerOutput` helpers surface the runner's stdout/stderr on failure — without them a renderer regression would show only "exit code 1" and you'd have to instrument manually.
+
+**Why this matters now.** v1.5.0 + v1.5.1 shipped on the back of unit tests only. The manual test plan was the safety net catching any rendered-code compile issues. With these integration tests, future renderer changes (v1.6+ input/output wiring, AI variation amplification, secrets-aware rewriter) get a CI gate before they can land — Rob's manual test pass becomes a confirmation step rather than the first time the generated code is exercised.
+
+### New
+
+- `packages/cli/tests/integration/render-v1-5-helpers.integration.test.ts` — 3 integration tests (helper-module path, queue happy path, queue iterations).
+- `.gitignore` gains `**/tests/integration/.tmp-*/` to cover the prefixed temp dirs the new test uses (the existing `.tmp/` pattern stays as-is for the M6 test).
+
+Total tests: 384/384 passing (+3 integration).
+
+### Changed
+
+- N/A — additive only.
+
+### Fixed
+
+- N/A.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/cli/tests/integration/render-v1-5-helpers.integration.test.ts` | **New** — 3 integration tests. |
+| `.gitignore` | Added `**/tests/integration/.tmp-*/` for the new prefixed temp dirs. |
+| `Versions/v1/v1.5/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- These tests share the M6 prereq: Chromium must be installed via `npx playwright install chromium` before the suite passes. CI runners that don't pre-install will see a clean Playwright error and fail loudly.
+- Total runtime impact: ~5s added to `pnpm test` (three Playwright launches). Acceptable for the coverage gained.
+
 ## v1.5.2 — Manual Test Plan (2026-05-20)
 
 ### Problem
