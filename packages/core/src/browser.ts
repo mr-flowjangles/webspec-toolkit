@@ -51,3 +51,19 @@ export {
   type AuthProfileList,
 } from './library/auth-profile.js';
 export { matchesUrlGlob } from './library/url-glob.js';
+
+// v1.4 Queues — ordered Test Case compositions that render to one Playwright
+// spec per Queue. See `docs/10-team-shareability.md`.
+export {
+  QUEUE_SCHEMA_VERSION,
+  QueueStepSchema,
+  QueueInputSchema,
+  QueueSchema,
+  QueueListSchema,
+  queueManifestFilename,
+  queueSpecFilename,
+  type QueueStep,
+  type QueueInput,
+  type Queue,
+  type QueueList,
+} from './library/queue.js';
