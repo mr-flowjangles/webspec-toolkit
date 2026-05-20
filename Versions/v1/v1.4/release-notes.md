@@ -1,5 +1,39 @@
 # v1.4
 
+## v1.4.3 — Mark v1.4 Shipped in Build Plan (2026-05-20)
+
+### Problem
+
+`docs/07-build-plan.md` § "Post-v1 stack" still listed v1.2 / v1.3 / v1.4 as "designed in `docs/08-test-library.md`, not yet implemented" — stale since v1.2.0 shipped, and outright wrong now that v1.4 closed at v1.4.2. New readers were getting a misleading picture of where the project stands. The build plan is supposed to be authoritative.
+
+### Solution
+
+Restructured the "Post-v1 stack" section into two parts:
+
+- **Shipped** — v1.2, v1.3, v1.4 each with a one-liner summary, the ship version, and a pointer to the design doc. v1.4 calls out the three ship versions (v1.4.0 composer + manifest, v1.4.1 renderer, v1.4.2 bootstrap files).
+- **Next — v1.5+** — the four ranked candidates from `docs/10-team-shareability.md` § "v1.5+ futures" promoted into the build plan so they're visible without a doc hop. Reusable Test Cases is #1; CI surface is #4. The "final order earned by lived experience with v1.4" caveat stays.
+
+Docs-only patch — no code touched.
+
+### New
+
+- N/A.
+
+### Changed
+
+- `docs/07-build-plan.md` § "Post-v1 stack" reorganized into Shipped / Next with v1.2 / v1.3 / v1.4 marked ✅ and v1.5+ candidates listed.
+
+### Fixed
+
+- N/A.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docs/07-build-plan.md` | Updated Post-v1 stack section to reflect shipped status. |
+| `Versions/v1/v1.4/release-notes.md` | This entry. |
+
 ## v1.4.2 — Repo Bootstrap Files (2026-05-20)
 
 ### Problem
