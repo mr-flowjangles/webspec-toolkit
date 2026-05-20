@@ -1,5 +1,67 @@
 # v1.4
 
+## v1.4.2 — Repo Bootstrap Files (2026-05-20)
+
+### Problem
+
+v1.4.0 + v1.4.1 wrote Test Cases and Queue specs into the configured Test repo folder, but if a user pointed webspec at a fresh empty folder, there was nothing to actually *run* what got written — no `package.json`, no root `playwright.config.ts`, no `.gitignore`. A teammate cloning the repo would land in a directory with `.spec.ts` files and no toolchain. This is the fourth and last MVP deliverable for v1.4 (`docs/10-team-shareability.md` § "v1.4 MVP scope" item 4).
+
+### Solution
+
+New `packages/chrome-extension/src/shared/bootstrap.ts` module + integration into both save sites (Test Case save in the popup, Queue save in the Settings panel).
+
+**Detection.** `needsBootstrap(rootHandle)` returns `true` when the repo root lacks a `package.json`. That's the canonical signal for "fresh init" — a repo already wired up by a teammate will have one, and we never overwrite. Any unexpected probe error is treated as "can't tell, don't bootstrap" — safer to no-op than to risk clobbering existing setup we just failed to read.
+
+**Confirmed write.** `ensureBootstrap(rootHandle, { confirm })` calls `needsBootstrap`; if `true`, awaits an injected `confirm()` callback; if the user agrees, writes the four scaffold files. Returns a discriminated result: `{ wrote: true }` / `{ wrote: false, reason: 'not-needed' | 'declined' }`. The confirm guard comes straight out of `docs/10` § "Implementation-detail questions" — webspec doesn't silently write files the user didn't ask for. Modeling `confirm` as an injected callback keeps `bootstrap.ts` UI-agnostic (popup, Settings, future surfaces can all supply their own prompt).
+
+**Scaffolded files** (all exported as `BOOTSTRAP_*` constants so they can be inspected in code review):
+
+- `package.json` — `private: true`, `type: 'module'`, scripts `test` + `test:ui`, `@playwright/test` pinned to `^1.60.0` (matches `packages/cli/package.json`, the repo's existing Playwright pin).
+- `playwright.config.ts` — a single project with `testDir: '.'` and `testMatch: ['test-cases/**/*.spec.ts', 'tests/queue-*-*.spec.ts']`. One config picks up both directories — no per-folder Playwright project to maintain.
+- `.gitignore` — `node_modules/`, `test-results/`, `playwright-report/`, `.DS_Store`, `*.log`.
+- `README.md` — what the repo is, how to install + run, where Test Cases and Queues live.
+
+**Save-time integration.** Both save sites call `ensureBootstrap(handle, { confirm: async () => confirm("...") })` right after they confirm permission and before they write their first file:
+
+- `popup/App.tsx → trySaveToRepo` — the Test Case Save flow (v1.3.4).
+- `settings/QueuesPanel.tsx → persist` — the Queue Save flow (v1.4.0 + v1.4.1).
+
+Both surfaces show the same prompt copy: explains what webspec wants to write, lists the four files, asks Continue/Cancel. A user who declines still gets their primary file saved (the Test Case spec / the Queue manifest+spec) — the repo just lacks the toolchain for running them until they say yes on a later save or scaffold by hand.
+
+This closes the v1.4 MVP per `docs/10` § "v1.4 MVP scope".
+
+### New
+
+- `packages/chrome-extension/src/shared/bootstrap.ts` — `needsBootstrap`, `ensureBootstrap`, plus the four `BOOTSTRAP_*` template constants and `EnsureBootstrapOptions` / `EnsureBootstrapResult` types.
+- `packages/chrome-extension/tests/bootstrap.test.ts` — 11 tests against the fake `FileSystemDirectoryHandle` pattern: `needsBootstrap` (true / false / safe on probe error), `ensureBootstrap` (skips + never asks when not needed, writes all four on confirm, writes nothing on decline, written contents match exported constants), template-content sanity checks for each file (key strings present).
+
+Total tests: 352/352 passing (+11 bootstrap).
+
+### Changed
+
+- `packages/chrome-extension/src/popup/App.tsx` — `trySaveToRepo` calls `ensureBootstrap` before writing the per-Test-Case files. Confirm prompt copy explains what webspec wants to write.
+- `packages/chrome-extension/src/settings/QueuesPanel.tsx` — `persist` calls `ensureBootstrap` before `saveQueueWithSpec`. Same confirm prompt copy as the popup.
+
+### Fixed
+
+- N/A (additive).
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/shared/bootstrap.ts` | **New** — bootstrap detection + write helper. |
+| `packages/chrome-extension/tests/bootstrap.test.ts` | **New** — 11 unit tests. |
+| `packages/chrome-extension/src/popup/App.tsx` | `trySaveToRepo` now calls `ensureBootstrap` first. |
+| `packages/chrome-extension/src/settings/QueuesPanel.tsx` | `persist` now calls `ensureBootstrap` before save. |
+| `Versions/v1/v1.4/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- v1.4 milestone is now MVP-complete per `docs/10` § "v1.4 MVP scope": composer (v1.4.0) + renderer (v1.4.1) + repo path (v1.3.3 + v1.3.4) + bootstrap (this patch).
+- `docs/07-build-plan.md` still has the v1.4 row listed as "post-v1 stack, not yet implemented" — should be flipped to "shipped" in a follow-up doc-only patch, or rolled into the v1.5 minor when planning begins.
+- Manual verification needed in Chrome before declaring done: pick a fresh empty folder under General → Settings, save a recording from the popup (expect bootstrap prompt → 4 files appear), then save a Queue (expect no second prompt; `tests/queue-1-*.json` + `.spec.ts` appear).
+
 ## v1.4.1 — Queue Spec Renderer (2026-05-20)
 
 ### Problem

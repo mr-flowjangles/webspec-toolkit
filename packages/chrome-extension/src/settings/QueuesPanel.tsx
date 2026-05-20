@@ -27,6 +27,7 @@ import {
   type TestCaseSummary,
 } from '../shared/queues.js';
 import { loadProfiles } from '../shared/profiles.js';
+import { ensureBootstrap } from '../shared/bootstrap.js';
 
 type LoadState =
   | { kind: 'loading' }
@@ -103,6 +104,18 @@ export function QueuesPanel(): JSX.Element {
       return;
     }
     try {
+      // v1.4.2: on first save into a fresh repo, scaffold package.json +
+      // playwright.config.ts + .gitignore + README.md so teammates can run
+      // the queue spec we're about to write. Confirmed-then-written; no-op
+      // when package.json already exists.
+      await ensureBootstrap(handle, {
+        confirm: async () =>
+          confirm(
+            `webspec wants to scaffold a Playwright project in "${handle.name}" so your team can run the tests.\n\n` +
+              `It will create: package.json, playwright.config.ts, .gitignore, README.md.\n\n` +
+              `Continue?`,
+          ),
+      });
       const authProfiles = await loadProfiles();
       await saveQueueWithSpec(handle, position, queue, authProfiles);
       setStatus('saved');
