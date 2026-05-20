@@ -1,5 +1,50 @@
 # v1.5
 
+## v1.5.2 — Manual Test Plan (2026-05-20)
+
+### Problem
+
+v1.4 + v1.5 shipped a lot of surface area in rapid succession (six PRs in one session). The release notes' "Known issues / notes" sections each carried a "manual verification needed" line, but the steps were scattered across five separate entries. Doing the verification meant flipping between docs and reassembling the order yourself. A standalone, ordered, checkbox-driven test plan removes that friction and gives a permanent reference future patches can append to.
+
+### Solution
+
+New `docs/manual-test-plan.md` — 8 sequential sections walking the full v1.4 + v1.5 contract end-to-end. Each section has actionable steps with checkboxes and a clear "expect" assertion, and the sections share state (the same `~/code/webspec-test-repo` folder, the same Test Case, the same Queue) so completing them in order verifies the full record → compose → render → push → CI flow without re-doing setup.
+
+**Coverage:**
+
+1. Prereqs — pull, build, load unpacked, prep parent dir.
+2. Settings → General Test repo folder picker (v1.3.3 baseline).
+3. Queues tab empty states (v1.4.0).
+4. Record + save first Test Case → bootstrap prompt with 5 files → 4 files written under `test-cases/<slug>/` including `recording.ts` AND `recording.spec.ts` (v1.5.0 helper shape).
+5. Standalone Test Case spec runs (`npm install && npx playwright install && npm test`).
+6. Compose + save a Queue → `tests/queue-N-<slug>.{json,spec.ts}` written; spec uses `import { run as ... }` not inlined events; iterations wrap the call (v1.4.0 + v1.4.1 + v1.5.0).
+7. Decline-bootstrap fallback path (v1.4.2 edge case).
+8. Self-heal for pre-v1.5.0 Test Cases (delete `recording.ts`, re-save Queue, watch it regenerate).
+9. Push to a fresh GitHub repo, watch Actions run green, download the Playwright HTML report artifact (v1.5.1 — the big CI surface payoff).
+
+Each section ends with a concrete "if broken" hint pointing at the most likely failure mode (Chrome blocking the Desktop / Downloads / Documents picker, CI failing on a dependency install, etc.) and a final "cleanup" section so the test pass leaves no residue.
+
+Doc-only patch — no code changes. Future verification rounds can edit this file in place rather than rewriting it from scratch each time.
+
+### New
+
+- `docs/manual-test-plan.md` — the full 8-section ordered checklist.
+
+### Changed
+
+- N/A.
+
+### Fixed
+
+- N/A.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docs/manual-test-plan.md` | **New** — manual verification checklist for v1.4 + v1.5. |
+| `Versions/v1/v1.5/release-notes.md` | This entry. |
+
 ## v1.5.1 — CI Surface (2026-05-20)
 
 ### Problem
