@@ -71,3 +71,23 @@ export {
   renderAmplifiedPlaywrightSpec,
   type RenderE2EOptions,
 } from './render/e2e/renderer.js';
+
+// v1.4 Queues — ordered Test Case compositions render to one Playwright spec.
+// See `docs/10-team-shareability.md`.
+export {
+  QUEUE_SCHEMA_VERSION,
+  QueueStepSchema,
+  QueueInputSchema,
+  QueueSchema,
+  QueueListSchema,
+  queueManifestFilename,
+  queueSpecFilename,
+  type QueueStep,
+  type QueueInput,
+  type Queue,
+  type QueueList,
+} from './library/queue.js';
+export {
+  renderQueueSpec,
+  type RenderQueueSpecArgs,
+} from './render/queue/renderer.js';

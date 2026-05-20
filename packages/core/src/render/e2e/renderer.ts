@@ -78,8 +78,11 @@ export function renderPlaywrightSpec(
  * Returns `[]` for events outside the v0.7.0 action set (defensive — the
  * schema currently has no such events, but the discriminated union may
  * grow before the renderer catches up).
+ *
+ * Exported so the v1.4 Queue renderer can inline a Test Case's actions into
+ * a queue spec without re-implementing event-to-Playwright translation.
  */
-function renderEvent(event: RecordedEvent): string[] {
+export function renderEvent(event: RecordedEvent): string[] {
   switch (event.kind) {
     case 'click':
       return [`await ${locator(event.selector)}.click();`];
