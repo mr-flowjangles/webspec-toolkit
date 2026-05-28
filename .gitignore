@@ -4,6 +4,12 @@ Thumbs.db
 
 # Local scratch (design mockups, throwaway HTML, smoke fixtures)
 _tmp/
+_testResults/
+
+# Local copies served by the python fixture server during in-browser
+# verification (not the source-of-truth docs).
+tests/fixtures/playwright-target/manual-test-plan.md
+tests/fixtures/playwright-target/test-plan.html
 
 # Playwright integration-test artifacts
 test-results/
