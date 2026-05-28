@@ -12,7 +12,19 @@
  * at the popup recorder. See `docs/10-team-shareability.md`.
  */
 import { useEffect, useState } from 'react';
-import { deriveSlug, type Queue, type QueueInput, type QueueStep } from '@webspec/core/browser';
+import {
+  deriveSlug,
+  type Queue,
+  type QueueInput,
+  type QueueStep,
+  type QueueStepInputValue,
+} from '@webspec/core/browser';
+import {
+  availableOutputSources,
+  buildInputValuesForStep,
+  validateStepWiring,
+  type ComposerStepView,
+} from './queue-input-wiring.js';
 import {
   checkRepoPermission,
   loadRepoFolderHandle,
@@ -320,6 +332,13 @@ interface DraftStep {
   testCase: string;
   runAs: string;
   iterations: string;
+  /**
+   * v1.6.3 — per-input wiring authored in the composer. Keyed by the input
+   * name declared on the referenced Test Case's recording. Stale entries
+   * (keys whose Test Case no longer declares that input) are dropped at
+   * submit time via `buildInputValuesForStep`.
+   */
+  inputValues: Record<string, QueueStepInputValue>;
 }
 
 interface DraftInput {
@@ -342,8 +361,16 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
           testCase: s.testCase,
           runAs: s.runAs,
           iterations: s.iterations === undefined ? '' : String(s.iterations),
+          inputValues: s.inputValues ?? {},
         }))
-      : [{ testCase: testCases[0]?.slug ?? '', runAs: testCases[0]?.runAs ?? '', iterations: '' }],
+      : [
+          {
+            testCase: testCases[0]?.slug ?? '',
+            runAs: testCases[0]?.runAs ?? '',
+            iterations: '',
+            inputValues: {},
+          },
+        ],
   );
   const [inputs, setInputs] = useState<DraftInput[]>(
     initial?.inputs.map((i) => ({ name: i.name, value: i.value })) ?? [],
@@ -361,14 +388,36 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
       // Pre-fill `runAs` from the Test Case's recorded value if the row is
       // empty or matches the previously-selected Test Case's runAs.
       runAs: summary?.runAs ?? '',
+      // v1.6.3 — reset wiring when the user switches Test Cases. Stale keys
+      // would survive otherwise; `buildInputValuesForStep` cleans them at
+      // submit time but the per-step Inputs UI would render against the new
+      // Test Case's inputs with old wiring shown, which is confusing.
+      inputValues: {},
     });
+  }
+
+  function setStepInput(
+    idx: number,
+    inputName: string,
+    value: QueueStepInputValue,
+  ): void {
+    setSteps((cur) =>
+      cur.map((s, i) =>
+        i === idx ? { ...s, inputValues: { ...s.inputValues, [inputName]: value } } : s,
+      ),
+    );
   }
 
   function addStep(): void {
     const first = testCases[0];
     setSteps((cur) => [
       ...cur,
-      { testCase: first?.slug ?? '', runAs: first?.runAs ?? '', iterations: '' },
+      {
+        testCase: first?.slug ?? '',
+        runAs: first?.runAs ?? '',
+        iterations: '',
+        inputValues: {},
+      },
     ]);
   }
 
@@ -395,6 +444,23 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
   function removeInput(idx: number): void {
     setInputs((cur) => cur.filter((_, i) => i !== idx));
   }
+
+  // v1.6.3 — build a compose-time view of each step (with iterations + the
+  // referenced Test Case's declared I/O) for the wiring helpers to read.
+  const composerViews: ComposerStepView[] = steps.map((s) => {
+    const summary = testCases.find((tc) => tc.slug === s.testCase);
+    const parsedIter = Number(s.iterations);
+    const iterations =
+      s.iterations.trim() !== '' && Number.isInteger(parsedIter) && parsedIter >= 1
+        ? parsedIter
+        : 1;
+    return {
+      testCaseSlug: s.testCase,
+      iterations,
+      testCaseInputs: summary?.inputs ?? [],
+      testCaseOutputs: summary?.outputs ?? [],
+    };
+  });
 
   function submit(e: React.FormEvent): void {
     e.preventDefault();
@@ -424,8 +490,19 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
         }
         if (n !== 1) iterations = n;
       }
+      // v1.6.3 — validate per-step input wiring; flag the first error
+      // encountered. Cross-step rules (target is earlier, non-iterated, has
+      // the named output) are enforced here, not in the schema.
+      const wiringErrors = validateStepWiring(composerViews, i, s.inputValues);
+      if (wiringErrors.length > 0) {
+        setValidationError(`Step ${i + 1}: ${wiringErrors[0]?.message ?? 'wiring is invalid.'}`);
+        return;
+      }
+      const summary = testCases.find((tc) => tc.slug === s.testCase);
+      const inputValues = buildInputValuesForStep(summary?.inputs ?? [], s.inputValues);
       const step: QueueStep = { testCase: s.testCase, runAs: s.runAs };
       if (iterations !== undefined) step.iterations = iterations;
+      if (inputValues !== undefined) step.inputValues = inputValues;
       builtSteps.push(step);
     }
     const builtInputs: QueueInput[] = [];
@@ -471,64 +548,80 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
 
       <fieldset className="profile-headers-field">
         <legend>Steps</legend>
-        {steps.map((step, idx) => (
-          <div key={idx} className="queue-step-row">
-            <span className="queue-step-num">{idx + 1}.</span>
-            <select
-              value={step.testCase}
-              onChange={(e) => pickTestCase(idx, e.target.value)}
-              aria-label={`Step ${idx + 1} Test Case`}
-            >
-              {testCases.map((tc) => (
-                <option key={tc.slug} value={tc.slug}>
-                  {tc.name} ({tc.slug})
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={step.runAs}
-              onChange={(e) => setStep(idx, { runAs: e.target.value })}
-              placeholder="runAs"
-              aria-label={`Step ${idx + 1} runAs`}
-              className="queue-step-runas"
-            />
-            <input
-              type="number"
-              min={1}
-              value={step.iterations}
-              onChange={(e) => setStep(idx, { iterations: e.target.value })}
-              placeholder="×1"
-              aria-label={`Step ${idx + 1} iterations`}
-              className="queue-step-iter"
-            />
-            <button
-              type="button"
-              onClick={() => moveStep(idx, -1)}
-              disabled={idx === 0}
-              aria-label={`Move step ${idx + 1} up`}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => moveStep(idx, 1)}
-              disabled={idx === steps.length - 1}
-              aria-label={`Move step ${idx + 1} down`}
-            >
-              ↓
-            </button>
-            <button
-              type="button"
-              className="profile-header-remove"
-              onClick={() => removeStep(idx)}
-              aria-label={`Remove step ${idx + 1}`}
-              disabled={steps.length === 1}
-            >
-              ×
-            </button>
-          </div>
-        ))}
+        {steps.map((step, idx) => {
+          const summary = testCases.find((tc) => tc.slug === step.testCase);
+          const declaredInputs = summary?.inputs ?? [];
+          const sources = availableOutputSources(composerViews, idx);
+          return (
+            <div key={idx} className="queue-step-block">
+              <div className="queue-step-row">
+                <span className="queue-step-num">{idx + 1}.</span>
+                <select
+                  value={step.testCase}
+                  onChange={(e) => pickTestCase(idx, e.target.value)}
+                  aria-label={`Step ${idx + 1} Test Case`}
+                >
+                  {testCases.map((tc) => (
+                    <option key={tc.slug} value={tc.slug}>
+                      {tc.name} ({tc.slug})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={step.runAs}
+                  onChange={(e) => setStep(idx, { runAs: e.target.value })}
+                  placeholder="runAs"
+                  aria-label={`Step ${idx + 1} runAs`}
+                  className="queue-step-runas"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={step.iterations}
+                  onChange={(e) => setStep(idx, { iterations: e.target.value })}
+                  placeholder="×1"
+                  aria-label={`Step ${idx + 1} iterations`}
+                  className="queue-step-iter"
+                />
+                <button
+                  type="button"
+                  onClick={() => moveStep(idx, -1)}
+                  disabled={idx === 0}
+                  aria-label={`Move step ${idx + 1} up`}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveStep(idx, 1)}
+                  disabled={idx === steps.length - 1}
+                  aria-label={`Move step ${idx + 1} down`}
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className="profile-header-remove"
+                  onClick={() => removeStep(idx)}
+                  aria-label={`Remove step ${idx + 1}`}
+                  disabled={steps.length === 1}
+                >
+                  ×
+                </button>
+              </div>
+              {declaredInputs.length > 0 && (
+                <StepInputsSubsection
+                  stepIndex={idx}
+                  declaredInputs={declaredInputs}
+                  wiring={step.inputValues}
+                  sources={sources}
+                  onChange={(name, value) => setStepInput(idx, name, value)}
+                />
+              )}
+            </div>
+          );
+        })}
         <button type="button" className="profile-header-add" onClick={addStep}>
           + Add step
         </button>
@@ -591,5 +684,98 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * v1.6.3 — per-step input wiring UI. Renders one row per declared input on
+ * the step's Test Case: a mode dropdown (constant / from earlier step) and
+ * either a text field (constant value) or a step-and-output dropdown
+ * (`from step N (slug) → outputName`). Iterated earlier steps are absent
+ * from `sources` so they never appear in the picker.
+ */
+function StepInputsSubsection(props: {
+  stepIndex: number;
+  declaredInputs: { name: string; eventIndex: number }[];
+  wiring: Record<string, QueueStepInputValue>;
+  sources: { step: number; testCaseSlug: string; outputName: string }[];
+  onChange: (inputName: string, value: QueueStepInputValue) => void;
+}): JSX.Element {
+  const { stepIndex, declaredInputs, wiring, sources, onChange } = props;
+  return (
+    <div className="queue-step-inputs">
+      <p className="queue-step-inputs-label">Inputs:</p>
+      <ul className="queue-step-inputs-list">
+        {declaredInputs.map((input) => {
+          const value = wiring[input.name];
+          const mode = value?.mode ?? 'constant';
+          return (
+            <li key={input.name} className="queue-step-input-row">
+              <code className="queue-step-input-name">{input.name}</code>
+              <select
+                value={mode}
+                onChange={(e) => {
+                  const next = e.target.value === 'output' ? 'output' : 'constant';
+                  if (next === 'constant') {
+                    onChange(input.name, { mode: 'constant', value: '' });
+                  } else {
+                    const first = sources[0];
+                    onChange(input.name, {
+                      mode: 'output',
+                      step: first?.step ?? 1,
+                      outputName: first?.outputName ?? '',
+                    });
+                  }
+                }}
+                aria-label={`Step ${stepIndex + 1} input ${input.name} mode`}
+              >
+                <option value="constant">constant</option>
+                <option value="output" disabled={sources.length === 0}>
+                  from earlier step
+                </option>
+              </select>
+              {value?.mode === 'output' ? (
+                <select
+                  value={`${value.step}:${value.outputName}`}
+                  onChange={(e) => {
+                    const [stepStr, outputName] = e.target.value.split(':');
+                    onChange(input.name, {
+                      mode: 'output',
+                      step: Number(stepStr),
+                      outputName: outputName ?? '',
+                    });
+                  }}
+                  aria-label={`Step ${stepIndex + 1} input ${input.name} source`}
+                >
+                  {sources.length === 0 ? (
+                    <option value="">no earlier outputs</option>
+                  ) : (
+                    sources.map((src) => (
+                      <option
+                        key={`${src.step}:${src.outputName}`}
+                        value={`${src.step}:${src.outputName}`}
+                      >
+                        step {src.step} ({src.testCaseSlug}) → {src.outputName}
+                      </option>
+                    ))
+                  )}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={value?.mode === 'constant' ? value.value : ''}
+                  onChange={(e) =>
+                    onChange(input.name, { mode: 'constant', value: e.target.value })
+                  }
+                  placeholder="literal value"
+                  aria-label={`Step ${stepIndex + 1} input ${input.name} value`}
+                  className="queue-step-input-value"
+                />
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

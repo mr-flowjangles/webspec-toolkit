@@ -1,5 +1,69 @@
 # v1.6
 
+## v1.6.3 — Queue Composer Inputs Wiring (2026-05-28)
+
+### Problem
+
+v1.6.2 lets the user declare parametric inputs and outputs on a Test Case at Save time, and v1.6.1 added the `QueueStep.inputValues` schema field. But the Queue composer in Settings → Queues has no UI to *populate* `inputValues` — every Queue saved post-v1.6.1 still ships steps without wiring, which means any Test Case with declared inputs will run with its default empty-string parameter values (or fail validation at the renderer in v1.6.4 once that lands). Next patch in the plan: the composer grows a per-step Inputs subsection so the user can wire each declared input to a constant or to an earlier step's output, with cross-step rules enforced at Save.
+
+### Solution
+
+Three pieces — extending the on-disk Test Case summary to carry I/O metadata, a pure helper module for the wiring logic, and the per-step UI block in the existing `QueueEditor`.
+
+**`TestCaseSummary` carries declared I/O.** `packages/chrome-extension/src/shared/queues.ts` widens the summary returned by `listTestCases` from `{ slug, name, runAs }` to `{ slug, name, runAs, inputs, outputs }`. The reader pulls `recording.json`'s `inputs` and `outputs` if present, defaults to `[]` otherwise (covering both pre-v1.6 recordings and v1.6 recordings where the user didn't declare any). The composer dropdown now has everything it needs to render an Inputs subsection per step and a "from step N → outputName" picker.
+
+**Pure helpers — `packages/chrome-extension/src/settings/queue-input-wiring.ts`.** Three exports:
+
+- `availableOutputSources(steps, currentStepIndex)` returns the earlier non-iterated steps' declared outputs in render order, as `{ step, testCaseSlug, outputName }[]`. Iterated earlier steps are hidden per the locked design decision (and a smoke test in the suite locks that behavior). The current step and any later step are excluded — references only flow forward.
+- `validateStepWiring(steps, currentStepIndex, wiring)` returns `WiringValidationError[]` covering every cross-step rule: every declared input is wired (no missing keys), `output`-mode references target an earlier non-iterated step, and the target step's Test Case declares the named output. Accumulates errors — doesn't short-circuit on the first one — so the user sees the full picture if they have multiple inputs in trouble.
+- `buildInputValuesForStep(declaredInputs, wiring)` returns the `Record<string, QueueStepInputValue>` for serialization, dropping stale keys (the user swapped Test Cases and the old wiring no longer matches any current input). Returns `undefined` when the result is empty so the manifest doesn't carry `inputValues: {}` — keeps `recording-N-slug.json` tidy.
+
+**`StepInputsSubsection` component in `QueuesPanel.tsx`.** Rendered inline under each step row when the step's Test Case has declared inputs. One row per declared input: a name label (code-styled), a mode dropdown (`constant` / `from earlier step` — the latter disabled when no earlier non-iterated step has declared outputs), and either a text field (constant) or a step-and-output picker (`step N (slug) → outputName`).
+
+The Test Case dropdown's `pickTestCase` handler resets `inputValues` to `{}` whenever the user swaps Test Cases — stale wiring would otherwise survive and render against the new Test Case's inputs with the old picks intact. The mode-swap (`constant` ↔ `output`) initializes the new shape with sensible defaults (empty string for constant; the first available source for output) so the user sees a meaningful starting state, not an unselected dropdown.
+
+**Submit-time validation + manifest build.** `QueueEditor.submit` now builds a `ComposerStepView[]` (one entry per step with iterations + the referenced Test Case's I/O) and calls `validateStepWiring` per step before building the `QueueStep`. The first error (`step N: <message>`) is surfaced via the existing `validationError` channel — matches the existing per-step error style (`Step ${i + 1}: ...`). When wiring is valid, `buildInputValuesForStep` produces the final `inputValues`, attached to the `QueueStep` only when non-empty.
+
+**Drive-by — `.tmp/` lint ignore.** The CLI integration tests in v1.5.3 added `**/tests/integration/.tmp-*/` to `.gitignore`, but ESLint kept walking those temp dirs and flagging the generated specs' unused `expect` imports. v1.6.1, v1.6.2, and the first attempt at v1.6.3 all had to clean `.tmp/` by hand before `make lint` would pass. Added `**/.tmp/**` and `**/.tmp-*/**` to `eslint.config.mjs`'s top-level `ignores` so lint stops re-discovering test artifacts.
+
+**Tests.** 16 new cases in `packages/chrome-extension/tests/queue-input-wiring.test.ts` covering all three helpers + every cross-step rule (target out of range, target is current/later step, target is iterated, target doesn't declare the named output, multiple errors accumulate). 1 new case in `queues.test.ts` locking the `TestCaseSummary` shape with I/O, plus 2 existing cases updated to expect the new `{ inputs: [], outputs: [] }` fields. 454/454 tests passing (was 437).
+
+### New
+
+- `packages/chrome-extension/src/settings/queue-input-wiring.ts` — `availableOutputSources`, `validateStepWiring`, `buildInputValuesForStep` + types.
+- `packages/chrome-extension/tests/queue-input-wiring.test.ts` — 16 unit tests.
+
+### Changed
+
+- `packages/chrome-extension/src/shared/queues.ts` — `TestCaseSummary` gains `inputs` + `outputs`; `listTestCases` populates them from `recording.json`.
+- `packages/chrome-extension/src/settings/QueuesPanel.tsx` — `DraftStep` gains `inputValues`; `QueueEditor` renders `StepInputsSubsection` per step with declared inputs; `submit` validates wiring and builds `QueueStep.inputValues`; new `StepInputsSubsection` component at the bottom of the file.
+- `packages/chrome-extension/src/settings/settings.css` — appends `.queue-step-block` + `.queue-step-inputs` + `.queue-step-inputs-list` + `.queue-step-input-row` styles (subtle left-rule + 5% currentColor tint to visually nest the inputs under their parent step).
+- `packages/chrome-extension/tests/queues.test.ts` — 1 new case (v1.6.3 inputs/outputs surfacing); 2 existing cases updated for the widened summary shape.
+- `eslint.config.mjs` — adds `**/.tmp/**` + `**/.tmp-*/**` to the top-level `ignores` list. Drive-by — see Solution.
+
+### Fixed
+
+- ESLint walking `.tmp/` test artifacts (CLI integration test scaffolding) caused recurring "unused `expect` import" failures across v1.6.1–v1.6.3 every time `make lint` ran after a test suite. Now eslint skips them just like `.gitignore` does.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/settings/queue-input-wiring.ts` | **New** — 3 pure helpers + types. |
+| `packages/chrome-extension/src/shared/queues.ts` | **Edit** — `TestCaseSummary` widened with `inputs`/`outputs`; `listTestCases` populates them. |
+| `packages/chrome-extension/src/settings/QueuesPanel.tsx` | **Edit** — per-step Inputs subsection; wiring state on `DraftStep`; submit validates + builds `inputValues`; new `StepInputsSubsection` component. |
+| `packages/chrome-extension/src/settings/settings.css` | **Edit** — `.queue-step-*` inputs styles (~55 lines). |
+| `packages/chrome-extension/tests/queue-input-wiring.test.ts` | **New** — 16 tests. |
+| `packages/chrome-extension/tests/queues.test.ts` | **Edit** — 1 new case + 2 updates for the widened `TestCaseSummary`. |
+| `eslint.config.mjs` | **Edit** — ignore `.tmp/` + `.tmp-*/`. |
+| `Versions/v1/v1.6/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **Composer-side validation is the only gate.** The schema permits invalid cross-step references (e.g. `step: 999`, or pointing at an iterated step) by design — that's enforced here, in the composer, before manifest write. If a hand-edited `queue-N-slug.json` carries an invalid reference, the v1.6.4 renderer will emit a Test Case helper that fails to compile rather than rejecting at load. Acceptable for v1; cross-reference validation at load time can land in v1.7+ if the issue actually surfaces.
+- **No re-validation of pre-v1.6.3 Queue manifests on load.** Editing a Queue whose steps reference a Test Case that has *gained* declared inputs since the Queue was last saved will land in the composer with the new declared inputs unwired — the user must wire them before Save will accept the form. Existing pre-v1.6 manifests with no `inputValues` keep working as long as their referenced Test Cases also have no declared inputs (the common case).
+- **Manual verification in the Settings panel deferred** alongside v1.6.2's popup verification. Static checks all clean (`pnpm test` 454/454, `make build`, `make lint`, `pnpm --filter @webspec/chrome-extension build`). The Settings → Queues UI flow (per-step Inputs subsection appearance, mode dropdown swap, output-source picker scope across iterations) is straightforward React but hasn't been driven against a real recording yet.
+
 ## v1.6.2 — Save UI Inputs and Outputs Panels (2026-05-28)
 
 ### Problem
