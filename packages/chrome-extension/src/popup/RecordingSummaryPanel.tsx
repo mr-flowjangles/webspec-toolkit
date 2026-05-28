@@ -112,7 +112,7 @@ function UrlTrailList({ trail }: { trail: UrlTrailEntry[] }): JSX.Element | null
  * inside the popup's max-width. Hover title shows the full URL.
  */
 function compactUrl(url: string): string {
-  let trimmed = url.replace(/^https?:\/\//, '');
+  const trimmed = url.replace(/^https?:\/\//, '');
   if (trimmed.length <= 56) return trimmed;
   return trimmed.slice(0, 53) + '…';
 }

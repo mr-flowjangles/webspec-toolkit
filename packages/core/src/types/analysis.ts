@@ -263,6 +263,42 @@ export const RecordedEventSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+/**
+ * v1.6 — input declaration on a Test Case. The user promotes a recorded
+ * fill/input/change event's value to a named parameter at Save time.
+ * `eventIndex` is the 0-based position in `WorkflowRecording.events[]` of the
+ * event whose recorded `value` is replaced by `inputs.<name>` at render time.
+ *
+ * The schema doesn't validate that `eventIndex` points at a value-bearing
+ * event (`input` / `change`) — that's enforced by the Save UI, which only
+ * surfaces fill-class events in the "promote to input" picker. Keeping the
+ * schema permissive lets older recordings round-trip without false negatives
+ * if the event-kind set ever broadens.
+ */
+export const RecordingInputSchema = z.object({
+  name: z.string().min(1),
+  eventIndex: z.number().int().nonnegative(),
+});
+
+/**
+ * v1.6 — output declaration on a Test Case. Two source kinds in v1.6 MVP:
+ *   - 'url'  : applies the RegExp to `page.url()` after the last recorded
+ *              action; the first capture group becomes the output value.
+ *   - 'text' : reads `page.locator(selector).first().textContent()` after
+ *              the last recorded action, trimmed.
+ * Attribute extraction, response-body parsing, and localStorage reads are
+ * deferred to a later milestone — see `docs/10` § "Out of scope for v1.6".
+ */
+export const RecordingOutputSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('url'), pattern: z.string().min(1) }),
+  z.object({ kind: z.literal('text'), selector: z.string().min(1) }),
+]);
+
+export const RecordingOutputSchema = z.object({
+  name: z.string().min(1),
+  source: RecordingOutputSourceSchema,
+});
+
 export const WorkflowRecordingSchema = z.object({
   /**
    * Human-given name for this recording. Used as the Playwright `test()`
@@ -308,6 +344,19 @@ export const WorkflowRecordingSchema = z.object({
   events: z.array(RecordedEventSchema),
   network: z.array(NetworkRequestSchema),
   framework: z.literal('playwright'),
+  /**
+   * v1.6 — declared parametric inputs. Each entry promotes a recorded
+   * fill/input/change event's value to a named helper parameter. Default `[]`
+   * keeps v1.5.x recordings backward-compatible: a recording without declared
+   * inputs renders exactly as it did pre-v1.6.
+   */
+  inputs: z.array(RecordingInputSchema).default([]),
+  /**
+   * v1.6 — declared outputs. Extracted from page state after the last
+   * recorded action runs and returned by the helper module. Default `[]`
+   * preserves the pre-v1.6 helper signature (`Promise<void>`, no return).
+   */
+  outputs: z.array(RecordingOutputSchema).default([]),
 });
 
 // ---------------------------------------------------------------------------
@@ -444,6 +493,9 @@ export type ObservedState = z.infer<typeof ObservedStateSchema>;
 export type NetworkRequest = z.infer<typeof NetworkRequestSchema>;
 export type RecordedEvent = z.infer<typeof RecordedEventSchema>;
 export type WorkflowRecording = z.infer<typeof WorkflowRecordingSchema>;
+export type RecordingInput = z.infer<typeof RecordingInputSchema>;
+export type RecordingOutput = z.infer<typeof RecordingOutputSchema>;
+export type RecordingOutputSource = z.infer<typeof RecordingOutputSourceSchema>;
 export type AmplifiedAction = z.infer<typeof AmplifiedActionSchema>;
 export type AmplifiedAssertion = z.infer<typeof AmplifiedAssertionSchema>;
 export type AmplifiedScenario = z.infer<typeof AmplifiedScenarioSchema>;
