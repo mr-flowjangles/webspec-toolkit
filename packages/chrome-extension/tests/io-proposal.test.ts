@@ -8,6 +8,7 @@ import type { HardenedSelector, RecordedEvent, WorkflowRecording } from '@webspe
 import {
   isPromotable,
   proposeInputsFromRecording,
+  proposeOutputsFromRecording,
   suggestNameFromSelector,
 } from '../src/popup/io-proposal.js';
 
@@ -223,5 +224,100 @@ describe('proposeInputsFromRecording', () => {
     ]);
     const proposed = proposeInputsFromRecording(r);
     expect(proposed).toEqual([{ name: 'leadName', eventIndex: 0 }]);
+  });
+});
+
+describe('proposeOutputsFromRecording', () => {
+  function nav(url: string, reason: 'navigate' | 'reload' | 'history' | 'hash' = 'history') {
+    return { t: 100, kind: 'navigate' as const, url, reason };
+  }
+
+  function recordingWithNav(start: string, navUrls: string[]): WorkflowRecording {
+    return {
+      ...recording([]),
+      startUrl: start,
+      events: navUrls.map((u, i) => ({ ...nav(u), t: 100 + i })),
+    };
+  }
+
+  it('returns [] when there are no navigate events', () => {
+    expect(proposeOutputsFromRecording(recording([]))).toEqual([]);
+  });
+
+  it('returns [] when the final URL equals startUrl', () => {
+    const r = recordingWithNav('http://x.test/page', ['http://x.test/page']);
+    expect(proposeOutputsFromRecording(r)).toEqual([]);
+  });
+
+  it('proposes a hash-route URL output from the lead-form shape', () => {
+    const r = recordingWithNav(
+      'http://localhost:8765/lead-form.html',
+      ['http://localhost:8765/lead-form.html#/lead/1'],
+    );
+    expect(proposeOutputsFromRecording(r)).toEqual([
+      { name: 'leadId', source: { kind: 'url', pattern: '#/lead/(\\d+)' } },
+    ]);
+  });
+
+  it('proposes a path-segment URL output for /leads/123', () => {
+    const r = recordingWithNav('https://app.test/dashboard', ['https://app.test/leads/123']);
+    expect(proposeOutputsFromRecording(r)).toEqual([
+      { name: 'leadId', source: { kind: 'url', pattern: '/leads/(\\d+)' } },
+    ]);
+  });
+
+  it('singularizes pluralized context words', () => {
+    const r = recordingWithNav('https://app.test/', ['https://app.test/categories/42']);
+    expect(proposeOutputsFromRecording(r)[0]?.name).toBe('categoryId');
+  });
+
+  it('proposes multiple outputs for nested ID segments', () => {
+    const r = recordingWithNav(
+      'https://app.test/',
+      ['https://app.test/users/7/posts/100'],
+    );
+    const proposed = proposeOutputsFromRecording(r);
+    expect(proposed).toEqual([
+      { name: 'userId', source: { kind: 'url', pattern: '/users/(\\d+)' } },
+      { name: 'postId', source: { kind: 'url', pattern: '/posts/(\\d+)' } },
+    ]);
+  });
+
+  it('skips ID segments that already existed in the start URL', () => {
+    // Recording starts on /leads/42, navigates within it — no new ID
+    // introduced, so no proposal.
+    const r = recordingWithNav('https://app.test/leads/42', ['https://app.test/leads/42/edit']);
+    expect(proposeOutputsFromRecording(r)).toEqual([]);
+  });
+
+  it('uniquifies when two paths yield the same name', () => {
+    const r = recordingWithNav(
+      'https://app.test/',
+      ['https://app.test/leads/1/leads/2'],
+    );
+    const proposed = proposeOutputsFromRecording(r);
+    expect(proposed.map((o) => o.name)).toEqual(['leadId', 'leadId2']);
+  });
+
+  it('uses the last navigate event as the final URL', () => {
+    const r = recordingWithNav(
+      'https://app.test/start',
+      [
+        'https://app.test/middle/1', // intermediate — not used for proposal
+        'https://app.test/end/42', // final
+      ],
+    );
+    const proposed = proposeOutputsFromRecording(r);
+    expect(proposed.map((o) => o.source)).toEqual([
+      { kind: 'url', pattern: '/end/(\\d+)' },
+    ]);
+  });
+
+  it('ignores non-numeric ID-like segments (UUIDs etc.) — heuristic-only MVP', () => {
+    const r = recordingWithNav(
+      'https://app.test/',
+      ['https://app.test/items/a1b2c3d4-e5f6-7890-abcd-ef1234567890'],
+    );
+    expect(proposeOutputsFromRecording(r)).toEqual([]);
   });
 });

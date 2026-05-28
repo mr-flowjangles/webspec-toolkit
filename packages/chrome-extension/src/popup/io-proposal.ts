@@ -17,6 +17,7 @@ import type {
   HardenedSelector,
   RecordedEvent,
   RecordingInput,
+  RecordingOutput,
   WorkflowRecording,
 } from '@webspec/core/browser';
 
@@ -136,4 +137,91 @@ function uniquifyName(base: string, used: Set<string>): string {
   let n = 2;
   while (used.has(`${base}${n}`)) n++;
   return `${base}${n}`;
+}
+
+// ---------------------------------------------------------------------------
+// v1.7.3 — output proposal (URL-source kind only for v1.7 MVP)
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk the recording's navigation events and propose one URL-source
+ * `RecordingOutput` per ID-shaped path segment that the recording
+ * introduced. Currently scopes to **numeric IDs** in path segments OR
+ * hash routes; cases like UUIDs, slugs, query-string params, or text
+ * selectors are deferred to a later patch (likely the LLM-fallback
+ * path — heuristic-only inference loses signal fast outside numeric IDs).
+ *
+ * Returns `[]` when:
+ *   - the recording has no navigate events (page never moved), OR
+ *   - the final URL exactly equals `startUrl` (e.g. only reload events
+ *     fired), OR
+ *   - no ID-shaped segment is introduced relative to the start URL.
+ *
+ * For the lead-form fixture (start `…/lead-form.html`, end
+ * `…/lead-form.html#/lead/1`) this produces:
+ *   `{ name: 'leadId', source: { kind: 'url', pattern: '#/lead/(\\d+)' } }`
+ */
+export function proposeOutputsFromRecording(recording: WorkflowRecording): RecordingOutput[] {
+  const startUrl = recording.startUrl;
+  const navigates = recording.events.filter(
+    (e): e is Extract<RecordedEvent, { kind: 'navigate' }> => e.kind === 'navigate',
+  );
+  if (navigates.length === 0) return [];
+  const finalUrl = navigates[navigates.length - 1]!.url;
+  if (finalUrl === startUrl) return [];
+
+  return extractUrlIdSegments(startUrl, finalUrl);
+}
+
+/**
+ * Find ID-shaped segments that the recording introduced. The regex looks
+ * for a separator (`#` or `/`), an optional intermediate `/`, an
+ * alphabetic word (the "context" — singularized to form the input name),
+ * a `/`, and a run of digits.
+ *
+ * Each match's full substring is checked against the start URL — if the
+ * start URL already contained the same pattern, the ID was pre-existing
+ * (not introduced by the recording), so we skip it.
+ */
+function extractUrlIdSegments(startUrl: string, finalUrl: string): RecordingOutput[] {
+  const out: RecordingOutput[] = [];
+  const usedNames = new Set<string>();
+  const re = /([#/])\/?([a-z][a-z0-9_-]*)\/(\d+)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(finalUrl)) !== null) {
+    const [matched, separator, context, id] = match;
+    if (matched === undefined || context === undefined || id === undefined) continue;
+    // Skip IDs that already existed in the start URL — those weren't
+    // introduced by the recording and aren't useful as test outputs.
+    if (startUrl.includes(matched)) continue;
+    const baseName = ensureValidIdentifier(toCamelCase(singularize(context)) + 'Id');
+    const name = uniquifyName(baseName, usedNames);
+    usedNames.add(name);
+    const escContext = escapeRegex(context);
+    const pattern =
+      separator === '#' ? `#/${escContext}/(\\d+)` : `/${escContext}/(\\d+)`;
+    out.push({ name, source: { kind: 'url', pattern } });
+  }
+  return out;
+}
+
+/**
+ * Naive English singularizer for path-segment context words. Covers the
+ * common cases that path naming hits (`leads` → `lead`, `categories` →
+ * `category`); intentionally simple, not a full inflector. False-positives
+ * (e.g. `news`, `series`) just produce slightly-off names that the user
+ * can edit at review time.
+ */
+function singularize(word: string): string {
+  if (word.length < 3) return word;
+  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
+  if (word.endsWith('ses') || word.endsWith('xes') || word.endsWith('zes')) {
+    return word.slice(0, -2);
+  }
+  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

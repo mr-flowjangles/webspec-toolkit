@@ -1,5 +1,78 @@
 # v1.7
 
+## v1.7.3 — Auto-Proposed Outputs at Save (2026-05-28)
+
+### Problem
+
+v1.7.2 closed half of the Save-panel reframe: inputs are now pre-proposed. Outputs still required the user to click `+ add output`, pick the source kind, and hand-author a CSS selector or URL regex. v1.7.3 closes the other half: detect URL changes during the recording and propose URL-source outputs automatically.
+
+### Solution
+
+Extends `io-proposal.ts` with `proposeOutputsFromRecording(recording)`. Walks `recording.events` for `navigate` events; uses the LAST one as the "final URL" and compares against `recording.startUrl`. If a new ID-shaped segment appears, propose a URL-source output.
+
+**Heuristic — `extractUrlIdSegments(start, final)`.** Regex: `/([#/])\/?([a-z][a-z0-9_-]*)\/(\d+)/gi` — separator + optional slash + alphabetic context word + slash + digits.
+
+For each match:
+- Skip if the full matched substring already exists in `startUrl` (the ID was pre-existing, not introduced by the recording).
+- Singularize the context word (`leads` → `lead`, `categories` → `category`).
+- Compose name: `<singular>Id` (e.g. `leadId`, `userId`).
+- Build pattern: hash routes get `#/<context>/(\\d+)`; path segments get `/<context>/(\\d+)`. The context is regex-escaped.
+- Uniquify if multiple segments yield the same name (`leadId`, `leadId2`).
+
+**The lead-form fixture's shape** (start `…/lead-form.html`, end `…/lead-form.html#/lead/1`) round-trips to:
+
+```ts
+{ name: 'leadId', source: { kind: 'url', pattern: '#/lead/(\\d+)' } }
+```
+
+That's the exact pattern v1.6.5's integration test hand-authored — confirming the heuristic produces what the rendered helper needs to extract via `page.url().match(/#\/lead\/(\d+)/)?.[1] ?? ''`.
+
+**`RecordingSummaryPanel.tsx`** — same shape as v1.7.2: the `useState<RecordingOutput[]>` initializer swaps from `recording.outputs ?? []` to the propose-when-empty path. Re-opening a Test Case respects its declared outputs; fresh recordings arrive with the URL output pre-populated when a navigation introduced an ID.
+
+**End-user effect.** A workflow that creates a record (e.g. clicks Submit and navigates to `…/lead/42`) now opens the Save panel with the Outputs section already populated: `leadId` from the URL, ready to review. The user can edit the name, edit the pattern, or remove the row entirely — but they don't have to *start* by typing a regex.
+
+**Naive singularizer.** Three rules: `-ies` → `-y` (queries/query), `-ses`/`-xes`/`-zes` → drop last 2 (boxes/box, classes/class), `-s` (not `-ss`) → drop last (leads/lead). Covers the common cases; false-positives on irregulars (`news`, `series`) produce slightly-off names that the user edits at review time. Not a full inflector — the user is the final review step.
+
+**Scope intentionally narrow.** v1.7.3 only proposes:
+- URL outputs.
+- Numeric ID segments (path + hash route).
+
+Deferred:
+- Text-source outputs (would need a DOM snapshot at start + end — not currently captured).
+- UUIDs, slugs, query-string params (heuristic loses signal fast outside numeric IDs).
+- These all surface in the LLM-fallback patch later in v1.7.
+
+**Tests.** 10 new cases in `packages/chrome-extension/tests/io-proposal.test.ts` covering the empty-navigates / no-change / lead-form / path-segment / singularization / nested-IDs / pre-existing-ID-skip / uniquification / last-nav-wins / UUID-skip behaviors. 498/498 tests passing (was 488).
+
+### New
+
+- `proposeOutputsFromRecording` + `extractUrlIdSegments` + `singularize` + `escapeRegex` helpers in `packages/chrome-extension/src/popup/io-proposal.ts`.
+- 10 new tests in `packages/chrome-extension/tests/io-proposal.test.ts`.
+
+### Changed
+
+- `packages/chrome-extension/src/popup/RecordingSummaryPanel.tsx` — seeds `outputs` state from the proposal when none are already declared. Imports `proposeOutputsFromRecording`.
+
+### Fixed
+
+- N/A.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/popup/io-proposal.ts` | **Edit** — outputs proposal pipeline (~80 lines added). |
+| `packages/chrome-extension/src/popup/RecordingSummaryPanel.tsx` | **Edit** — seed `outputs` state from the proposal. |
+| `packages/chrome-extension/tests/io-proposal.test.ts` | **Edit** — +10 cases for `proposeOutputsFromRecording`. |
+| `Versions/v1/v1.7/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **Numeric IDs only.** UUIDs, hash tokens, base64 IDs, and slugs aren't matched by the regex. False negatives surface as "user has to manually add the output" — degraded gracefully to the v1.6.2 flow.
+- **No text-source proposals yet.** The DOM snapshot capture needed for "this text appeared at this selector after the last action" isn't in the recording schema. Adding it is a content-script change; v1.7's LLM-fallback patch is the better place to add this since the LLM can reason over the full DOM diff rather than reduce to a single text node.
+- **Singularizer is naive.** Works for English regular plurals. `news` / `series` / `data` / non-English path names produce odd names. The user can edit at review time.
+- **Patch plan stays.** v1.7.4 composer auto-wire (the third big UX win — Queue composer reads outputs from earlier steps and auto-wires matching-name inputs in later steps) is next.
+
 ## v1.7.2 — Auto-Proposed Inputs at Save (2026-05-28)
 
 ### Problem
