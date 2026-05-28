@@ -1,5 +1,69 @@
 # v1.6
 
+## v1.6.2 — Save UI Inputs and Outputs Panels (2026-05-28)
+
+### Problem
+
+v1.6.1 landed the schema additions (`WorkflowRecording.inputs`, `WorkflowRecording.outputs`, `QueueStep.inputValues`) but no UI to author them. A recording saved today still serializes with `inputs: []` and `outputs: []` — the contract is in place, but the popup gives the user no way to declare parametric inputs or outputs. Next milestone in the v1.6 patch plan: the Save panel grows the authoring surface so a user can promote recorded fill values to named parameters and declare named outputs (URL regex or text selector) right before clicking Save.
+
+### Solution
+
+Two pieces — a pure helper module with full unit-test coverage, and a React panel that delegates all testable logic to it.
+
+**Pure helpers — `packages/chrome-extension/src/popup/io-authoring.ts`.** Three exports, all framework-free:
+
+- `extractFillEventRows(recording)` walks `recording.events[]` and surfaces one row per `input` or `change` event — those are the only event kinds carrying a recorded `value` worth parameterizing. Returns `{ eventIndex, kind, value, selectorPreview, sensitive }[]` with the selector truncated to 40 chars for popup display. Password-masked rows keep `sensitive: true` so the UI can warn the user before promoting a credential to a per-runner input.
+- `validateIOAuthoring({ inputs, outputs })` returns `IOValidationError[]` (empty = ready to save). Rules: every input/output name is a non-empty JS identifier (matches `/^[A-Za-z_$][A-Za-z0-9_$]*$/`); names are unique within each list; input names and output names live in separate namespaces (so the helper's `(ctx, inputs) => outputs` shape lets the same identifier appear on both sides — e.g. `leadName` in / `leadName` out); URL outputs need a non-empty pattern; text outputs need a non-empty selector. Each error carries `{ scope, index, field, message }` so the UI can attach the message to the offending row without re-deriving which row failed.
+- `attachIOToRecording(recording, inputs, outputs)` returns a fresh `WorkflowRecording` with the authored arrays attached. The save handler calls this just before serialization; keeps the merge in one tested place. Verified non-mutating.
+
+**React panel — `packages/chrome-extension/src/popup/IOAuthoringPanel.tsx`.** Two collapsible `<details>` sections, embedded by `RecordingSummaryPanel` above the Save button. Both default open when their authored array is non-empty; collapsed when empty so the simple no-I/O Test Case shape stays clean.
+
+The **Inputs section** lists one row per fill-class event from `extractFillEventRows`. Each row shows the event index (e.g. `#7`), kind tag (`input` / `change`), the truncated selector, the recorded value in italic, a 🔒 if the input is password-masked, and a checkbox. Checking the row reveals a name field. The component manages state immutably — checking → adds to `inputs[]`; unchecking → removes by `eventIndex`; editing the name → in-place updates. Validation errors render directly under the offending row.
+
+The **Outputs section** is a list of rows + an `+ add output` button. Each row is a four-column grid: name input, kind dropdown (`from URL` / `from text`), pattern/selector input, and a `×` remove button. Changing the kind swaps the source shape (`{ kind: 'url', pattern: '' }` ↔ `{ kind: 'text', selector: '' }`) and emits the new state up; the placeholder updates from `/leads/(\d+)` to `h1.title` to give the user the right mental model. Validation errors span the full grid width under the row.
+
+**Save-button gating.** `RecordingSummaryPanel` keeps the authored arrays in local `useState` and tracks the latest validation errors via `IOAuthoringPanel`'s `onValidationChange` callback. The Save button is `disabled` when the recording has zero events (the v0.5.4 baseline) *or* when validation errors are present; hovering shows a tooltip naming the error count. The hover-disabled state replaces the silent "click does nothing" that would happen if we let Save fire with invalid I/O — the user sees immediately that something needs fixing.
+
+**Save-handler integration.** `App.tsx`'s `handleSaveRecording` signature widens from `(recording)` to `(rawRecording, inputs, outputs)`. The first line merges the authored arrays into the recording via `attachIOToRecording`; the rest of the handler is unchanged. `recording.json` written to disk now carries the user-declared I/O alongside the events; `recording.spec.ts` and `recording.ts` are still rendered by the v1.5.0 renderers (which ignore `inputs` / `outputs` — that's v1.6.4's job).
+
+**Backward compat.** A recording stopped pre-v1.6.2 carries `inputs: []` / `outputs: []` via the schema defaults. The panel initial state reads `recording.inputs ?? []` / `recording.outputs ?? []`, so re-opening such a recording's review state lands the panels in their empty-but-available form. No migration needed.
+
+**Tests.** 28 new cases in `packages/chrome-extension/tests/io-authoring.test.ts` covering `extractFillEventRows` (filter rules, sensitive flag, selector truncation, empty case), `isValidIOName` (12 parameterized cases), `validateIOAuthoring` (every rule + the input/output namespace-separation property), and `attachIOToRecording` (correct merge + non-mutation). 437/437 tests passing (was 409).
+
+### New
+
+- `packages/chrome-extension/src/popup/io-authoring.ts` — pure helpers for the Save-panel authoring UI.
+- `packages/chrome-extension/src/popup/IOAuthoringPanel.tsx` — React panel with the two collapsible sections.
+- `packages/chrome-extension/tests/io-authoring.test.ts` — 28 unit tests.
+
+### Changed
+
+- `packages/chrome-extension/src/popup/RecordingSummaryPanel.tsx` — embeds the `IOAuthoringPanel`; `onSave` signature is now `(inputs, outputs) => void`; Save button gates on validation errors.
+- `packages/chrome-extension/src/popup/App.tsx` — imports `attachIOToRecording`, widens `handleSaveRecording` signature, threads authored I/O into the recording before serialization.
+- `packages/chrome-extension/src/popup/popup.css` — appends `.io-panel` + `.io-section` + `.io-input-row` + `.io-output-row` + `.io-error` + `.io-add-btn` styles matching the existing `.trace-*` review-panel aesthetic.
+
+### Fixed
+
+- N/A.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/popup/io-authoring.ts` | **New** — 3 pure helpers + types. |
+| `packages/chrome-extension/src/popup/IOAuthoringPanel.tsx` | **New** — React panel with Inputs + Outputs sections. |
+| `packages/chrome-extension/src/popup/RecordingSummaryPanel.tsx` | **Edit** — embeds the panel; widens `onSave` signature; gates Save on validation. |
+| `packages/chrome-extension/src/popup/App.tsx` | **Edit** — merges authored I/O via `attachIOToRecording` before write. |
+| `packages/chrome-extension/src/popup/popup.css` | **Edit** — new `.io-*` styles (~190 lines appended). |
+| `packages/chrome-extension/tests/io-authoring.test.ts` | **New** — 28 tests. |
+| `Versions/v1/v1.6/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **Manual verification in the popup deferred.** All static checks pass (`pnpm test` 437/437, `make build` clean, `make lint` clean, `pnpm --filter @webspec/chrome-extension build` produces a clean extension bundle). The browser-side experience (the two `<details>` open/closed transitions, checkbox-then-name-field reveal, kind-dropdown source swap, error message attachment to the right row) is straightforward React but hasn't been exercised against a real recording yet. Will be covered when the next manual-test-plan pass runs through v1.6.
+- **The authored I/O is captured but not yet rendered.** v1.6.4 wires `WorkflowRecording.inputs[]` into the helper module's parameter substitution and `WorkflowRecording.outputs[]` into the extraction tail. Until then, a Test Case with declared I/O writes the metadata to `recording.json` but the helper module still emits the same recorded-literal-only body it does today. This is the same shape as v1.6.1's "schema-only" note: each patch is independently shippable.
+- **No "promote subset of value" UX.** Per the design doc, v1.6 substitution is whole-value-only. A recording fill of `"Acme Corp Inc"` becomes `inputs.leadName` wholesale; there's no way to parameterize just `"Acme"` from within that string. The Save panel reflects that: the value column is read-only display, not editable.
+
 ## v1.6.1 — Test Case and Queue Step Schemas (2026-05-28)
 
 ### Problem
