@@ -1,5 +1,85 @@
 # v1.6
 
+## v1.6.4 — Renderer Inputs and Outputs (2026-05-28)
+
+### Problem
+
+After v1.6.1–v1.6.3, a Test Case's `recording.json` can carry `inputs`/`outputs` and a Queue's `step.inputValues` can wire them — but no renderer reads any of it. A Test Case helper module still emits `async function run({ page, context })` with literal recorded values inline. A Queue spec still calls `await createLead({ page, context })` with no second argument. The schema and authoring surfaces are all in place; the rendered output has none of it. This is the patch that turns the wiring into executable Playwright code.
+
+### Solution
+
+Three renderer changes — one shared helper extension, one Test Case module rewrite, one Queue spec extension.
+
+**`renderEvent` accepts an optional `valueOverride`.** `packages/core/src/render/e2e/renderer.ts`. The function signature widens to `renderEvent(event, valueOverride?)`. When `valueOverride` is set:
+- `input` (fill) emits `.fill(<override>)` — the override goes in unquoted as a TypeScript expression (e.g. `inputs.leadName`).
+- `change` with `options !== undefined` (a `<select>`) emits `.selectOption(<override>)` — same treatment.
+- `change` without `options` (checkbox / radio) ignores the override; the recorded verb (`check` / `uncheck`) wins. Parameterizing the verb at runtime would need a ternary in the rendered source, which v1.6 MVP intentionally skips per docs/10 § "Out of scope for v1.6". Listed as a known limitation below.
+
+When `valueOverride` is `undefined`, the function behaves exactly as before — all 31 existing e2e renderer tests still pass without modification.
+
+**`renderTestCaseModule` emits typed inputs + outputs.** `packages/core/src/render/test-case/renderer.ts`. The helper:
+
+1. Builds a `subsByIndex: Map<number, string>` from `recording.inputs[]` → for each declared input, maps the promoted `eventIndex` to the TS expression `inputs.<name>`.
+2. Builds `inputDefaults: Map<name, string>` from the corresponding events' recorded values — these become the parameter's recorded-literal defaults, preserving the standalone-spec replay fidelity decision in the design doc.
+3. Emits one of three signature shapes depending on whether inputs / outputs were declared:
+   - No I/O: `async function run({ page, context }): Promise<void>` (unchanged from v1.5.0 — backward-compatible).
+   - Inputs only: `async function run({ page, context }, inputs: { leadName: string } = { leadName: 'Acme Corp' }): Promise<void>` — multi-line with recorded-literal defaults.
+   - Inputs + outputs: `Promise<{ leadId: string; leadName: string }>` return type narrows to declared outputs.
+4. Walks `recording.events.forEach((event, eventIndex))` and passes `subsByIndex.get(eventIndex)` to `renderEvent`. Events not in `subsByIndex` emit their recorded literal as before.
+5. **Extraction tail** — runs after the last recorded action when `recording.outputs[]` is non-empty:
+   - `kind: 'url'` → `const _out_<name> = page.url().match(/<pattern>/)?.[1] ?? '';`
+   - `kind: 'text'` → `const _out_<name> = ((await page.locator('<selector>').first().textContent()) ?? '').trim();`
+   - Followed by `return { <name>: _out_<name>, ... };`
+
+The `regexLiteral` helper renders the user's pattern into a valid JS regex literal, escaping unescaped forward slashes (so `/leads/(\d+)/` doesn't terminate the literal at the first `/`). Newlines are stripped defensively.
+
+**`renderQueueSpec` wires inputs + captures returns.** `packages/core/src/render/queue/renderer.ts`. Two new pieces:
+
+- **`computeStepReferencedFlags(steps)`** forward-scans every step's `inputValues` for `mode: 'output'` references and returns a `boolean[]` flagging which steps' return values need to be captured. Used to decide whether to render `const createLead_1 = await ...` vs the bare `await ...` form. Per the design doc, we don't add unused `const` assignments — only captured when something downstream actually reads them. Belt-and-suspenders: iterated steps are never flagged as referenced (the composer + schema already rule this out, but the call-site checks `iterations === 1` again before capturing).
+- **`renderInputsArg(inputValues, stepLocals)`** builds the second argument to the helper call: `{ leadName: 'Acme', email: createLead_1.email }`. Constants get quoted via the shared `quote` helper; output references emit as `<local>.<outputName>` reads against the captured earlier-step return value. Returns `null` when `inputValues` is empty/undefined so the call stays in the bare `helper({ page, context })` form.
+
+The `stepLocals` array is built upfront — one entry per step, format `<slug-identifier>_<1-based-index>` (e.g. `createLead_1`, `fillDetails_2`). Aliases are positional; reorder is a re-render. Iterated steps still get the for-loop wrap; the helper call inside the loop receives the same `inputsArg` each iteration (per-iteration variation is the next milestone).
+
+**Hand-edited safety net.** If a hand-edited Queue manifest carries an out-of-range `value.step` reference, `renderInputsArg` emits `__missing_step_N` rather than crashing the renderer. The result is a TypeScript compile error at `npm test` time pointing at the bad identifier — loud failure rather than silent.
+
+**Tests.** 7 new cases in `packages/core/tests/render/test-case/renderer.test.ts` (typed inputs param with recorded defaults, substitution at promoted events, non-promoted events stay literal, url extraction shape, text extraction shape, both inputs+outputs together, no-I/O backward-compat). 6 new cases in `packages/core/tests/render/queue/renderer.test.ts` (constant wiring, output reference + return capture, no capture when unreferenced, iterated step with inputs, iterated step never captures, multi-input stable key order). 467/467 tests passing (was 454).
+
+Existing inline snapshots for the no-I/O Test Case module still match — the backward-compat path is unchanged. The v1.5 integration tests (which build real on-disk projects and run `npx playwright test`) all still pass against the no-I/O fixtures, confirming the renderer changes haven't regressed the v1.5.0 shape.
+
+### New
+
+- `renderEvent(event, valueOverride?)` — optional second parameter for input substitution in `packages/core/src/render/e2e/renderer.ts`.
+- `renderTestCaseModule` extraction tail + typed inputs/outputs in `packages/core/src/render/test-case/renderer.ts` (helpers `renderInputsTypeAnnotation`, `renderInputsDefaultExpr`, `renderReturnTypeAnnotation`, `regexLiteral`, `pageLocator`).
+- `computeStepReferencedFlags` + `renderInputsArg` in `packages/core/src/render/queue/renderer.ts`.
+- 13 new renderer test cases (7 for test-case, 6 for queue).
+
+### Changed
+
+- `packages/core/src/render/e2e/renderer.ts` — `renderEvent` widens signature; `renderChange` accepts and forwards `valueOverride` for selects.
+- `packages/core/src/render/test-case/renderer.ts` — three signature shapes depending on declared I/O; substitution at promoted events; output extraction tail.
+- `packages/core/src/render/queue/renderer.ts` — per-step local-variable naming; capture-on-reference forward scan; inputs argument rendering.
+
+### Fixed
+
+- N/A.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/core/src/render/e2e/renderer.ts` | **Edit** — `renderEvent` accepts optional `valueOverride`; `renderChange` forwards it for selects, ignores it for checkboxes. |
+| `packages/core/src/render/test-case/renderer.ts` | **Rewrite** — typed inputs param with recorded-literal defaults; declared-output return type; extraction tail with url + text source rendering. |
+| `packages/core/src/render/queue/renderer.ts` | **Edit** — `stepLocals[]`, `computeStepReferencedFlags`, `renderInputsArg`; helper call renders capture + inputs arg per step. |
+| `packages/core/tests/render/test-case/renderer.test.ts` | **Edit** — +7 cases under new "v1.6.4 inputs/outputs" describe block. |
+| `packages/core/tests/render/queue/renderer.test.ts` | **Edit** — +6 cases under new "v1.6.4 inputValues" describe block. |
+| `Versions/v1/v1.6/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **Checkbox/radio inputs ignore substitution.** The Save UI (v1.6.2) surfaces all `input` and `change` events for promotion. If a user promotes a checkbox `change` event, the helper signature gains a declared parameter but the body still emits the recorded `.check()` / `.uncheck()` verb — the override is silently ignored. The parameter becomes effectively unused. Listed as a v1.6 design out-of-scope ("parameterizing the verb at runtime would need a ternary in the rendered source"); a future patch can either filter checkbox events from the Save UI's promote picker or render the ternary if a use case actually surfaces.
+- **Schema permits hand-editing past composer-side validation.** A `recording.json` with `inputs: [{ name: 'leadName', eventIndex: 999 }]` (no matching event) renders the helper with `inputs.leadName` declared but never referenced in the body, and the default value defaults to `''`. Same for an out-of-range `value.step` in `inputValues` — the renderer emits `__missing_step_N` to fail loudly at compile rather than crash. Composer-side validation prevents both cases for normal use; hand-edits are the user's problem.
+- **Integration tests still run only against no-I/O fixtures.** The v1.5 integration tests in `packages/cli/tests/integration/render-v1-5-helpers.integration.test.ts` (which build real on-disk projects and run `npx playwright test`) all still pass, confirming no regression in the v1.5.0 shape. End-to-end coverage for the v1.6 wiring (parametric helper + wired Queue + output round-trip against the page fixture) is v1.6.5's job per the patch plan.
+
 ## v1.6.3 — Queue Composer Inputs Wiring (2026-05-28)
 
 ### Problem

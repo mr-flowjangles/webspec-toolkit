@@ -150,3 +150,125 @@ describe('renderTestCaseSpec', () => {
     expect(out).not.toContain('setExtraHTTPHeaders');
   });
 });
+
+// v1.6.4 — parametric inputs + declared outputs change the helper signature
+// and add an extraction tail. Backward compat for the no-I/O case is already
+// covered by the inline snapshot above; these tests pin the new behavior.
+describe('renderTestCaseModule — v1.6.4 inputs/outputs', () => {
+  it('emits a typed inputs param with recorded-literal defaults when inputs are declared', () => {
+    const out = renderTestCaseModule(
+      recording({
+        events: [
+          {
+            t: 100,
+            kind: 'input',
+            selector: roleSelector('textbox', 'Lead Name'),
+            value: 'Acme Corp',
+            sensitive: false,
+          },
+        ],
+        inputs: [{ name: 'leadName', eventIndex: 0 }],
+      }),
+    );
+    expect(out).toContain('inputs: { leadName: string } = { leadName: \'Acme Corp\' },');
+  });
+
+  it('substitutes inputs.<name> for the recorded literal at the promoted event', () => {
+    const out = renderTestCaseModule(
+      recording({
+        events: [
+          {
+            t: 100,
+            kind: 'input',
+            selector: roleSelector('textbox', 'Lead Name'),
+            value: 'Acme Corp',
+            sensitive: false,
+          },
+        ],
+        inputs: [{ name: 'leadName', eventIndex: 0 }],
+      }),
+    );
+    expect(out).toContain(
+      `await page.getByRole('textbox', { name: 'Lead Name' }).fill(inputs.leadName);`,
+    );
+    expect(out).not.toContain("fill('Acme Corp')");
+  });
+
+  it('non-promoted recorded events still emit their literal values', () => {
+    const out = renderTestCaseModule(
+      recording({
+        events: [
+          {
+            t: 100,
+            kind: 'input',
+            selector: roleSelector('textbox', 'Lead Name'),
+            value: 'Acme',
+            sensitive: false,
+          },
+          {
+            t: 200,
+            kind: 'input',
+            selector: roleSelector('textbox', 'Notes'),
+            value: 'high priority',
+            sensitive: false,
+          },
+        ],
+        inputs: [{ name: 'leadName', eventIndex: 0 }],
+      }),
+    );
+    expect(out).toContain('fill(inputs.leadName);');
+    expect(out).toContain(`fill('high priority');`);
+  });
+
+  it('emits a typed return + url-source extraction when an outputs[].kind = url is declared', () => {
+    const out = renderTestCaseModule(
+      recording({
+        outputs: [{ name: 'leadId', source: { kind: 'url', pattern: '/leads/(\\d+)' } }],
+      }),
+    );
+    expect(out).toContain('): Promise<{ leadId: string }> {');
+    expect(out).toContain(`const _out_leadId = page.url().match(/\\/leads\\/(\\d+)/)?.[1] ?? '';`);
+    expect(out).toContain('return { leadId: _out_leadId };');
+  });
+
+  it('emits a text-source extraction with .textContent() and trim', () => {
+    const out = renderTestCaseModule(
+      recording({
+        outputs: [{ name: 'leadName', source: { kind: 'text', selector: 'h1.lead-title' } }],
+      }),
+    );
+    expect(out).toContain(
+      `const _out_leadName = ((await page.locator('h1.lead-title').first().textContent()) ?? '').trim();`,
+    );
+    expect(out).toContain('return { leadName: _out_leadName };');
+  });
+
+  it('emits both inputs param and outputs return when both are declared', () => {
+    const out = renderTestCaseModule(
+      recording({
+        events: [
+          {
+            t: 100,
+            kind: 'input',
+            selector: roleSelector('textbox', 'Lead Name'),
+            value: 'Acme',
+            sensitive: false,
+          },
+        ],
+        inputs: [{ name: 'leadName', eventIndex: 0 }],
+        outputs: [{ name: 'leadId', source: { kind: 'url', pattern: '/leads/(\\d+)' } }],
+      }),
+    );
+    expect(out).toContain('inputs: { leadName: string } = { leadName: \'Acme\' },');
+    expect(out).toContain('): Promise<{ leadId: string }> {');
+  });
+
+  it('keeps the no-I/O backward-compatible shape (signature unchanged, no return)', () => {
+    const out = renderTestCaseModule(recording({ inputs: [], outputs: [] }));
+    expect(out).toContain(
+      'export async function run({ page, context }: { page: Page; context: BrowserContext }): Promise<void> {',
+    );
+    expect(out).not.toContain('inputs:');
+    expect(out).not.toContain('return {');
+  });
+});
