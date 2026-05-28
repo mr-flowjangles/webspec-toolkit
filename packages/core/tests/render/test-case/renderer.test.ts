@@ -47,8 +47,13 @@ const BASE_EVENTS: RecordedEvent[] = [
 describe('renderTestCaseModule', () => {
   const out = renderTestCaseModule(recording({ events: BASE_EVENTS }));
 
-  it('imports BrowserContext + Page as type-only from @playwright/test', () => {
-    expect(out).toContain("import type { BrowserContext, Page } from '@playwright/test';");
+  it('imports expect + BrowserContext + Page from @playwright/test', () => {
+    // v1.7.7 — `expect` is imported as a value (used by navigate-event
+    // `toHaveURL` assertions); the type-only `BrowserContext`/`Page` ride
+    // along in the same import to keep the helper to one line at the top.
+    expect(out).toContain(
+      "import { expect, type BrowserContext, type Page } from '@playwright/test';",
+    );
   });
 
   it('exports a named async function `run` with the canonical signature', () => {
@@ -88,7 +93,7 @@ describe('renderTestCaseModule', () => {
 
   it('matches a stable inline snapshot', () => {
     expect(out).toMatchInlineSnapshot(`
-      "import type { BrowserContext, Page } from '@playwright/test';
+      "import { expect, type BrowserContext, type Page } from '@playwright/test';
 
       /**
        * Creates a lead in UCM Dev.

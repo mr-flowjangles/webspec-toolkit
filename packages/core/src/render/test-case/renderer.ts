@@ -77,7 +77,12 @@ export function renderTestCaseModule(recording: WorkflowRecording): string {
     }
   }
 
-  lines.push("import type { BrowserContext, Page } from '@playwright/test';");
+  // v1.7.7 — `expect` is used by event-renderer-emitted `toHaveURL` assertions
+  // for navigate events. Import as value (with type-only BrowserContext/Page
+  // bundled) so the helper compiles regardless of whether the recording
+  // happened to capture a navigate. The bundle cost is zero — `@playwright/
+  // test` is already pulled in for the types.
+  lines.push("import { expect, type BrowserContext, type Page } from '@playwright/test';");
   lines.push('');
   lines.push('/**');
   for (const descLine of recording.description.split('\n')) {

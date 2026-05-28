@@ -1,5 +1,47 @@
 # v1.7
 
+## v1.7.7 — Helper Imports Expect (2026-05-28)
+
+### Problem
+
+Caught live during Rob's first end-to-end test against the Playwright TodoMVC demo. The webspec recorder captured a 14-event flow, the renderer emitted `recording.ts` + `recording.spec.ts`, Rob moved them into the repo and tried to run — `ReferenceError: expect is not defined` at the first `toHaveURL` assertion.
+
+The test-case renderer (`packages/core/src/render/test-case/renderer.ts`) emitted `import type { BrowserContext, Page } from '@playwright/test';` — type-only. But the event renderer happily emits `await expect(page).toHaveURL(…)` for navigate events. Without a value-import of `expect`, the helper compiled (TS type-stripping leaves the broken reference) but blew up at runtime.
+
+The sibling `recording.spec.ts` imported `expect` for user convenience (`void expect;` to suppress unused-import lint) — masking the gap from anyone running the spec via the Test Case spec but not the helper directly. Queues import the helper directly, so the bug would have hit any Queue spec the moment a step's recording contained a navigate event.
+
+### Solution
+
+One-line fix in `renderer.ts`:
+
+```ts
+- lines.push("import type { BrowserContext, Page } from '@playwright/test';");
++ lines.push("import { expect, type BrowserContext, type Page } from '@playwright/test';");
+```
+
+`expect` is now a value import; `BrowserContext` and `Page` continue to be type-only via the `type` modifier on each named import. One line, no extra `import type` statement.
+
+Updated:
+- The "imports BrowserContext + Page as type-only" assertion test → renamed to "imports expect + BrowserContext + Page" and updated to match the new shape.
+- The inline snapshot in the same file → auto-regenerated via `vitest --update`.
+
+### Verification
+
+- 312 core tests passing (was 312).
+- 34 cli integration tests passing — including the three v1.6 wiring tests that render and **run** specs against a live Playwright Chromium. Those would have caught this earlier if the test fixtures had included a navigate event — they didn't, which is why this leaked to Rob's live recording.
+- Manually patched `_testResults/test-cases/todos-test/recording.ts` to the new shape and ran it via `packages/cli/node_modules/.bin/playwright test` — **1 passed in 5.1s** against the live TodoMVC demo.
+
+### Fixed
+
+- `ReferenceError: expect is not defined` at runtime in any rendered helper whose recording contained a navigate event (which is most non-trivial workflows).
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/core/src/render/test-case/renderer.ts` | **Edit** — helper import changed from type-only to value-with-types. |
+| `packages/core/tests/render/test-case/renderer.test.ts` | **Edit** — renamed + updated the import assertion; snapshot regenerated. |
+
 ## v1.7.6 — Side Panel Tab URL Permission (2026-05-28)
 
 ### Problem
