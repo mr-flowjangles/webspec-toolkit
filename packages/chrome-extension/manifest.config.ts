@@ -15,8 +15,20 @@ export default defineManifest({
   version: pkg.version,
   description: 'Browser-based shift-left companion: WCAG/508 audit + workflow recorder for web apps.',
   action: {
+    // v1.7.1 — `default_popup` stays declared so the popup HTML continues
+    // to auto-discover as a vite build entry and Chrome treats it as a
+    // valid action surface. At runtime the service worker calls
+    // `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`,
+    // which makes the side panel win on icon-click. The popup remains
+    // available programmatically until v1.7.3 retires it fully.
     default_popup: 'src/popup/index.html',
     default_title: 'webspec',
+  },
+  // v1.7.1 — Chrome 114+ Side Panel API surfaces the same React app the
+  // popup did. Clicking the toolbar icon opens the side panel; see the
+  // setPanelBehavior call in the service worker.
+  side_panel: {
+    default_path: 'src/sidepanel/index.html',
   },
   background: {
     service_worker: 'src/service-worker/index.ts',
@@ -29,7 +41,7 @@ export default defineManifest({
       run_at: 'document_idle',
     },
   ],
-  permissions: ['activeTab', 'storage', 'downloads', 'webNavigation'],
+  permissions: ['activeTab', 'storage', 'downloads', 'webNavigation', 'sidePanel'],
   web_accessible_resources: [
     {
       resources: ['src/report/index.html', 'src/settings/index.html'],

@@ -1,0 +1,29 @@
+/**
+ * v1.7.1 — side panel layout overrides. The popup's `body { max-width:
+ * 480px }` clamp made sense for a floating popup; in a side panel the
+ * frame width is set by Chrome (user-resizable), so let the content fill.
+ * `.sidepanel-shell` wraps the existing popup App to scope these overrides
+ * without touching popup.css (which the popup entry still uses verbatim
+ * during the v1.7.1–v1.7.3 transition).
+ */
+
+body {
+  /* Override popup's max-width clamp; let the side panel frame govern. */
+  max-width: none;
+  min-width: 0;
+}
+
+.sidepanel-shell {
+  /* Same .popup inner padding/layout as before; the wrap gives us a hook
+   * for sidepanel-specific tweaks without forking popup.css. */
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.sidepanel-shell .popup {
+  /* The popup root retains its padding/gap; just make sure it can grow to
+   * fill the side panel's width. */
+  width: 100%;
+  max-width: none;
+}
