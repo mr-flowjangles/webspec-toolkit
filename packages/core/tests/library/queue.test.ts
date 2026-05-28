@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   QueueSchema,
+  QueueStepInputValueSchema,
   queueManifestFilename,
   queueSpecFilename,
   type Queue,
@@ -85,6 +86,96 @@ describe('QueueSchema', () => {
   it('rejects an input with an empty name', () => {
     const q = { ...MINIMAL, inputs: [{ name: '', value: 'x' }] };
     expect(QueueSchema.safeParse(q).success).toBe(false);
+  });
+
+  // v1.6.1 — parametric input wiring on a step.
+  it('accepts a step with constant inputValues', () => {
+    const q: Queue = {
+      ...MINIMAL,
+      steps: [
+        {
+          testCase: 'create-lead',
+          runAs: 'X',
+          inputValues: { leadName: { mode: 'constant', value: 'Acme Corp' } },
+        },
+      ],
+    };
+    expect(QueueSchema.safeParse(q).success).toBe(true);
+  });
+
+  it('accepts a step wiring inputValues to an earlier step output', () => {
+    const q: Queue = {
+      ...MINIMAL,
+      steps: [
+        { testCase: 'create-lead', runAs: 'X' },
+        {
+          testCase: 'update-lead',
+          runAs: 'X',
+          inputValues: {
+            leadName: { mode: 'output', step: 1, outputName: 'leadName' },
+          },
+        },
+      ],
+    };
+    expect(QueueSchema.safeParse(q).success).toBe(true);
+  });
+
+  it('accepts a step with no inputValues (back-compat with pre-v1.6 manifests)', () => {
+    const q: Queue = {
+      ...MINIMAL,
+      steps: [{ testCase: 'create-lead', runAs: 'X' }],
+    };
+    expect(QueueSchema.safeParse(q).success).toBe(true);
+  });
+});
+
+describe('QueueStepInputValueSchema', () => {
+  it('accepts a constant input value', () => {
+    expect(
+      QueueStepInputValueSchema.safeParse({ mode: 'constant', value: 'Acme' }).success,
+    ).toBe(true);
+  });
+
+  it('accepts an empty-string constant', () => {
+    expect(
+      QueueStepInputValueSchema.safeParse({ mode: 'constant', value: '' }).success,
+    ).toBe(true);
+  });
+
+  it('accepts an output reference', () => {
+    expect(
+      QueueStepInputValueSchema.safeParse({
+        mode: 'output',
+        step: 1,
+        outputName: 'leadId',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an output reference with step 0 (steps are 1-based)', () => {
+    expect(
+      QueueStepInputValueSchema.safeParse({
+        mode: 'output',
+        step: 0,
+        outputName: 'leadId',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an output reference with an empty outputName', () => {
+    expect(
+      QueueStepInputValueSchema.safeParse({
+        mode: 'output',
+        step: 1,
+        outputName: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an unknown mode', () => {
+    expect(
+      QueueStepInputValueSchema.safeParse({ mode: 'env', value: 'X' }).success,
+    ).toBe(false);
   });
 });
 

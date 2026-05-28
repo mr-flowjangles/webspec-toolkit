@@ -17,10 +17,37 @@ import { z } from 'zod';
 
 export const QUEUE_SCHEMA_VERSION = 1;
 
+/**
+ * v1.6 — value source for a parametric Test Case input on a Queue step.
+ *   - 'constant'  : a literal string supplied at compose time.
+ *   - 'output'    : the named output of an earlier non-iterated step in the
+ *                   same Queue. `step` is 1-based and must reference a prior
+ *                   step (`step < currentStep`) whose Test Case declares the
+ *                   given `outputName`. The composer is responsible for that
+ *                   cross-step validation — the schema only enforces local
+ *                   shape (step is a positive integer, outputName is non-empty).
+ */
+export const QueueStepInputValueSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('constant'), value: z.string() }),
+  z.object({
+    mode: z.literal('output'),
+    step: z.number().int().positive(),
+    outputName: z.string().min(1),
+  }),
+]);
+
 export const QueueStepSchema = z.object({
   testCase: z.string().min(1),
   runAs: z.string(),
   iterations: z.number().int().positive().optional(),
+  /**
+   * v1.6 — wiring for the referenced Test Case's declared inputs. Keys are
+   * input names (from `WorkflowRecording.inputs[].name`); each value is
+   * either a literal constant or a reference to an earlier step's output.
+   * Optional; absent or `{}` means the step's Test Case declares no inputs
+   * (or the user hasn't wired them yet — composer-side error).
+   */
+  inputValues: z.record(z.string(), QueueStepInputValueSchema).optional(),
 });
 
 export const QueueInputSchema = z.object({
@@ -40,6 +67,7 @@ export const QueueSchema = z.object({
 export const QueueListSchema = z.array(QueueSchema);
 
 export type QueueStep = z.infer<typeof QueueStepSchema>;
+export type QueueStepInputValue = z.infer<typeof QueueStepInputValueSchema>;
 export type QueueInput = z.infer<typeof QueueInputSchema>;
 export type Queue = z.infer<typeof QueueSchema>;
 export type QueueList = z.infer<typeof QueueListSchema>;

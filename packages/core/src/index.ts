@@ -76,6 +76,7 @@ export {
 // See `docs/10-team-shareability.md`.
 export {
   QUEUE_SCHEMA_VERSION,
+  QueueStepInputValueSchema,
   QueueStepSchema,
   QueueInputSchema,
   QueueSchema,
@@ -83,6 +84,7 @@ export {
   queueManifestFilename,
   queueSpecFilename,
   type QueueStep,
+  type QueueStepInputValue,
   type QueueInput,
   type Queue,
   type QueueList,
