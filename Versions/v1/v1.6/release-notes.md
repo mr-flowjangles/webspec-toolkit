@@ -1,5 +1,56 @@
 # v1.6
 
+## v1.6.6 — Manual Test Plan for v1.6 Wiring (2026-05-28)
+
+### Problem
+
+v1.6.2 (Save-panel Inputs/Outputs UI), v1.6.3 (composer per-step Inputs subsection), and the renderer changes in v1.6.4/v1.6.5 all shipped with full static coverage — unit tests, type checks, lint, and the v1.6.5 integration tests run real Playwright against the rendered output. What's still missing: an in-Chrome verification of the actual UI flows. The `<details>` open/close transitions, the checkbox-then-name-field reveal, the kind-dropdown swap between URL pattern and text selector, the wiring dropdown that hides iterated earlier steps, the Save-button gating tooltip — none of these have been exercised by hand. v1.5.2 already established the pattern (a doc-only patch with a sequential, checkbox-driven test plan); this is the v1.6 counterpart.
+
+### Solution
+
+Extended `docs/manual-test-plan.md` with 5 new sections (9–13) layering on top of the existing v1.4 + v1.5 plan. The sections share `~/code/webspec-test-repo` from section 1 and can be run either after section 8 or in isolation after a rebuild.
+
+**Fixture choice — the v1.6.5 `lead-form.html`.** The plan needs a fixture page that exercises both v1.6 output kinds (URL regex + text selector) AND lets Rob assert that input substitution actually reached the field. The integration-test fixture from v1.6.5 already does both — a name input writes to `#lead-title` on submit, and the form sets `location.hash` to `#/lead/<seq-id>`. Plan instructs Rob to serve it locally via `python3 -m http.server 8765` since Chrome extensions can't drive `file://` URLs out of the box.
+
+**Section breakdown:**
+
+- **Section 9 — Prereqs.** Stand up the local server. Sanity-check the page works by hand before recording.
+- **Section 10 — Record with declared I/O.** The headline v1.6.2 flow. Walks through: recording on the fixture, opening the Save panel's Inputs section, finding the recorded "Acme Corp" fill, checking it, naming it `leadName`. Adding two outputs — a URL-regex `leadId` and a text-selector `leadName` — with explicit attention to the kind-dropdown swap (verifying the placeholder text changes from a regex example to `h1.title`). Save-button gating verified by clearing a required field and watching Save disable + the tooltip appear. After Save, `cat recording.json` and `head -25 recording.ts` confirm the v1.6.4 renderer emitted the parametric signature with recorded-literal defaults and the extraction tail with both source kinds. Standalone spec runs via `npm test -- test-cases/create-lead/recording.spec.ts` to confirm replay still works with defaults.
+- **Section 11 — Constant wiring.** Compose a single-step Queue with `leadName` wired to a constant `'Beta Industries'`. Verify the call site reads `await createLead({ page, context }, { leadName: 'Beta Industries' })` (constant baked in) and that the spec runs the page workflow against the wired value.
+- **Section 12 — Output reference wiring (Queue 3 from the design doc).** Record a second Test Case (`view-lead-echo`) on the same fixture, declared input `incomingName`, no outputs. Edit the Queue, add step 2, set `incomingName`'s mode to `from earlier step`, pick `step 1 (create-lead) → leadName` from the dropdown. The rendered spec is verified to contain the hoisted `let createLead_1!: Awaited<ReturnType<typeof createLead>>;` declaration (the v1.6.5 bug fix), the `createLead_1 = await createLead(...)` assignment, AND the `createLead_1.leadName` reference in step 2's body. `npm test` runs both step `test()` blocks green.
+- **Section 13 — Validation paths.** Sweep the validation rules: duplicate output names, invalid identifiers (`1leadId`), empty URL pattern; in the composer, set step 1 iterations to 3 and verify step 2's wiring dropdown stops listing step 1's outputs (the iterated-step hide rule from the v1.6 design lock).
+
+Each section ends with "If broken" hints pointing at the most likely failure mode (React errors in the popup console, helper not re-rendered, the specific validator that owns each rule). Cleanup script at the end removes the v1.6 Test Cases without disturbing the v1.5 `example-hello` recording.
+
+**Top-of-doc edit.** The plan's H1 widens from "v1.4 + v1.5" to "v1.4 + v1.5 + v1.6"; the intro paragraph notes that v1.6 sections layer on top of v1.4 + v1.5 and can be run either after section 8 or in isolation. The original sections 0–8 are untouched.
+
+### New
+
+- `docs/manual-test-plan.md` § 9–13 — five new sections covering v1.6.2 Save panel, v1.6.3 composer wiring, v1.6.4 renderer output, v1.6.5 hoisted captures, and the v1.6.2/v1.6.3 validation rules.
+
+### Changed
+
+- `docs/manual-test-plan.md` H1 + intro — widened scope from "v1.4 + v1.5" to "v1.4 + v1.5 + v1.6"; added a line about running v1.6 sections in isolation.
+
+### Fixed
+
+- N/A — doc-only patch.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docs/manual-test-plan.md` | **Edit** — five new v1.6 sections (~190 lines appended); H1/intro widened. |
+| `Versions/v1/v1.6/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **No code changes.** Pure doc patch — same shape as v1.5.2. The contract is the test plan itself.
+- **Two known v1.6 issues are still pending and not yet fixed.** They'll roll into v1.6.7 once this test plan surfaces whatever else needs attention:
+  - `docs/10` § "v1.6 design" still sketches the schema types as `TestCaseInput` / `TestCaseOutput`, but the actual exports are `RecordingInput` / `RecordingOutput` (v1.6.1 renamed them to avoid colliding with the M2 `TestCase` type). Doc-vs-shipped mismatch.
+  - The Save panel's input-promote picker currently surfaces checkbox/radio `change` events alongside `input` and `change`-select events. The renderer (v1.6.4) silently ignores substitution for checkbox/radio because Playwright's `.check()` / `.uncheck()` verbs are picked from the recorded value, not a runtime parameter. If a user promotes a checkbox, the resulting helper has an unused declared parameter. Per docs/10 § "Out of scope for v1.6" the verb-parameterization itself stays deferred — the fix is to filter checkbox/radio events from the picker so users can't silently end up in this state.
+- **Bundling rationale.** Test plan ships first (separate v1.6.6) because Rob needs to run it before we know whether the two known issues are the only things to fix or whether the manual pass surfaces more. The v1.6.7 cleanup patch will fold those + anything Rob catches.
+
 ## v1.6.5 — Integration Tests for v1.6 Wiring (2026-05-28)
 
 ### Problem
