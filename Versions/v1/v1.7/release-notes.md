@@ -1,5 +1,26 @@
 # v1.7
 
+## v1.7.5 — Side Panel Tab Error Reset (2026-05-28)
+
+### Problem
+
+The side panel introduced in v1.7.1 persists across tab switches inside a Chrome window (that's the side-panel API contract — one panel per window, not per tab). v1.7.0's popup-era recorder kept a "webspec only works on http(s) pages" error in state when the active tab wasn't a regular page. In the popup that was harmless: the popup closes on every blur, so the next open mounts fresh. In the side panel that error stuck around forever — even after the user navigated to a real http(s) page, the panel still showed the error and refused to record. Reproduced live during v1.7.4 verification.
+
+### Solution
+
+New `useEffect` in `popup/App.tsx` subscribes to `chrome.tabs.onActivated` + `chrome.tabs.onUpdated` (URL-change events only). On either signal, recorder/audit state in `kind: 'error'` is reset to `kind: 'idle'`. All other states (recording, review, saved, naming) are preserved — the listener only clears stale errors.
+
+### Fixed
+
+- Side panel showing "webspec only works on http(s) pages" persists after switching to an http(s) tab.
+- Audit error state similarly clears on tab switch (same pattern, same hook).
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/popup/App.tsx` | New `useEffect` listening to `chrome.tabs.onActivated` and `chrome.tabs.onUpdated`; resets `recorder` and `audit` from `'error'` → `'idle'` on tab/URL change. |
+
 ## v1.7.4 — Composer Auto-Wire by Name (2026-05-28)
 
 ### Problem

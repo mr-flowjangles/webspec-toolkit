@@ -89,6 +89,31 @@ export function App(): JSX.Element {
     void hydrateRecorderStatus(setRecorder);
   }, []);
 
+  // v1.7.5 — the side panel persists across tab switches inside a window,
+  // so an "only works on http(s) pages" error stuck around even after the
+  // user navigated to a real page. Clear the recorder/audit error state
+  // whenever the active tab changes or its URL updates. Idle/recording/
+  // review/etc. are preserved.
+  useEffect(() => {
+    const clearIfError = (): void => {
+      setRecorder((prev) => (prev.kind === 'error' ? { kind: 'idle' } : prev));
+      setAudit((prev) => (prev.kind === 'error' ? { kind: 'idle' } : prev));
+    };
+    const onActivated = (): void => clearIfError();
+    const onUpdated = (
+      _tabId: number,
+      changeInfo: chrome.tabs.TabChangeInfo,
+    ): void => {
+      if (changeInfo.url !== undefined) clearIfError();
+    };
+    chrome.tabs.onActivated.addListener(onActivated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    return () => {
+      chrome.tabs.onActivated.removeListener(onActivated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+    };
+  }, []);
+
   const auditRunning = audit.kind === 'running';
   const recording = recorder.kind === 'recording';
   const recorderBusy =
