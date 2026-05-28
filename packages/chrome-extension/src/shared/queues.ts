@@ -19,6 +19,8 @@ import {
   renderTestCaseModule,
   type AuthProfileList,
   type Queue,
+  type RecordingInput,
+  type RecordingOutput,
   type WorkflowRecording,
 } from '@webspec/core/browser';
 import { writeFileToRepoFolder } from './repoFolder.js';
@@ -34,6 +36,18 @@ export interface TestCaseSummary {
   slug: string;
   name: string;
   runAs: string;
+  /**
+   * v1.6.3 — declared parametric inputs from `recording.json`. Empty array
+   * when the recording is pre-v1.6 or the user declared no inputs. Used by
+   * the Queue composer to render an input-wiring subsection per step.
+   */
+  inputs: RecordingInput[];
+  /**
+   * v1.6.3 — declared outputs from `recording.json`. Used by the Queue
+   * composer to populate the "from step N → outputName" dropdown for later
+   * steps wiring their inputs to earlier outputs.
+   */
+  outputs: RecordingOutput[];
 }
 
 /**
@@ -98,7 +112,13 @@ export async function listTestCases(
       const obj = parsed as Record<string, unknown>;
       const name = typeof obj.name === 'string' ? obj.name : slug;
       const runAs = typeof obj.runAs === 'string' ? obj.runAs : '';
-      out.push({ slug, name, runAs });
+      // v1.6.3 — pull declared inputs/outputs if present. We accept whatever
+      // shape is on disk (the schema's defaults handle pre-v1.6 recordings
+      // with these fields missing); the composer can trust the array shape
+      // but should not assume schema-perfect contents at this layer.
+      const inputs = Array.isArray(obj.inputs) ? (obj.inputs as RecordingInput[]) : [];
+      const outputs = Array.isArray(obj.outputs) ? (obj.outputs as RecordingOutput[]) : [];
+      out.push({ slug, name, runAs, inputs, outputs });
     } catch {
       // Skip unreadable recordings; the user can re-save from the popup.
     }

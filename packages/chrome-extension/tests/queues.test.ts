@@ -150,7 +150,9 @@ describe('listTestCases', () => {
     dir.childFiles.set('recording.json', makeFakeFile('recording.json', VALID_RECORDING));
 
     const result = await listTestCases(asHandle(root));
-    expect(result).toEqual([{ slug: 'create-lead', name: 'Create Lead', runAs: 'TTIDUMWSUP' }]);
+    expect(result).toEqual([
+      { slug: 'create-lead', name: 'Create Lead', runAs: 'TTIDUMWSUP', inputs: [], outputs: [] },
+    ]);
   });
 
   it('skips directories with no recording.json', async () => {
@@ -179,7 +181,37 @@ describe('listTestCases', () => {
     dir.childFiles.set('recording.json', makeFakeFile('recording.json', '{}'));
 
     const result = await listTestCases(asHandle(root));
-    expect(result).toEqual([{ slug: 'no-meta', name: 'no-meta', runAs: '' }]);
+    expect(result).toEqual([
+      { slug: 'no-meta', name: 'no-meta', runAs: '', inputs: [], outputs: [] },
+    ]);
+  });
+
+  it('surfaces declared inputs and outputs from recording.json (v1.6.3)', async () => {
+    const root = makeFakeDir('repo');
+    const testCases = await root.getDirectoryHandle('test-cases', { create: true });
+    const dir = await testCases.getDirectoryHandle('create-lead', { create: true });
+    const recording = JSON.stringify({
+      name: 'Create Lead',
+      runAs: 'X',
+      inputs: [{ name: 'leadName', eventIndex: 3 }],
+      outputs: [
+        { name: 'leadId', source: { kind: 'url', pattern: '/leads/(\\d+)' } },
+      ],
+    });
+    dir.childFiles.set('recording.json', makeFakeFile('recording.json', recording));
+
+    const result = await listTestCases(asHandle(root));
+    expect(result).toEqual([
+      {
+        slug: 'create-lead',
+        name: 'Create Lead',
+        runAs: 'X',
+        inputs: [{ name: 'leadName', eventIndex: 3 }],
+        outputs: [
+          { name: 'leadId', source: { kind: 'url', pattern: '/leads/(\\d+)' } },
+        ],
+      },
+    ]);
   });
 
   it('sorts results by name', async () => {
