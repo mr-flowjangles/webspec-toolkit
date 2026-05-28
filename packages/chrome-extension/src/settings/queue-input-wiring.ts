@@ -184,3 +184,58 @@ export function buildInputValuesForStep(
   }
   return Object.keys(result).length === 0 ? undefined : result;
 }
+
+/**
+ * v1.7.4 — auto-wire a step's declared inputs to earlier non-iterated
+ * steps' outputs by name match. Replaces the v1.6.3 default of every
+ * input starting as a blank-value constant — now common cases ("step 2
+ * needs `leadName`; step 1 produces `leadName`") wire themselves; the
+ * composer UI only surfaces unresolved cases for the user to confirm.
+ *
+ * **Rules:**
+ *   - For each declared input on the current step:
+ *     - Look for a matching-name output in `availableOutputSources`
+ *       (those are already filtered to earlier non-iterated steps).
+ *     - If exactly one match: emit a `{ mode: 'output', step, outputName }`
+ *       wiring entry.
+ *     - If multiple matches: emit nothing — user must disambiguate in UI.
+ *     - If zero matches: emit nothing — user supplies a constant or marks
+ *       unresolved.
+ *
+ * Preserves any pre-existing entry in `currentWiring` (e.g. user already
+ * picked a constant for an input that also has an auto-wire candidate —
+ * respect their choice).
+ *
+ * Strict name match (no fuzzy/Levenshtein) — per the v1.7 design doc,
+ * v1.7 MVP is strict; relax if real usage produces too many unresolved
+ * cases that should have matched.
+ */
+export function autoWireInputs(
+  declaredInputs: RecordingInput[],
+  availableOutputSources: AvailableOutputSource[],
+  currentWiring: Record<string, QueueStepInputValue> = {},
+): Record<string, QueueStepInputValue> {
+  // Group available sources by output name so we can detect ambiguity.
+  const sourcesByName = new Map<string, AvailableOutputSource[]>();
+  for (const src of availableOutputSources) {
+    const list = sourcesByName.get(src.outputName);
+    if (list === undefined) {
+      sourcesByName.set(src.outputName, [src]);
+    } else {
+      list.push(src);
+    }
+  }
+  const result: Record<string, QueueStepInputValue> = { ...currentWiring };
+  for (const input of declaredInputs) {
+    if (result[input.name] !== undefined) continue; // respect existing wiring
+    const candidates = sourcesByName.get(input.name);
+    if (candidates === undefined || candidates.length !== 1) continue;
+    const only = candidates[0]!;
+    result[input.name] = {
+      mode: 'output',
+      step: only.step,
+      outputName: only.outputName,
+    };
+  }
+  return result;
+}

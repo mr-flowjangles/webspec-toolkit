@@ -1,5 +1,64 @@
 # v1.7
 
+## v1.7.4 — Composer Auto-Wire by Name (2026-05-28)
+
+### Problem
+
+v1.6.3 made the Queue composer surface a per-step **Inputs** subsection with a mode dropdown (constant / from earlier step). Even with v1.7.2 + v1.7.3 auto-proposing the Save panel, the *composer* still required the user to manually switch each input to "from earlier step" and pick the source. For obvious cases ("step 2 needs `leadName`; step 1 produces `leadName`") that's still manual work. v1.7.4 finishes the reframe: matching-name outputs wire themselves; the UI surfaces only ambiguities.
+
+### Solution
+
+New `autoWireInputs(declaredInputs, availableOutputSources, currentWiring?)` in `packages/chrome-extension/src/settings/queue-input-wiring.ts`. Rules:
+
+- **Exactly one match:** emit `{ mode: 'output', step, outputName }` wiring.
+- **Multiple matches (ambiguity):** skip; user disambiguates in UI.
+- **Zero matches:** skip; user supplies a constant or marks unresolved.
+- **Pre-existing entry in `currentWiring`:** respect it. Auto-wire never overwrites the user's explicit choice.
+
+Strict name match — no fuzzy / Levenshtein. v1.7 MVP locks behavior at the strict end; relaxation is reversible.
+
+**`QueuesPanel.tsx`** extracts `applyAutoWire(steps, idx)` that re-derives one step's `inputValues` by running the auto-wire pipeline. Both `pickTestCase` and `addStep` call it after mutating the steps array:
+
+- **Picking a Test Case on a step** — matching-name inputs wire automatically; non-matching inputs stay unset (existing UI still shows the mode dropdown for the user to constant-fill).
+- **Adding a new step** — auto-wire runs on the newly-pushed step against prior steps' outputs.
+
+**End-user effect.** Composing a two-step Queue where step 1 (`create-lead`) declares output `leadName` and step 2 (`update-lead`) declares input `leadName`:
+
+- **Before v1.7.4:** add step 2 → pick `update-lead` → click mode dropdown → switch to `from earlier step` → pick `step 1 → leadName`. Four interactions.
+- **After v1.7.4:** add step 2 → pick `update-lead` → Inputs section shows `leadName` already wired to `step 1 (create-lead) → leadName`. Zero interactions.
+
+The user's hand never touches the mode dropdown for the obvious case. Disambiguation (two earlier steps producing `leadName`) still surfaces — those rows arrive unset; the user picks.
+
+**Tests.** 6 new cases in `packages/chrome-extension/tests/queue-input-wiring.test.ts`. 504/504 tests passing (was 498).
+
+### New
+
+- `autoWireInputs` helper.
+- 6 new tests covering the five rules + multi-input case.
+
+### Changed
+
+- `packages/chrome-extension/src/settings/QueuesPanel.tsx` — `applyAutoWire` post-process on `pickTestCase` and `addStep`.
+
+### Fixed
+
+- N/A — additive UX shift.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/settings/queue-input-wiring.ts` | **Edit** — `autoWireInputs` (~50 lines added). |
+| `packages/chrome-extension/src/settings/QueuesPanel.tsx` | **Edit** — `applyAutoWire` integration. |
+| `packages/chrome-extension/tests/queue-input-wiring.test.ts` | **Edit** — +6 cases. |
+| `Versions/v1/v1.7/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **Strict name match only.** No fuzzy matching (`lead_id` vs `leadId`, `lead-name` vs `leadName`). The v1.7.2 auto-propose pipeline emits camelCase identifiers consistently, so within a webspec-authored Queue the names align by construction; cross-author or hand-edited recordings may need a fuzzy pass — LLM-fallback patch can handle it.
+- **Ambiguity always punts to UI.** When two earlier steps produce the same output name, auto-wire emits nothing — user picks. Intentional.
+- **Composer UI unchanged.** The mode dropdown + source picker from v1.6.3 still render the same; they just appear pre-wired when a match exists.
+
 ## v1.7.3 — Auto-Proposed Outputs at Save (2026-05-28)
 
 ### Problem
