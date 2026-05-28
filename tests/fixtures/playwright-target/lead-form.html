@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>webspec v1.6 integration fixture — lead form</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 40px auto; }
+  label { display: block; margin: 12px 0 4px; }
+  input, button { font-size: 14px; padding: 4px 8px; }
+  #lead-detail { margin-top: 24px; }
+  #lead-title { color: #1e8449; font-size: 18px; }
+  [hidden] { display: none; }
+</style>
+
+<h1>Lead form</h1>
+
+<form id="create">
+  <label for="name">Lead Name</label>
+  <input id="name" name="name" type="text" required />
+
+  <button type="submit">Create</button>
+</form>
+
+<section id="lead-detail" hidden>
+  <h2 id="lead-title">—</h2>
+  <p>Lead created. <span id="lead-id-display">—</span></p>
+</section>
+
+<script>
+  // Minimal in-page workflow for v1.6 integration coverage. On submit:
+  //   1. Generate a sequential lead ID.
+  //   2. Update location.hash to /lead/<id> — exercises the URL-regex
+  //      output source.
+  //   3. Render the lead name into #lead-title — exercises the text
+  //      selector output source. The text echoes back whatever was typed
+  //      so the integration test can assert input substitution actually
+  //      reached the field.
+  let nextId = 1;
+  const form = document.getElementById('create');
+  const detail = document.getElementById('lead-detail');
+  const title = document.getElementById('lead-title');
+  const idDisplay = document.getElementById('lead-id-display');
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const leadId = String(nextId++);
+    const leadName = document.getElementById('name').value;
+    title.textContent = leadName;
+    idDisplay.textContent = `id=${leadId}`;
+    detail.hidden = false;
+    location.hash = `#/lead/${leadId}`;
+  });
+</script>

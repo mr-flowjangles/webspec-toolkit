@@ -1,5 +1,81 @@
 # v1.6
 
+## v1.6.5 — Integration Tests for v1.6 Wiring (2026-05-28)
+
+### Problem
+
+v1.6.4 shipped renderer changes with full unit coverage but, like v1.5.0, the renderer's output was only snapshot-tested — no patch actually built the generated TypeScript and ran `npx playwright test` against it. The v1.5 integration suite (v1.5.3) closed that loop for no-I/O recordings; this patch closes it for parametric helpers and wired Queues. **And — anticipated value paid off** — the new integration test caught a real renderer bug that all the unit tests missed.
+
+### Solution
+
+Three new on-disk integration tests + one renderer bug fix.
+
+**The fixture — `tests/fixtures/playwright-target/lead-form.html`.** A minimal in-page workflow purpose-built for v1.6 I/O coverage: a name input + Create button. On submit, the page (a) increments a sequential lead ID and writes it into `location.hash` as `#/lead/<id>` (exercises the `url` output source via a RegExp capture group), (b) echoes the typed name into `#lead-title` (exercises the `text` output source AND lets us assert input substitution actually reached the field). Standalone HTML file with a few lines of inline JavaScript — no build step, no backend.
+
+**Three integration tests in `packages/cli/tests/integration/render-v1-6-wiring.integration.test.ts`:**
+
+1. **Parametric helper with defaults.** Renders a `create-lead` Test Case with declared `leadName` input + `leadId`/`leadName` outputs, writes the standalone `recording.spec.ts` wrapper (which calls `await run({ page, context })` with no inputs argument), runs Playwright. Confirms the recorded-literal default kicks in, the helper compiles, the page workflow runs end-to-end.
+
+2. **Parametric helper with overrides.** Same Test Case, but instead of the standalone wrapper we write a custom spec that imports `run` and invokes it with explicit `{ leadName: 'Wired Name' }`. The custom spec then asserts `out.leadName === 'Wired Name'` (substitution reached the field, the page echoed it back, the text extraction returned the wired value) AND `out.leadId` matches `/^\d+$/` (URL extraction picked the regex capture group). End-to-end validation of input substitution + both output kinds.
+
+3. **Queue with wired output reference.** Composes two Test Cases into a Queue: step 1 creates a lead with `leadName: 'Acme Holdings'` constant, step 2 ("view-lead", a synthetic second step on the same fixture) wires its `incomingName` input to step 1's `leadName` output. Renders the queue spec, writes it to `tests/queue-1-lead-flow.spec.ts`, runs Playwright. Sanity-checks the rendered source has the hoisted `let createLead_1!: Awaited<ReturnType<typeof createLead>>;` declaration + the `createLead_1.leadName` reference. Confirms the captured-return-value flow actually compiles and the second helper receives the runtime-resolved value from the first.
+
+Each test uses its own sub-directory under `packages/cli/tests/integration/.tmp-v1-6/` so a failure leaves debuggable artifacts. 60s timeout matches the v1.5 suite. Combined runtime ~5s added to `pnpm test`.
+
+**Renderer bug fix — scope of captured return values.** The first attempt at the third test failed with `ReferenceError: createLead_1 is not defined`. v1.6.4 captured the return value as `const createLead_1 = await createLead(...)` **inside step 1's `test()` block** — but step 2's `test()` block is a separate function scope and can't see it. The unit tests in v1.6.4 only checked that the substring `const createLead_1 = await createLead` appeared in the output; they didn't check that the variable was reachable from a later step.
+
+Fix: hoist the captured declarations to the `describe.serial` body and use `let` with the definite-assignment assertion (`!:`):
+
+```ts
+test.describe.serial('Lead Flow', () => {
+  let createLead_1!: Awaited<ReturnType<typeof createLead>>;
+
+  test('Step 1 — create-lead', async ({ page, context }) => {
+    createLead_1 = await createLead({ page, context }, { leadName: 'Acme Holdings' });
+  });
+
+  test('Step 2 — view-lead', async ({ page, context }) => {
+    await viewLead({ page, context }, { incomingName: createLead_1.leadName });
+  });
+});
+```
+
+`test.describe.serial`'s ordering guarantee means the consuming step always runs after the producing step has assigned, making the definite-assignment assertion safe in practice. `Awaited<ReturnType<typeof <alias>>>` lets TypeScript infer the exact shape from the imported helper — no `any`, no manual type duplication. Required moving `stepLocals` and `stepIsReferenced` declarations above the describe-block emission so the hoisted-let block can reference them without a TDZ error.
+
+The v1.6.4 unit tests' assertions were updated to match: `const createLead_1 = await ...` → `let createLead_1!: Awaited<...>` (in describe body) + `createLead_1 = await ...` (in step body, no `const`).
+
+**Result.** 470/470 tests passing (+3 from v1.6.4's 467). The three new integration tests + the bug fix together confirm v1.6 input/output wiring works end-to-end against a real Chromium run, not just at the snapshot level.
+
+### New
+
+- `tests/fixtures/playwright-target/lead-form.html` — fixture page with parametric input + extractable URL + extractable text.
+- `packages/cli/tests/integration/render-v1-6-wiring.integration.test.ts` — 3 integration tests.
+
+### Changed
+
+- `packages/core/src/render/queue/renderer.ts` — captured return-value declarations are now hoisted to the `describe.serial` body as `let X!: Awaited<ReturnType<typeof <alias>>>` rather than declared as `const X` inside each step's `test()` body. `stepLocals` and `stepIsReferenced` are computed earlier in the function so the hoisted-let emission can read them.
+- `packages/core/tests/render/queue/renderer.test.ts` — 3 v1.6.4-era assertions updated for the new hoist + assignment shape.
+
+### Fixed
+
+- **Captured return values are now reachable from later steps' `test()` blocks.** v1.6.4 emitted `const createLead_1 = await createLead(...)` inside step 1's `test()` body, but step 2's `test()` body is a separate function scope — at runtime, step 2 hit `ReferenceError: createLead_1 is not defined`. Hoisting the declaration to the `describe.serial` body fixes it. Surfaced by the new integration test; unit tests only checked for the substring's presence, not for cross-step visibility.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `tests/fixtures/playwright-target/lead-form.html` | **New** — v1.6 integration fixture (~50 lines). |
+| `packages/cli/tests/integration/render-v1-6-wiring.integration.test.ts` | **New** — 3 integration tests covering parametric defaults, parametric overrides, and Queue with wired output reference. |
+| `packages/core/src/render/queue/renderer.ts` | **Edit** — hoist captured-return declarations to `describe.serial` body; reorder `stepLocals`/`stepIsReferenced` computation. |
+| `packages/core/tests/render/queue/renderer.test.ts` | **Edit** — 3 assertions updated for hoisted `let` + plain assignment shape. |
+| `Versions/v1/v1.6/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **The v1.6 patch plan completes here.** Five patches: design → schema → save UI → composer → renderer → integration tests. Each is independently shippable. v1.6 closes out item #2 of the four-item v1.5+ futures list in `docs/07-build-plan.md`. The remaining item is #3 (AI variation amplification — same `LLMProvider` seam extended to positive variations).
+- **Same Chromium prereq as the v1.5 + M6 integration tests.** CI runners that don't pre-install will see a clean Playwright error and fail loudly.
+- **Manual verification of the v1.6 UI flows still pending.** v1.6.2 (popup Save panel) and v1.6.3 (Settings composer) both noted "manual verification deferred." The end-to-end integration coverage here partially substitutes — the rendered output is exercised against a real browser — but the actual UI flows (collapsible sections opening, checkbox-to-name-field reveal, mode dropdown swap, validation error display) still want a manual pass before v1.6 is "shipped" in the full sense. Will fold into the next manual-test-plan run.
+
 ## v1.6.4 — Renderer Inputs and Outputs (2026-05-28)
 
 ### Problem
