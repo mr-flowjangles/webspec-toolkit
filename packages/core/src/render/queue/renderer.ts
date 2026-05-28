@@ -98,6 +98,25 @@ export function renderQueueSpec(args: RenderQueueSpecArgs): string {
   // the helper calls without an extra import. Mark intentionally unused.
   lines.push('void expect;');
   lines.push('');
+
+  // v1.6.4 — per-step local variable name when we need to capture the helper's
+  // return value (forward-scan tells us if any later step references this
+  // step's output). Format: `<slug-identifier>_<1-based-step-index>`.
+  //
+  // v1.6.5 — captures are hoisted to the `describe.serial` body (not local to
+  // each `test()`) so a later step in a different `test()` block can read
+  // them. `let` + definite-assignment assertion (`!:`) — `describe.serial`
+  // guarantees step ordering, so the consuming step always runs after the
+  // producing step has assigned.
+  //
+  // Declared up front so the hoisted-let block (rendered into the describe
+  // body, after the inputs constants) can reference them — TDZ would bite
+  // if these moved below.
+  const stepLocals: string[] = queue.steps.map(
+    (step, idx) => `${slugToAlias.get(step.testCase)!}_${idx + 1}`,
+  );
+  const stepIsReferenced = computeStepReferencedFlags(queue.steps);
+
   lines.push(`test.describe.serial(${quote(queue.name)}, () => {`);
 
   // Inputs become constants at the top of the describe block. v1.5.0 still
@@ -109,13 +128,20 @@ export function renderQueueSpec(args: RenderQueueSpecArgs): string {
     lines.push('');
   }
 
-  // v1.6.4 — per-step local variable name when we need to capture the helper's
-  // return value (forward-scan tells us if any later step references this
-  // step's output). Format: `<slug-identifier>_<1-based-step-index>`.
-  const stepLocals: string[] = queue.steps.map(
-    (step, idx) => `${slugToAlias.get(step.testCase)!}_${idx + 1}`,
-  );
-  const stepIsReferenced = computeStepReferencedFlags(queue.steps);
+  // v1.6.5 — hoist captured return-value declarations to the describe body
+  // so consumers in later test() blocks can read them. `let X!: Awaited<...>`
+  // uses TypeScript's definite-assignment assertion to skip the initializer;
+  // the test.describe.serial ordering guarantee makes that safe in practice.
+  const hoistedDecls = queue.steps
+    .map((step, idx) => ({ step, idx, local: stepLocals[idx]! }))
+    .filter(({ idx, step }) => stepIsReferenced[idx] === true && (step.iterations ?? 1) === 1);
+  if (hoistedDecls.length > 0) {
+    for (const { step, local } of hoistedDecls) {
+      const alias = slugToAlias.get(step.testCase)!;
+      lines.push(`  let ${local}!: Awaited<ReturnType<typeof ${alias}>>;`);
+    }
+    lines.push('');
+  }
 
   // Header-switching: compare resolved headers across step boundaries so we
   // only emit a setExtraHTTPHeaders call when they actually change.
@@ -141,8 +167,11 @@ export function renderQueueSpec(args: RenderQueueSpecArgs): string {
 
     const iterations = step.iterations ?? 1;
     const inputsArg = renderInputsArg(step.inputValues, stepLocals);
+    // v1.6.5 — captureReturn now means "assign into the hoisted let" (not
+    // "declare a const here"). The describe-body declaration is emitted
+    // above; this line just does the assignment.
     const captureReturn = stepIsReferenced[idx] === true && iterations === 1;
-    const lhs = captureReturn ? `const ${stepLocals[idx]} = ` : '';
+    const lhs = captureReturn ? `${stepLocals[idx]} = ` : '';
     const helperCall =
       inputsArg === null
         ? `${alias}({ page, context })`

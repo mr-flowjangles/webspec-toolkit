@@ -413,7 +413,10 @@ describe('renderQueueSpec — v1.6.4 inputValues', () => {
       ]),
       authProfiles: [],
     });
-    expect(out).toContain(`const createLead_1 = await createLead({ page, context });`);
+    // v1.6.5 — captures are hoisted to the describe.serial body so a later
+    // test() block can read them; the call-site does plain assignment.
+    expect(out).toContain('let createLead_1!: Awaited<ReturnType<typeof createLead>>;');
+    expect(out).toContain('createLead_1 = await createLead({ page, context });');
     expect(out).toContain(
       `await fillDetails({ page, context }, { leadName: createLead_1.leadName });`,
     );
@@ -432,8 +435,8 @@ describe('renderQueueSpec — v1.6.4 inputValues', () => {
       authProfiles: [],
     });
     expect(out).toContain(`await createLead({ page, context });`);
-    expect(out).not.toContain('const createLead_1');
-    expect(out).not.toContain('const createLead_');
+    expect(out).not.toContain('let createLead_1');
+    expect(out).not.toContain('createLead_1 = await');
   });
 
   it('iterated step with inputValues passes the same inputs each iteration', () => {
@@ -467,7 +470,8 @@ describe('renderQueueSpec — v1.6.4 inputValues', () => {
       ]),
       authProfiles: [],
     });
-    expect(out).not.toContain('const createLead_1');
+    expect(out).not.toContain('let createLead_1');
+    expect(out).not.toContain('createLead_1 = await');
   });
 
   it('renders multiple inputValues entries in stable key order', () => {
