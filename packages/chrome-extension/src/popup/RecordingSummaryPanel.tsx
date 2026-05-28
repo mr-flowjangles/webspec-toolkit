@@ -6,18 +6,35 @@
  * either Save (writes to ~/Downloads/webspec/<slug>/ — the v1.2 library
  * layout) or Discard. The recording is held in popup state until one of
  * those buttons is pressed.
+ *
+ * v1.6.2: embeds `IOAuthoringPanel` so the user can declare parametric
+ * inputs (promoted from recorded fill values) and outputs (URL regex or
+ * text selector). Authored arrays thread back to App via `onSave`.
  */
-import type { WorkflowRecording } from '@webspec/core/browser';
+import { useState } from 'react';
+import type {
+  RecordingInput,
+  RecordingOutput,
+  WorkflowRecording,
+} from '@webspec/core/browser';
+import { IOAuthoringPanel } from './IOAuthoringPanel.js';
+import type { IOValidationError } from './io-authoring.js';
 import { formatDuration, summarizeRecording, type RecordingSummary, type UrlTrailEntry } from './summary.js';
 
 interface Props {
   recording: WorkflowRecording;
-  onSave: () => void;
+  onSave: (inputs: RecordingInput[], outputs: RecordingOutput[]) => void;
   onDiscard: () => void;
 }
 
 export function RecordingSummaryPanel({ recording, onSave, onDiscard }: Props): JSX.Element {
   const summary = summarizeRecording(recording);
+
+  const [inputs, setInputs] = useState<RecordingInput[]>(recording.inputs ?? []);
+  const [outputs, setOutputs] = useState<RecordingOutput[]>(recording.outputs ?? []);
+  const [validationErrors, setValidationErrors] = useState<IOValidationError[]>([]);
+
+  const canSave = summary.eventCount > 0 && validationErrors.length === 0;
 
   return (
     <section className="trace-panel" aria-label="Recording summary">
@@ -46,12 +63,28 @@ export function RecordingSummaryPanel({ recording, onSave, onDiscard }: Props): 
           : 'No non-password user input was captured in this recording.'}
       </p>
 
+      <IOAuthoringPanel
+        recording={recording}
+        inputs={inputs}
+        outputs={outputs}
+        onChange={(next) => {
+          setInputs(next.inputs);
+          setOutputs(next.outputs);
+        }}
+        onValidationChange={setValidationErrors}
+      />
+
       <div className="trace-actions">
         <button
           type="button"
           className="trace-download-btn"
-          onClick={onSave}
-          disabled={summary.eventCount === 0}
+          onClick={() => onSave(inputs, outputs)}
+          disabled={!canSave}
+          title={
+            validationErrors.length > 0
+              ? `Fix ${validationErrors.length} validation error${validationErrors.length === 1 ? '' : 's'} before saving.`
+              : undefined
+          }
         >
           Save
         </button>

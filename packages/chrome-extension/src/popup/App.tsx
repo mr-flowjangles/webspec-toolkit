@@ -8,7 +8,14 @@ import {
   renderTestCaseSpec,
   resolveProfileHeaders,
 } from '@webspec/core/browser';
-import type { A11yReport, AuthProfile, WorkflowRecording } from '@webspec/core/browser';
+import type {
+  A11yReport,
+  AuthProfile,
+  RecordingInput,
+  RecordingOutput,
+  WorkflowRecording,
+} from '@webspec/core/browser';
+import { attachIOToRecording } from './io-authoring.js';
 import type {
   AuditRequest,
   AuditResponse,
@@ -237,7 +244,15 @@ export function App(): JSX.Element {
     }
   }
 
-  async function handleSaveRecording(recording: WorkflowRecording): Promise<void> {
+  async function handleSaveRecording(
+    rawRecording: WorkflowRecording,
+    inputs: RecordingInput[],
+    outputs: RecordingOutput[],
+  ): Promise<void> {
+    // v1.6.2 — attach the Save-panel-authored Inputs/Outputs to the recording
+    // before serialization. The Save UI has already validated them; the
+    // helper module renderer + queue composer will read these in v1.6.3+.
+    const recording = attachIOToRecording(rawRecording, inputs, outputs);
     const slug = deriveSlug(recording.name);
     if (slug === '') {
       setRecorder({
@@ -386,7 +401,9 @@ export function App(): JSX.Element {
       {recorder.kind === 'review' && (
         <RecordingSummaryPanel
           recording={recorder.recording}
-          onSave={() => handleSaveRecording(recorder.recording)}
+          onSave={(inputs, outputs) =>
+            handleSaveRecording(recorder.recording, inputs, outputs)
+          }
           onDiscard={handleDiscardRecording}
         />
       )}
