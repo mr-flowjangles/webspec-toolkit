@@ -298,13 +298,244 @@ Triggers: `push` + `pull_request` to `main` and `workflow_dispatch` (manual reru
 
 **Out of scope for v1.5.1.** No secret rewriting. No matrix builds (browser × Node version). No incremental "run only changed Queues" — Playwright's own sharding/changed-files handling is a v1.7+ optimization. No Bellese-internal GitHub Enterprise variant (this is for `github.com` per the toolkit's standing rules).
 
+## v1.6 — Input/Output Wiring (design locked, 2026-05-28)
+
+The third v1.5+ futures item, promoted to its own minor. Test Cases become **parametric**: they declare named inputs (replacing specific recorded values) and named outputs (extracted from the final page state). Queue steps wire each input either to a constant or to an earlier step's output. This unlocks Queue 3 — `[open-lead, approve-lead]` driven by an `record_id` produced by a prior step — and the broader "compose real workflows from atomic actions" mission.
+
+### Mental model
+
+A Test Case stops being a frozen replay. It becomes a function:
+
+```
+createLead({ page, context }, { leadName }) → { leadId, leadName }
+```
+
+- **Inputs** are recorded fill values that the user has promoted to named parameters at Save time. The helper's `inputs.<name>` is substituted for the recorded literal at render time.
+- **Outputs** are values the user has declared at Save time, extracted from page state after the last recorded action runs. Two source kinds in v1.6 MVP: a URL regex (`/\/leads\/(\d+)/` → first capture group) and the text content of a selector (`h1.lead-title` → `.textContent()`).
+
+A Queue is now a wiring graph: each step's inputs are either constants or references to earlier non-iterated steps' outputs.
+
+### Test Case schema changes
+
+`packages/core/src/types/test-case.ts` (the stored shape) gains two optional arrays:
+
+```ts
+type TestCase = {
+  slug: string;
+  name: string;
+  description: string;
+  runAs: string | null;
+  recording: WorkflowRecording;
+  savedAt: string;
+  // v1.6 additions:
+  inputs?: TestCaseInput[];
+  outputs?: TestCaseOutput[];
+};
+
+type TestCaseInput = {
+  name: string;          // e.g. "leadName"
+  eventIndex: number;    // index into recording.events[] — the fill whose value is parameterized
+};
+
+type TestCaseOutput = {
+  name: string;          // e.g. "leadId"
+  source:
+    | { kind: 'url'; pattern: string }      // RegExp string with at least one capture group; output = match[1]
+    | { kind: 'text'; selector: string };   // page.locator(selector).first().textContent()
+};
+```
+
+Both fields are optional and default to empty. Existing v1.5.x Test Cases (no `inputs` / `outputs`) keep working unchanged — backward compatible additive change.
+
+**Substitution rule.** Full-value only in v1.6. If a recorded fill is `"Acme Corp Inc"` and the user promotes it to `leadName`, the entire string is replaced by `inputs.leadName` at render time. Substring parameterization (e.g. `"Acme ${suffix} Inc"`) is post-MVP.
+
+**Constraints.** `eventIndex` must point at a `fill` or `input`-typed `RecordedEvent`. The Save UI enforces this — only fill-class events appear in the "promote to input" picker.
+
+### Save UI changes
+
+The popup's Test Case Save panel gains two sections under the existing name/description/runAs fields:
+
+```
+Outputs (optional)
+──────────────────
+ + leadId    from URL   /leads/(\d+)
+ + leadName  from text  h1.lead-title
+[+ add output]
+
+Inputs (optional)
+──────────────────
+Recorded fills detected:
+  [ ] event #3   fill h1.name        "Acme Corp"
+  [✓] event #7   fill input[name=…]  "ops@acme.test"   → emailAddress
+  [ ] event #12  fill textarea       "notes…"
+```
+
+- **Outputs** are an ordered list of `{ name, source }`. Source kind is a dropdown (`URL regex` | `text selector`); the second field is the pattern or selector. Name uniqueness validated client-side.
+- **Inputs** is built from the recording's fill/input events. Each row has a checkbox + an input name field. Checking the row promotes the event's value to that named input; the field becomes required and validated for uniqueness.
+
+Both panels are collapsed by default — Test Cases without I/O are still the common shape and shouldn't have noisy empty forms.
+
+### Queue step schema changes
+
+`QueueStep` (stored in the Queue manifest) gains one optional field:
+
+```ts
+type QueueStep = {
+  testCaseSlug: string;
+  runAs: string | null;
+  iterations: number;
+  // v1.6 addition:
+  inputValues?: Record<string, QueueStepInputValue>;
+};
+
+type QueueStepInputValue =
+  | { mode: 'constant'; value: string }
+  | { mode: 'output'; step: number; outputName: string };  // 1-based step index, must reference an earlier step with iterations === 1
+```
+
+Default: empty. A step with no `inputValues` and a Test Case with no declared inputs is unchanged from v1.5.x.
+
+**Validation at Queue Save time** (composer-side, not renderer):
+- Every declared input on the referenced Test Case must have a wired `inputValues[name]` entry (constant or output). No "default to the recorded literal" fallback — explicit is the rule we set with the output design.
+- `mode: 'output'` references must target an earlier step (`step < currentStep`), the target step must have `iterations === 1`, and the target Test Case must declare that output name. Iterated steps are hidden from the dropdown (per the locked decision).
+
+### Composer UI changes
+
+The Queue composer's step panel grows an **Inputs** subsection — visible only when the referenced Test Case declares inputs:
+
+```
+Step 2 — update-lead
+runAs: editor
+iterations: 1
+Inputs:
+  leadName   ▼ from step 1 (createLead) → leadName
+  email      ▼ constant: "ops@acme.test"
+```
+
+The dropdown for each input lists:
+- `constant: …` — a text field appears for the literal value.
+- `from step <N> (<slug>) → <outputName>` — one entry per earlier non-iterated step's declared outputs. Disabled rows (with an explanatory tooltip) for iterated earlier steps.
+
+### Helper signature & rendered output
+
+The Test Case helper module (`test-cases/<slug>/recording.ts`) signature changes from:
+
+```ts
+export async function run({ page, context }: { page: Page; context: BrowserContext }): Promise<void> { … }
+```
+
+to:
+
+```ts
+export async function run(
+  { page, context }: { page: Page; context: BrowserContext },
+  inputs: { leadName: string } = { leadName: '' }
+): Promise<{ leadId: string; leadName: string }> {
+  // … recorded events, with inputs.leadName substituted at the promoted event …
+  await page.locator('h1.name').fill(inputs.leadName);
+  // … remaining events …
+
+  // Output extraction (appended after the last recorded action):
+  const _urlMatch_leadId = page.url().match(/\/leads\/(\d+)/);
+  const leadId = _urlMatch_leadId?.[1] ?? '';
+  const leadName = (await page.locator('h1.lead-title').first().textContent())?.trim() ?? '';
+  return { leadId, leadName };
+}
+```
+
+- Inputs param is positional, defaulted to an object containing empty-string defaults for every declared input. Means the helper can still be called bare (`run({ page, context })`) and won't crash — useful for ad-hoc one-off invocations and for the standalone `recording.spec.ts` wrapper.
+- Return type narrows to the declared output set. No declared outputs → `Promise<void>` and no return statement (back to today's shape).
+- Extraction code is appended **after** the last recorded action. URL extraction reads `page.url()` synchronously. Text extraction awaits `.first().textContent()` with `.trim()` and a fallback `?? ''` so a missing element returns the empty string rather than throwing — matches the "fail at the assertion, not at the helper" philosophy from M6.
+
+Queue spec call sites change from today's:
+
+```ts
+await createLead({ page, context });
+await updateLead({ page, context });
+```
+
+to (when wiring is present):
+
+```ts
+const createLead_1 = await createLead({ page, context }, { leadName: 'Acme Corp' });
+const updateLead_2 = await updateLead({ page, context }, { leadName: createLead_1.leadName });
+```
+
+When a step has no declared inputs **and** isn't an output source for any later step, the call stays bare — no `const` assignment, no inputs object — to avoid unused-var noise in the rendered output. The renderer scans forward to decide whether each step's return value is referenced before deciding whether to assign.
+
+### Standalone Test Case spec (the `recording.spec.ts` wrapper)
+
+The thin wrapper that imports `run` and calls it gains a sensible default-inputs path:
+
+```ts
+import { test } from '@playwright/test';
+import { run } from './recording.js';
+
+test('create-lead', async ({ page, context }) => {
+  await run({ page, context });  // default empty-string inputs; recording's own literal still appears in the action via the recorded event when the input is unset? — see below
+});
+```
+
+**Open implementation detail** that the build will settle: the spec wrapper calls `run` with no inputs, which means the param defaults kick in (empty strings). If the user wants the standalone spec to use *the recorded literal values*, the renderer needs to emit them as the defaults instead of empty strings:
+
+```ts
+inputs: { leadName: string } = { leadName: 'Acme Corp' }
+```
+
+This preserves the v1.5.x "standalone spec replays the recording faithfully" property. Going with **recorded-literal defaults** as the lock — empty-string defaults would silently change standalone behavior, which is a regression. Confirmed.
+
+### Renderer changes
+
+Three renderer pieces touch:
+
+1. `renderTestCaseModule` — emits the new signature, performs input substitution at the right event index, appends extraction code.
+2. `renderQueueSpec` — decides per-step whether to assign the return value (forward-scans for references), emits the inputs object with constants or `<alias>.<output>` references, and renders the alias `<slug>_<index>` consistently.
+3. The shared snippet that writes the `recording.spec.ts` wrapper continues to call `run({ page, context })` bare — defaulted-input behavior preserves replay-of-recording semantics.
+
+No changes to `playwright.config.ts`, the README bootstrap, or the CI workflow — all v1.4/v1.5 surfaces stay as-is.
+
+### Iteration semantics
+
+Locked at design time:
+
+- A step with `iterations > 1` **cannot supply outputs** to later steps. The composer hides it from the output-source dropdown; the validator rejects manual references.
+- A step with `iterations > 1` **can still consume inputs** (constants or outputs from earlier non-iterated steps). The same input value is passed each iteration in v1.6 — no per-iteration variation yet (that's part of AI variation amplification, the next milestone).
+- Renderer: the `for` loop wraps the helper call as today; if the iterated step happens to have declared outputs, they're computed each pass but discarded — no `const` assignment, no aliasing.
+
+### Backward compatibility & self-heal
+
+The v1.5.0 self-heal pattern extends:
+
+- Existing Test Cases without `inputs`/`outputs` keep rendering exactly as before — the new fields are optional, the renderer treats `undefined` as `[]`.
+- A Queue saved pre-v1.6 has no `inputValues` on any step. Re-saving the Queue post-v1.6 detects this; if the referenced Test Cases still have no declared inputs, the spec re-renders unchanged. If a referenced Test Case has *gained* declared inputs since the Queue was last saved, the composer surfaces an "Inputs need wiring" affordance on that step before Save can complete.
+- Removing an input or output from a Test Case is the user's responsibility. The next Queue Save will surface a missing-output error (composer-side validation) or, if missed, a TypeScript compile error at `npm test` time. v1.7+ may add a proactive cross-reference checker.
+
+### Out of scope for v1.6
+
+- **Per-iteration input variation.** A step with `iterations: 3` sees the same `{ leadName: 'Acme' }` each pass. Variation is a v1.7+ AI-amplification milestone (item #4 in v1.5+ futures).
+- **Substring substitution.** Input substitution is whole-value-only.
+- **Output kinds beyond URL regex + text selector.** No attribute extraction (`getAttribute`), no response-body parsing, no localStorage reads. Add when a real fixture demands it.
+- **Outputs from iterated steps as arrays.** Iterated steps don't produce wirable outputs at all in v1.6.
+- **Step reordering re-renders dependent queues.** Aliases are positional (`<slug>_<index>`); reorder is a re-render, surfaced when the user re-saves.
+
+### Patch plan within v1.6
+
+- **v1.6.0** — Design (this section). Doc-only.
+- **v1.6.1** — `TestCase` + `QueueStep` schema additions (zod + storage). No UI yet.
+- **v1.6.2** — Save-UI Inputs/Outputs panels in the popup.
+- **v1.6.3** — Composer Inputs subsection + dropdown + validation.
+- **v1.6.4** — Renderer changes (`renderTestCaseModule` + `renderQueueSpec`).
+- **v1.6.5** — Integration tests (parametric helper + wired queue + extraction round-trip against the `form.html` fixture).
+
+Order chosen so each patch is independently shippable and the surface grows outward: contract → write surface → read surface → render → integration.
+
 ## v1.5+ futures
 
 In rough priority order (final order earned by lived experience with v1.4 + v1.5):
 
 1. **Reusable Test Cases.** ✅ Design locked above — shipped in v1.5.0.
 2. **CI surface.** ✅ Design locked above — shipped in v1.5.1.
-3. **Input/output wiring.** Test Cases declare their outputs (`createLead → { leadId }`) and inputs. The Queue composer wires them. Enables Queue 3-style "start at step 5 with a record passed from step 4."
+3. **Input/output wiring.** ✅ Design locked above — implementation begins in v1.6.1. Test Cases declare their outputs (`createLead → { leadId }`) and inputs. The Queue composer wires them. Enables Queue 3-style "start at step 5 with a record passed from step 4."
 4. **AI variation amplification.** Same `LLMProvider` / `BedrockAdapter` seam used today for negative-scenario generation, extended to positive variations: "Here's `create-lead`. Generate 10 variants exercising every dropdown / radio / required-field combination." One Test Case → ten Queues.
 5. **Secrets-aware workflow rewriter** (was banked from v1.5.1). Auth-profile headers whose values look like credentials get templated to `${{ secrets.NAME }}` references in the rendered workflow / specs, with the user prompted to add the corresponding secret in GitHub. Probably surfaces in the Settings → Auth Profiles editor as a "treat as secret" toggle per header.
 
