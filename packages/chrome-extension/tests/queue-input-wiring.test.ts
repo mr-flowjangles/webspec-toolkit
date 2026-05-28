@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { QueueStepInputValue } from '@webspec/core/browser';
 import {
+  autoWireInputs,
   availableOutputSources,
   buildInputValuesForStep,
   validateStepWiring,
@@ -191,5 +192,73 @@ describe('buildInputValuesForStep', () => {
       leadName: { mode: 'constant', value: 'Acme' },
       email: { mode: 'output', step: 1, outputName: 'email' },
     });
+  });
+});
+
+describe('autoWireInputs', () => {
+  it('wires an input to its single matching-name output source', () => {
+    const out = autoWireInputs(
+      [{ name: 'leadName', eventIndex: 0 }],
+      [{ step: 1, testCaseSlug: 'create-lead', outputName: 'leadName' }],
+    );
+    expect(out).toEqual({
+      leadName: { mode: 'output', step: 1, outputName: 'leadName' },
+    });
+  });
+
+  it('returns no wiring when no source matches', () => {
+    const out = autoWireInputs(
+      [{ name: 'leadName', eventIndex: 0 }],
+      [{ step: 1, testCaseSlug: 'create-lead', outputName: 'otherField' }],
+    );
+    expect(out).toEqual({});
+  });
+
+  it('skips wiring when two sources match the same name (ambiguity)', () => {
+    const out = autoWireInputs(
+      [{ name: 'leadName', eventIndex: 0 }],
+      [
+        { step: 1, testCaseSlug: 'create-lead', outputName: 'leadName' },
+        { step: 2, testCaseSlug: 'create-lead-2', outputName: 'leadName' },
+      ],
+    );
+    expect(out).toEqual({});
+  });
+
+  it('respects existing wiring (does not overwrite a user-set value)', () => {
+    const out = autoWireInputs(
+      [{ name: 'leadName', eventIndex: 0 }],
+      [{ step: 1, testCaseSlug: 'create-lead', outputName: 'leadName' }],
+      { leadName: { mode: 'constant', value: 'override' } },
+    );
+    expect(out).toEqual({
+      leadName: { mode: 'constant', value: 'override' },
+    });
+  });
+
+  it('wires multiple inputs in a single call', () => {
+    const out = autoWireInputs(
+      [
+        { name: 'leadName', eventIndex: 0 },
+        { name: 'leadId', eventIndex: 1 },
+      ],
+      [
+        { step: 1, testCaseSlug: 'create-lead', outputName: 'leadName' },
+        { step: 1, testCaseSlug: 'create-lead', outputName: 'leadId' },
+      ],
+    );
+    expect(out).toEqual({
+      leadName: { mode: 'output', step: 1, outputName: 'leadName' },
+      leadId: { mode: 'output', step: 1, outputName: 'leadId' },
+    });
+  });
+
+  it('returns {} when no declared inputs', () => {
+    expect(
+      autoWireInputs(
+        [],
+        [{ step: 1, testCaseSlug: 'x', outputName: 'y' }],
+      ),
+    ).toEqual({});
   });
 });

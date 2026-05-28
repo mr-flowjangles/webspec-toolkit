@@ -20,6 +20,7 @@ import {
   type QueueStepInputValue,
 } from '@webspec/core/browser';
 import {
+  autoWireInputs,
   availableOutputSources,
   buildInputValuesForStep,
   validateStepWiring,
@@ -381,18 +382,58 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
     setSteps((cur) => cur.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
   }
 
+  /**
+   * v1.7.4 — re-derive `inputValues` for one step by auto-wiring matching-name
+   * outputs from earlier non-iterated steps. Returns the steps array with the
+   * target step updated; no-op if the step's Test Case has no declared inputs.
+   * Both `pickTestCase` and `addStep` call this after mutating the steps array
+   * so the new selection's wiring lands in one place.
+   */
+  function applyAutoWire(
+    nextSteps: DraftStep[],
+    idx: number,
+  ): DraftStep[] {
+    const target = nextSteps[idx];
+    if (target === undefined) return nextSteps;
+    const summary = testCases.find((tc) => tc.slug === target.testCase);
+    const declaredInputs = summary?.inputs ?? [];
+    if (declaredInputs.length === 0) return nextSteps;
+    const views: ComposerStepView[] = nextSteps.map((s) => {
+      const tcSummary = testCases.find((tc) => tc.slug === s.testCase);
+      const parsedIter = Number(s.iterations);
+      const iterations =
+        s.iterations.trim() !== '' && Number.isInteger(parsedIter) && parsedIter >= 1
+          ? parsedIter
+          : 1;
+      return {
+        testCaseSlug: s.testCase,
+        iterations,
+        testCaseInputs: tcSummary?.inputs ?? [],
+        testCaseOutputs: tcSummary?.outputs ?? [],
+      };
+    });
+    const sources = availableOutputSources(views, idx);
+    const wired = autoWireInputs(declaredInputs, sources, target.inputValues);
+    return nextSteps.map((s, i) => (i === idx ? { ...s, inputValues: wired } : s));
+  }
+
   function pickTestCase(idx: number, slug: string): void {
     const summary = testCases.find((tc) => tc.slug === slug);
-    setStep(idx, {
-      testCase: slug,
-      // Pre-fill `runAs` from the Test Case's recorded value if the row is
-      // empty or matches the previously-selected Test Case's runAs.
-      runAs: summary?.runAs ?? '',
-      // v1.6.3 — reset wiring when the user switches Test Cases. Stale keys
-      // would survive otherwise; `buildInputValuesForStep` cleans them at
-      // submit time but the per-step Inputs UI would render against the new
-      // Test Case's inputs with old wiring shown, which is confusing.
-      inputValues: {},
+    setSteps((cur) => {
+      const next = cur.map((s, i) =>
+        i === idx
+          ? {
+              ...s,
+              testCase: slug,
+              // Pre-fill `runAs` from the Test Case's recorded value.
+              runAs: summary?.runAs ?? '',
+              // Reset wiring — stale keys would otherwise survive into the new
+              // Test Case's input set. v1.7.4's auto-wire below re-derives it.
+              inputValues: {},
+            }
+          : s,
+      );
+      return applyAutoWire(next, idx);
     });
   }
 
@@ -410,15 +451,21 @@ function QueueEditor({ testCases, initial, onSave, onCancel }: QueueEditorProps)
 
   function addStep(): void {
     const first = testCases[0];
-    setSteps((cur) => [
-      ...cur,
-      {
-        testCase: first?.slug ?? '',
-        runAs: first?.runAs ?? '',
-        iterations: '',
-        inputValues: {},
-      },
-    ]);
+    setSteps((cur) => {
+      const next = [
+        ...cur,
+        {
+          testCase: first?.slug ?? '',
+          runAs: first?.runAs ?? '',
+          iterations: '',
+          inputValues: {} as Record<string, QueueStepInputValue>,
+        },
+      ];
+      // v1.7.4 — auto-wire on add, so the new step's matching-name inputs
+      // wire to earlier outputs immediately rather than waiting for the
+      // user to re-pick its Test Case.
+      return applyAutoWire(next, next.length - 1);
+    });
   }
 
   function removeStep(idx: number): void {
