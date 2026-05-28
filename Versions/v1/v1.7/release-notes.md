@@ -1,5 +1,73 @@
 # v1.7
 
+## v1.7.2 — Auto-Proposed Inputs at Save (2026-05-28)
+
+### Problem
+
+v1.6.2 shipped the Save panel with empty Inputs + Outputs sections; the user had to manually check every recorded fill, type a name, and hand-author CSS selectors and URL regexes for outputs. Verifying that flow on 2026-05-28, Rob's phrase was *"this is nonsense work that makes this tool unusable by a human."* v1.7 (designed in `docs/11`) reframes the Save panel as a **review** surface — the tool examines the recording and proposes inputs; the user reviews. v1.7.2 is the first concrete delivery of that reframe.
+
+### Solution
+
+New `packages/chrome-extension/src/popup/io-proposal.ts` — a pure helper that derives a sensible default `RecordingInput[]` from a recording.
+
+**`proposeInputsFromRecording(recording)`** walks `recording.events[]` and emits one input per promotable event:
+- `input` events with non-empty, non-sensitive values → promotable.
+- `change` events on `<select>` (where `options !== undefined`) with non-empty values → promotable.
+- Sensitive `input` (passwords), empty values, and checkbox/radio `change` events are skipped. The v1.6.4 known issue (checkboxes can't be parameterized under v1.6's whole-value substitution model) no longer reaches the proposal — fixed at the source.
+
+**`suggestNameFromSelector(selector)`** derives a JS-identifier name from the selector's `preferred` string. Precedence:
+1. `role=ROLE[name="Human Name"]` — the natural-language field label (matches Playwright's role+name pattern). `"Lead Name"` → `leadName`.
+2. `#identifier` — element id. `#lead-name` → `leadName`.
+3. `[data-*="value"]` — test/automation attributes. `[data-test-id="email-field"]` → `emailField`.
+4. `[name="value"]` — form name attribute. `[name="lead_name"]` → `leadName`.
+5. `[placeholder="value"]` — placeholder text. `[placeholder="Enter email"]` → `enterEmail`.
+6. Fallback: `"input"`.
+
+camelCase conversion handles spaces, hyphens, underscores; results starting with a digit get prefixed with `input` so the rendered helper signature stays a valid JS identifier (matches `io-authoring.ts`'s `IDENT_RE`).
+
+Names are **uniquified per-recording** via a `Set<string>` accumulator: a second field with the same suggested base name becomes `name2`, third `name3`, etc.
+
+**`RecordingSummaryPanel.tsx`** is the only other change: the `useState<RecordingInput[]>` initializer switches from `recording.inputs ?? []` to `recording.inputs && recording.inputs.length > 0 ? recording.inputs : proposeInputsFromRecording(recording)`. Re-opening a Test Case saved with explicit inputs respects them; a fresh recording arrives with the proposed defaults already populated.
+
+**End-user effect.** On Stop, the Save panel's Inputs section is already populated:
+- Each promotable fill appears with its checkbox **pre-checked**.
+- The name field is **pre-filled** with the suggested camelCase name.
+- User reviews. Unchecking removes a row from `inputs`. Editing the name updates in place.
+- Save validation still applies (duplicate names, empty names, invalid identifiers) — the auto-propose pipeline produces valid identifiers by construction, but typos during review still error correctly.
+
+**Outputs are unchanged in v1.7.2.** Auto-proposing outputs (URL regex inference from URL changes, text-source inference from new DOM nodes) is the next patch — v1.7.3.
+
+**Tests.** 18 new cases in `packages/chrome-extension/tests/io-proposal.test.ts`. 488/488 tests passing (was 470).
+
+### New
+
+- `packages/chrome-extension/src/popup/io-proposal.ts` — auto-propose helper + name suggestion.
+- `packages/chrome-extension/tests/io-proposal.test.ts` — 18 unit tests.
+
+### Changed
+
+- `packages/chrome-extension/src/popup/RecordingSummaryPanel.tsx` — seeds `inputs` state from the proposal when none are already declared.
+
+### Fixed
+
+- N/A — additive UX shift, not a bug fix.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/popup/io-proposal.ts` | **New** — auto-propose helper. |
+| `packages/chrome-extension/src/popup/RecordingSummaryPanel.tsx` | **Edit** — seed `inputs` state from proposal. |
+| `packages/chrome-extension/tests/io-proposal.test.ts` | **New** — 18 tests. |
+| `Versions/v1/v1.7/release-notes.md` | This entry. |
+
+### Known issues / notes
+
+- **Manual review surface unchanged.** The v1.6.2 `IOAuthoringPanel` still renders all fill events as rows; pre-proposed rows are checked + name-filled. The user can still manually check unproposed rows (e.g. sensitive fields) if they really want to — the auto-propose narrows candidates but doesn't restrict the UI.
+- **Outputs still empty by default.** v1.7.3 delivers auto-proposed outputs.
+- **No LLM round-trip yet.** Heuristic-only inference. LLM fallback for harder cases (labels in sibling elements, multilingual UIs) is queued for a later patch.
+- **Patch plan reordered.** Today's order: v1.7.2 inputs propose → v1.7.3 outputs propose → v1.7.4 composer auto-wire → v1.7.5 floating overlay → v1.7.6 LLM fallback. View migrations / popup retirement deferred to v1.7.7+.
+
 ## v1.7.1 — Side Panel Scaffold (2026-05-28)
 
 ### Problem
