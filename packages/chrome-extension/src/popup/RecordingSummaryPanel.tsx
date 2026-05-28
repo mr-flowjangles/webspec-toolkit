@@ -19,6 +19,7 @@ import type {
 } from '@webspec/core/browser';
 import { IOAuthoringPanel } from './IOAuthoringPanel.js';
 import type { IOValidationError } from './io-authoring.js';
+import { proposeInputsFromRecording } from './io-proposal.js';
 import { formatDuration, summarizeRecording, type RecordingSummary, type UrlTrailEntry } from './summary.js';
 
 interface Props {
@@ -30,7 +31,17 @@ interface Props {
 export function RecordingSummaryPanel({ recording, onSave, onDiscard }: Props): JSX.Element {
   const summary = summarizeRecording(recording);
 
-  const [inputs, setInputs] = useState<RecordingInput[]>(recording.inputs ?? []);
+  // v1.7.2 — auto-propose inputs from the recording on first review.
+  // If the recording already carries `inputs` (rare in v1.7+, common for
+  // recordings saved pre-v1.7.2 and re-opened), respect them as-is.
+  // Otherwise, walk the events and seed the picker with promotable fills,
+  // each with a name suggested from the selector. The user reviews,
+  // unchecks unwanted ones, and edits names — no more authoring-from-empty.
+  const [inputs, setInputs] = useState<RecordingInput[]>(
+    recording.inputs !== undefined && recording.inputs.length > 0
+      ? recording.inputs
+      : proposeInputsFromRecording(recording),
+  );
   const [outputs, setOutputs] = useState<RecordingOutput[]>(recording.outputs ?? []);
   const [validationErrors, setValidationErrors] = useState<IOValidationError[]>([]);
 
