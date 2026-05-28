@@ -43,6 +43,19 @@ chrome.runtime.onInstalled.addListener((details) => {
   console.log('[webspec] service worker installed:', details.reason);
 });
 
+// v1.7.1 — clicking the webspec toolbar icon opens the side panel.
+// Replaces the popup-on-click behavior; popup HTML still ships during the
+// v1.7.1–v1.7.3 transition but isn't bound to the action anymore.
+// `chrome.sidePanel` is Chrome 114+. Setting on every service-worker wake
+// (no event listener needed) is the idiomatic Chrome guidance.
+if (typeof chrome.sidePanel?.setPanelBehavior === 'function') {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((err: unknown) => {
+      console.warn('[webspec] sidePanel.setPanelBehavior failed:', err);
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Recorder session broker
 // ---------------------------------------------------------------------------
