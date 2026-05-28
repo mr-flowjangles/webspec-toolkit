@@ -1,5 +1,36 @@
 # v1.7
 
+## v1.7.6 — Side Panel Tab URL Permission (2026-05-28)
+
+### Problem
+
+After shipping v1.7.5, the side panel **still** showed "webspec only works on http(s) pages" even while the active tab was clearly `http://localhost:8765/lead-form.html`. Two distinct bugs were stacking:
+
+1. **`activeTab` permission alone is insufficient for the side panel.** With `activeTab` only, `chrome.tabs.query` returns `tab.url === undefined` for tabs the user *switched to* (vs. invoked the extension on). The side panel's `activeHttpTab()` treated `undefined` URL as "not http(s)" and emitted the same error message — masking a permission gap as a wrong-page error.
+2. **v1.7.5's `onActivated` listener only cleared errors on tab-change events.** A side panel that mounted with an error already in state (e.g. from a stray click on a non-http tab earlier in the session) had no event to react to until the user happened to switch tabs.
+
+### Solution
+
+**Manifest.** Add `host_permissions: ['http://*/*', 'https://*/*']` so `chrome.tabs.query` reliably returns `tab.url` for any http/https tab the side panel queries — no per-tab grant required.
+
+**App.tsx.** New `clearErrorIfTabIsHttp(setRecorder, setAudit)` helper: queries the active tab and, if it's http(s), drops any `error`-state recorder/audit back to `idle`. Called from:
+- A new mount-effect — clears stale errors as soon as the panel opens.
+- The v1.7.5 tab-event listener — replaces the blanket clear with an http-aware re-check.
+
+**Cosmetic.** Footer string updated from the stale `v1.3.0 — domain-aware auth profiles` to `v1.7.6 — side panel UX`.
+
+### Fixed
+
+- Side panel showing "only works on http(s) pages" while the active tab IS http(s) (root cause: `activeTab` doesn't grant URL read on tab-switch).
+- Stale error state surviving across the side panel's lifetime when no tab event happened to fire after the error.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/manifest.config.ts` | **Edit** — add `host_permissions: ['http://*/*', 'https://*/*']`. |
+| `packages/chrome-extension/src/popup/App.tsx` | **Edit** — new mount effect calling `clearErrorIfTabIsHttp`; v1.7.5 listener delegates to the same helper; footer version label refreshed. |
+
 ## v1.7.5 — Side Panel Tab Error Reset (2026-05-28)
 
 ### Problem

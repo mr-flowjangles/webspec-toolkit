@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   deriveSlug,
   matchProfile,
@@ -89,22 +89,32 @@ export function App(): JSX.Element {
     void hydrateRecorderStatus(setRecorder);
   }, []);
 
+  // v1.7.6 — the side panel persists for the lifetime of its window, so
+  // *any* state captured at mount time can outlive the situation that
+  // produced it. Clearing errors on mount alone isn't enough — the panel
+  // mounted once, hours ago. So we ALSO actively re-check active-tab
+  // status whenever a tab event fires (see useEffect below) and clear
+  // any stale error if the current tab is actually http(s) now.
+  useEffect(() => {
+    void clearErrorIfTabIsHttp(setRecorder, setAudit);
+  }, []);
+
   // v1.7.5 — the side panel persists across tab switches inside a window,
   // so an "only works on http(s) pages" error stuck around even after the
   // user navigated to a real page. Clear the recorder/audit error state
   // whenever the active tab changes or its URL updates. Idle/recording/
   // review/etc. are preserved.
   useEffect(() => {
-    const clearIfError = (): void => {
-      setRecorder((prev) => (prev.kind === 'error' ? { kind: 'idle' } : prev));
-      setAudit((prev) => (prev.kind === 'error' ? { kind: 'idle' } : prev));
+    const onActivated = (): void => {
+      void clearErrorIfTabIsHttp(setRecorder, setAudit);
     };
-    const onActivated = (): void => clearIfError();
     const onUpdated = (
       _tabId: number,
       changeInfo: chrome.tabs.TabChangeInfo,
     ): void => {
-      if (changeInfo.url !== undefined) clearIfError();
+      if (changeInfo.url !== undefined) {
+        void clearErrorIfTabIsHttp(setRecorder, setAudit);
+      }
     };
     chrome.tabs.onActivated.addListener(onActivated);
     chrome.tabs.onUpdated.addListener(onUpdated);
@@ -466,7 +476,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v1.3.0 — domain-aware auth profiles</p>
+        <p className="meta">v1.7.6 — side panel UX</p>
       </footer>
     </main>
   );
@@ -550,6 +560,26 @@ async function activeHttpTab(): Promise<{ tabId: number; url: string }> {
     );
   }
   return { tabId: tab.id, url: tab.url };
+}
+
+/**
+ * v1.7.6 — proactive check used by the side-panel mount effect and the
+ * tab-change listener. If the active tab is currently http(s), forcibly
+ * drop any stale `error` state on recorder/audit back to `idle`. Safe to
+ * call any time — bails silently if anything goes wrong.
+ */
+async function clearErrorIfTabIsHttp(
+  setRecorder: Dispatch<SetStateAction<RecorderStatus>>,
+  setAudit: Dispatch<SetStateAction<AuditStatus>>,
+): Promise<void> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url || !/^https?:/i.test(tab.url)) return;
+    setRecorder((prev) => (prev.kind === 'error' ? { kind: 'idle' } : prev));
+    setAudit((prev) => (prev.kind === 'error' ? { kind: 'idle' } : prev));
+  } catch {
+    // ignore — best-effort
+  }
 }
 
 function friendlyMessagingError(err: unknown): string {

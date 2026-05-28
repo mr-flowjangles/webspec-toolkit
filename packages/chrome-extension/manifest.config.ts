@@ -42,6 +42,15 @@ export default defineManifest({
     },
   ],
   permissions: ['activeTab', 'storage', 'downloads', 'webNavigation', 'sidePanel'],
+  // v1.7.6 — without explicit host_permissions, `chrome.tabs.query` only
+  // returns `tab.url` for tabs the user has invoked the extension on (the
+  // `activeTab` grant). In the side panel, that means a tab the user
+  // *switched to* but hasn't re-clicked the icon on returns `tab.url ===
+  // undefined`, which our `activeHttpTab()` check treats as "not an
+  // http(s) page" — surfacing the false-positive error Rob hit live. We
+  // declare http/https host access so the side panel can correctly
+  // identify the active tab without depending on a per-tab grant.
+  host_permissions: ['http://*/*', 'https://*/*'],
   web_accessible_resources: [
     {
       resources: ['src/report/index.html', 'src/settings/index.html'],
