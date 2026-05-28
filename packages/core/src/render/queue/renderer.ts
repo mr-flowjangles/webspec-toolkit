@@ -41,7 +41,11 @@
  * See `docs/10-team-shareability.md` § "v1.5.0 — Reusable Test Cases".
  */
 import type { WorkflowRecording } from '../../types/analysis.js';
-import type { Queue, QueueStep } from '../../library/queue.js';
+import type {
+  Queue,
+  QueueStep,
+  QueueStepInputValue,
+} from '../../library/queue.js';
 import {
   matchProfile,
   resolveProfileHeaders,
@@ -105,6 +109,14 @@ export function renderQueueSpec(args: RenderQueueSpecArgs): string {
     lines.push('');
   }
 
+  // v1.6.4 — per-step local variable name when we need to capture the helper's
+  // return value (forward-scan tells us if any later step references this
+  // step's output). Format: `<slug-identifier>_<1-based-step-index>`.
+  const stepLocals: string[] = queue.steps.map(
+    (step, idx) => `${slugToAlias.get(step.testCase)!}_${idx + 1}`,
+  );
+  const stepIsReferenced = computeStepReferencedFlags(queue.steps);
+
   // Header-switching: compare resolved headers across step boundaries so we
   // only emit a setExtraHTTPHeaders call when they actually change.
   let prevHeadersKey: string | null = null;
@@ -128,12 +140,20 @@ export function renderQueueSpec(args: RenderQueueSpecArgs): string {
     }
 
     const iterations = step.iterations ?? 1;
+    const inputsArg = renderInputsArg(step.inputValues, stepLocals);
+    const captureReturn = stepIsReferenced[idx] === true && iterations === 1;
+    const lhs = captureReturn ? `const ${stepLocals[idx]} = ` : '';
+    const helperCall =
+      inputsArg === null
+        ? `${alias}({ page, context })`
+        : `${alias}({ page, context }, ${inputsArg})`;
+
     if (iterations > 1) {
       lines.push(`    for (let i = 0; i < ${iterations}; i++) {`);
-      lines.push(`      await ${alias}({ page, context });`);
+      lines.push(`      await ${helperCall};`);
       lines.push(`    }`);
     } else {
-      lines.push(`    await ${alias}({ page, context });`);
+      lines.push(`    ${lhs}await ${helperCall};`);
     }
 
     lines.push('  });');
@@ -185,4 +205,56 @@ function quote(value: string): string {
     return `'${value}'`;
   }
   return JSON.stringify(value);
+}
+
+/**
+ * v1.6.4 — for each step, decide whether to capture its helper return value
+ * in a `const` local. The rule: capture iff some later step references this
+ * step's output via `inputValues[name] = { mode: 'output', step: i+1, ... }`.
+ * Per the v1.6 design lock, iterated steps cannot supply outputs (the
+ * composer hides them from the picker), so we'd never flag an iterated step
+ * — the validation that produces `inputValues` already enforces it — but
+ * we keep the iteration check in the call-site too as belt-and-suspenders.
+ */
+function computeStepReferencedFlags(steps: QueueStep[]): boolean[] {
+  const referenced = new Array<boolean>(steps.length).fill(false);
+  for (let i = 1; i < steps.length; i++) {
+    const wiring = steps[i]?.inputValues;
+    if (wiring === undefined) continue;
+    for (const value of Object.values(wiring)) {
+      if (value.mode === 'output' && value.step >= 1 && value.step <= steps.length) {
+        referenced[value.step - 1] = true;
+      }
+    }
+  }
+  return referenced;
+}
+
+/**
+ * v1.6.4 — render the second positional argument to the helper call from
+ * `step.inputValues`. Returns `null` when the step has no wiring (the bare
+ * `helper({ page, context })` form is used). Constants emit as quoted
+ * string literals; output references emit as `<local>.<outputName>` reads
+ * against the captured return value of an earlier step.
+ */
+function renderInputsArg(
+  inputValues: Record<string, QueueStepInputValue> | undefined,
+  stepLocals: string[],
+): string | null {
+  if (inputValues === undefined || Object.keys(inputValues).length === 0) return null;
+  const pairs: string[] = [];
+  for (const [name, value] of Object.entries(inputValues)) {
+    if (value.mode === 'constant') {
+      pairs.push(`${name}: ${quote(value.value)}`);
+    } else {
+      const local = stepLocals[value.step - 1];
+      // The composer-side validator should have rejected an out-of-range
+      // `value.step`; if a hand-edited manifest sneaks one through, render
+      // a clearly-broken identifier so the test fails loudly rather than
+      // crashing the renderer.
+      const expr = local !== undefined ? local : `__missing_step_${value.step}`;
+      pairs.push(`${name}: ${expr}.${value.outputName}`);
+    }
+  }
+  return `{ ${pairs.join(', ')} }`;
 }

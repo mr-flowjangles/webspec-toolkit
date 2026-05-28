@@ -82,14 +82,18 @@ export function renderPlaywrightSpec(
  * Exported so the v1.4 Queue renderer can inline a Test Case's actions into
  * a queue spec without re-implementing event-to-Playwright translation.
  */
-export function renderEvent(event: RecordedEvent): string[] {
+export function renderEvent(event: RecordedEvent, valueOverride?: string): string[] {
   switch (event.kind) {
     case 'click':
       return [`await ${locator(event.selector)}.click();`];
 
     case 'input':
+      // v1.6.4 — when the Test Case promoted this fill's value to a named
+      // parameter, `valueOverride` carries a TypeScript expression (e.g.
+      // `inputs.leadName`) that goes in unquoted. Without an override, the
+      // recorded literal is emitted as a quoted string as before.
       return [
-        `await ${locator(event.selector)}.fill(${quote(event.value)});`,
+        `await ${locator(event.selector)}.fill(${valueOverride ?? quote(event.value)});`,
       ];
 
     case 'keydown':
@@ -103,7 +107,7 @@ export function renderEvent(event: RecordedEvent): string[] {
       return [`await page.keyboard.press(${quote(event.key)});`];
 
     case 'change':
-      return renderChange(event);
+      return renderChange(event, valueOverride);
 
     case 'submit':
       // `submit` is captured for the audit trail but Playwright doesn't have a
@@ -129,14 +133,25 @@ export function renderEvent(event: RecordedEvent): string[] {
   }
 }
 
-function renderChange(event: Extract<RecordedEvent, { kind: 'change' }>): string[] {
+function renderChange(
+  event: Extract<RecordedEvent, { kind: 'change' }>,
+  valueOverride?: string,
+): string[] {
   // Selects carry an `options` array (v0.6.1). Checkbox/radio events don't.
   if (event.options !== undefined) {
+    // v1.6.4 — parametric select: substitute `inputs.<name>` for the recorded
+    // option value. Selects with a declared input become runtime-driven.
     return [
-      `await ${locator(event.selector)}.selectOption(${quote(event.value)});`,
+      `await ${locator(event.selector)}.selectOption(${valueOverride ?? quote(event.value)});`,
     ];
   }
   // Checkbox / radio: value is 'true' | 'false' (see content-script handleChange).
+  // Parameterizing the verb (`check` vs `uncheck`) at runtime would need a
+  // ternary in the rendered source, which v1.6 MVP intentionally skips —
+  // see docs/10 § "Out of scope for v1.6". Override is silently ignored if
+  // a user promoted a checkbox/radio change to a named input; the helper
+  // param is declared but unused for that event. Listed as a known limitation
+  // in v1.6.4's release notes.
   const verb = event.value === 'true' ? 'check' : 'uncheck';
   return [`await ${locator(event.selector)}.${verb}();`];
 }

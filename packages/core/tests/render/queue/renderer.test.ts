@@ -376,3 +376,117 @@ describe('renderQueueSpec — error cases', () => {
     ).toThrow(/step 1/);
   });
 });
+
+// v1.6.4 — per-step inputValues drive the helper call's second argument and
+// whether the return value is captured for downstream wiring.
+describe('renderQueueSpec — v1.6.4 inputValues', () => {
+  it('renders constant wiring as a quoted key/value pair', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        {
+          testCase: 'create-lead',
+          runAs: 'X',
+          inputValues: { leadName: { mode: 'constant', value: 'Acme Corp' } },
+        },
+      ]),
+      recordings: recordingMap([['create-lead', CREATE_LEAD]]),
+      authProfiles: [],
+    });
+    expect(out).toContain(`await createLead({ page, context }, { leadName: 'Acme Corp' });`);
+  });
+
+  it('captures the return value when a later step references this step\'s output', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        { testCase: 'create-lead', runAs: 'X' },
+        {
+          testCase: 'fill-details',
+          runAs: 'X',
+          inputValues: {
+            leadName: { mode: 'output', step: 1, outputName: 'leadName' },
+          },
+        },
+      ]),
+      recordings: recordingMap([
+        ['create-lead', CREATE_LEAD],
+        ['fill-details', FILL_DETAILS],
+      ]),
+      authProfiles: [],
+    });
+    expect(out).toContain(`const createLead_1 = await createLead({ page, context });`);
+    expect(out).toContain(
+      `await fillDetails({ page, context }, { leadName: createLead_1.leadName });`,
+    );
+  });
+
+  it('does not capture return value when no later step references it', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        { testCase: 'create-lead', runAs: 'X' },
+        { testCase: 'fill-details', runAs: 'X' },
+      ]),
+      recordings: recordingMap([
+        ['create-lead', CREATE_LEAD],
+        ['fill-details', FILL_DETAILS],
+      ]),
+      authProfiles: [],
+    });
+    expect(out).toContain(`await createLead({ page, context });`);
+    expect(out).not.toContain('const createLead_1');
+    expect(out).not.toContain('const createLead_');
+  });
+
+  it('iterated step with inputValues passes the same inputs each iteration', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        {
+          testCase: 'fill-details',
+          runAs: 'X',
+          iterations: 3,
+          inputValues: { leadName: { mode: 'constant', value: 'Acme' } },
+        },
+      ]),
+      recordings: recordingMap([['fill-details', FILL_DETAILS]]),
+      authProfiles: [],
+    });
+    expect(out).toContain(`for (let i = 0; i < 3; i++) {`);
+    expect(out).toContain(
+      `await fillDetails({ page, context }, { leadName: 'Acme' });`,
+    );
+  });
+
+  it('does not capture an iterated step\'s return value even with empty inputValues', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        { testCase: 'create-lead', runAs: 'X', iterations: 100 },
+        { testCase: 'fill-details', runAs: 'X' },
+      ]),
+      recordings: recordingMap([
+        ['create-lead', CREATE_LEAD],
+        ['fill-details', FILL_DETAILS],
+      ]),
+      authProfiles: [],
+    });
+    expect(out).not.toContain('const createLead_1');
+  });
+
+  it('renders multiple inputValues entries in stable key order', () => {
+    const out = renderQueueSpec({
+      queue: queue([
+        {
+          testCase: 'create-lead',
+          runAs: 'X',
+          inputValues: {
+            leadName: { mode: 'constant', value: 'Acme' },
+            notes: { mode: 'constant', value: 'priority' },
+          },
+        },
+      ]),
+      recordings: recordingMap([['create-lead', CREATE_LEAD]]),
+      authProfiles: [],
+    });
+    expect(out).toContain(
+      `await createLead({ page, context }, { leadName: 'Acme', notes: 'priority' });`,
+    );
+  });
+});
