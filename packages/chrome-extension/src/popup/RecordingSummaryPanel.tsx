@@ -19,7 +19,7 @@ import type {
 } from '@webspec/core/browser';
 import { IOAuthoringPanel } from './IOAuthoringPanel.js';
 import type { IOValidationError } from './io-authoring.js';
-import { proposeInputsFromRecording } from './io-proposal.js';
+import { proposeInputsFromRecording, proposeOutputsFromRecording } from './io-proposal.js';
 import { formatDuration, summarizeRecording, type RecordingSummary, type UrlTrailEntry } from './summary.js';
 
 interface Props {
@@ -42,7 +42,16 @@ export function RecordingSummaryPanel({ recording, onSave, onDiscard }: Props): 
       ? recording.inputs
       : proposeInputsFromRecording(recording),
   );
-  const [outputs, setOutputs] = useState<RecordingOutput[]>(recording.outputs ?? []);
+  // v1.7.3 — auto-propose outputs from the recording's URL changes on first
+  // review. Same respect-existing rule as inputs: if the recording carries
+  // declared outputs (re-opened Test Case), keep them; otherwise seed from
+  // the proposal. Currently URL-source only; text-source proposals deferred
+  // to LLM-fallback patch.
+  const [outputs, setOutputs] = useState<RecordingOutput[]>(
+    recording.outputs !== undefined && recording.outputs.length > 0
+      ? recording.outputs
+      : proposeOutputsFromRecording(recording),
+  );
   const [validationErrors, setValidationErrors] = useState<IOValidationError[]>([]);
 
   const canSave = summary.eventCount > 0 && validationErrors.length === 0;
