@@ -1,5 +1,57 @@
 # v1.7
 
+## v1.7.8 — Floating Recorder Overlay (2026-06-01)
+
+### Problem
+
+`docs/11-recorder-ux-overhaul.md` locked four pieces for v1.7; pieces 3 (auto-proposed I/O) and 4 (composer auto-wire) shipped, but **piece 2 — the floating recorder overlay — was never built.** During recording the user had no on-page feedback (was it even capturing?) and had to leave the page, find the extension icon, and open the side panel to hit Stop. That violates the v1.7 mission: the human's job is *record and review*, not hunt-for-the-stop-button.
+
+### Solution
+
+A page-level overlay, injected by the content script for the lifetime of a recording:
+
+- **Live event feed** — one line per captured event (`▸ click "Add Lead"`, `▸ fill #name "Acme"`, `▸ press Enter`, `▸ navigate /lead/42`), driven straight off the recorder's existing `recordedEvents` buffer, so it reflects the same coalescing/dedup the renderer sees.
+- **On-page Stop button** + a running event count.
+- **Top-right, draggable** by its header; **closes on Stop**.
+
+Architecture decisions that keep it clean:
+
+- **No framework.** Plain DOM — the content script stays React-free; nothing heavy gets pulled into every http(s) page.
+- **Shadow DOM isolation.** An open shadow root on a `[data-webspec-overlay-host]` host keeps page CSS out and overlay CSS in. The recorder's capture handlers skip any event whose (retargeted) target is inside that host, so operating the overlay never pollutes the recording.
+- **One stop path.** The overlay's Stop doesn't stop the recorder directly — it broadcasts a `recorder:overlay-stop` runtime message. The side panel (App.tsx) listens and runs the *same* stop→review flow its own Stop button uses, which sends `recorder:stop` to the content script and tears the overlay down. The `WorkflowRecording` is still built in exactly one place.
+- **Survives reload.** The overlay re-mounts (and re-seeds its feed) on the content-script bootstrap-resume path, so a page reload mid-recording doesn't lose the live view.
+
+The feed stays current via a single chokepoint: `persistSession()` already runs after every event push (DOM events and service-worker-pushed navigations alike), so one `syncRecorderOverlay()` call there keeps the overlay in lockstep.
+
+### Verification
+
+- 13 new tests in `packages/chrome-extension/tests/overlay.test.ts` (happy-dom): `describeEvent` formatter per event kind (incl. sensitive masking, navigate path extraction, truncation), mount/shadow/Stop-callback wiring, feed-count tracking through a shrinking buffer, no-op-when-unmounted, double-unmount safety.
+- Full suite **517 passing** (was 504). `tsc -b` clean, `eslint .` clean.
+- Manual walkthrough on the TodoMVC demo pending Rob (load unpacked → record → watch the feed → Stop from the overlay).
+
+### New
+
+- `packages/chrome-extension/src/content-script/overlay.ts` — overlay module (`describeEvent`, `mountRecorderOverlay`, `syncRecorderOverlay`, `unmountRecorderOverlay`).
+- `recorder:overlay-stop` message type + guard in `src/shared/messages.ts`.
+- `packages/chrome-extension/tests/overlay.test.ts`.
+
+### Changed
+
+- `src/content-script/index.ts` — mount on start + bootstrap-resume; unmount on stop; sync the feed in `persistSession()`; ignore the overlay's own events in every capture handler.
+- `src/popup/App.tsx` — listen for `recorder:overlay-stop` and run the existing stop→review flow.
+- `docs/11-recorder-ux-overhaul.md` — locked the overlay decisions; corrected the patch plan to what actually shipped; status no longer a stub.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/content-script/overlay.ts` | **New** — floating overlay (DOM + Shadow DOM, feed, drag, Stop). |
+| `packages/chrome-extension/src/content-script/index.ts` | **Edit** — mount/sync/unmount wiring + overlay-event guards. |
+| `packages/chrome-extension/src/shared/messages.ts` | **Edit** — `recorder:overlay-stop` request + guard. |
+| `packages/chrome-extension/src/popup/App.tsx` | **Edit** — side-panel listener funnels overlay-Stop into the stop→review flow. |
+| `packages/chrome-extension/tests/overlay.test.ts` | **New** — 13 tests. |
+| `docs/11-recorder-ux-overhaul.md` | **Edit** — locked decisions, corrected patch plan, status update. |
+
 ## v1.7.7 — Helper Imports Expect (2026-05-28)
 
 ### Problem

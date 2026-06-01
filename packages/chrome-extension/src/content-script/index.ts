@@ -52,6 +52,13 @@ import {
 } from '../shared/messages.js';
 import { buildHardenedSelector } from './selectors.js';
 import type { HardenedSelector } from '@webspec/core/browser';
+import {
+  OVERLAY_HOST_ATTR,
+  mountRecorderOverlay,
+  syncRecorderOverlay,
+  unmountRecorderOverlay,
+} from './overlay.js';
+import type { RecorderOverlayStopRequest } from '../shared/messages.js';
 
 /** Mirror of `DEFAULT_A11Y_TAGS` in `@webspec/core` — see audit-mode rationale. */
 const A11Y_TAGS = [
@@ -109,6 +116,16 @@ function selectorFor(target: Element): HardenedSelector {
 }
 
 /**
+ * The overlay is rendered inside a Shadow DOM host appended to this same
+ * document, so clicks/drags on it bubble to our capture listeners with the
+ * event retargeted to the host element. Ignore those so the recorder doesn't
+ * capture the user operating the overlay (the Stop button, dragging, etc.).
+ */
+function isOverlayEvent(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(`[${OVERLAY_HOST_ATTR}]`) !== null;
+}
+
+/**
  * Push the current recording snapshot to the service worker, which writes it
  * to `chrome.storage.session` keyed by this tab's id. Fire-and-forget: a
  * later event will overwrite the snapshot, so a dropped persist is recovered
@@ -136,6 +153,21 @@ function persistSession(): void {
   };
   const request: RecorderSessionPutRequest = { type: 'recorder:session:put', state };
   void chrome.runtime.sendMessage<RecorderSessionPutRequest, RecorderSessionPutResponse>(request);
+  // Keep the floating overlay's live feed in step with the buffer. This is the
+  // single chokepoint every event push (DOM + navigate) flows through, so the
+  // feed stays current without sprinkling sync calls across each handler.
+  syncRecorderOverlay(recordedEvents);
+}
+
+/**
+ * The overlay's Stop button broadcasts this fire-and-forget message; the side
+ * panel runs its stop→review flow in response. We deliberately don't stop the
+ * recorder here — keeping a single stop path (via `recorder:stop`) means the
+ * WorkflowRecording is always built in one place.
+ */
+function requestOverlayStop(): void {
+  const request: RecorderOverlayStopRequest = { type: 'recorder:overlay-stop' };
+  void chrome.runtime.sendMessage(request);
 }
 
 function addRecorderListeners(): void {
@@ -156,6 +188,7 @@ function removeRecorderListeners(): void {
 
 function handleClick(ev: MouseEvent): void {
   if (!recorderActive) return;
+  if (isOverlayEvent(ev.target)) return;
   const target = ev.target;
   if (!(target instanceof Element)) return;
 
@@ -182,6 +215,7 @@ function handleClick(ev: MouseEvent): void {
 
 function handleInput(ev: Event): void {
   if (!recorderActive) return;
+  if (isOverlayEvent(ev.target)) return;
   const target = ev.target;
   if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return;
 
@@ -225,6 +259,7 @@ function handleInput(ev: Event): void {
 
 function handleChange(ev: Event): void {
   if (!recorderActive) return;
+  if (isOverlayEvent(ev.target)) return;
   const target = ev.target;
   if (target instanceof HTMLInputElement) {
     // For checkbox/radio, the meaningful value is checked state, surfaced as
@@ -286,6 +321,7 @@ function optionsFor(select: HTMLSelectElement): { value: string; label: string }
 
 function handleSubmit(ev: SubmitEvent): void {
   if (!recorderActive) return;
+  if (isOverlayEvent(ev.target)) return;
   const target = ev.target;
   if (!(target instanceof HTMLFormElement)) return;
 
@@ -299,6 +335,7 @@ function handleSubmit(ev: SubmitEvent): void {
 
 function handleKeydown(ev: KeyboardEvent): void {
   if (!recorderActive) return;
+  if (isOverlayEvent(ev.target)) return;
   if (!SIGNIFICANT_KEYS.has(ev.key)) return;
 
   const target = ev.target;
@@ -325,6 +362,7 @@ function startRecorder(req: RecorderStartRequest): RecorderStartResponse {
   recorderRunAs = req.runAs;
   recorderActive = true;
   addRecorderListeners();
+  mountRecorderOverlay({ name: recorderName, onStop: requestOverlayStop });
   persistSession();
   return { ok: true, startedAt: recorderStartedAtIso, startUrl: recorderStartUrl };
 }
@@ -345,6 +383,7 @@ function stopRecorder(): RecorderStopResponse {
   recorderDescription = null;
   recorderRunAs = null;
   removeRecorderListeners();
+  unmountRecorderOverlay();
   const events = recordedEvents;
   recordedEvents = [];
   const clearRequest: RecorderSessionClearRequest = { type: 'recorder:session:clear' };
@@ -391,6 +430,10 @@ async function bootstrapRecorder(): Promise<void> {
       recorderRunAs = state.runAs ?? '';
       recorderActive = true;
       addRecorderListeners();
+      // Re-show the overlay after a page reload mid-recording and seed its
+      // feed from the restored buffer.
+      mountRecorderOverlay({ name: recorderName, onStop: requestOverlayStop });
+      syncRecorderOverlay(recordedEvents);
       console.log('[webspec] recorder resumed:', state.events.length, 'events buffered');
       return;
     } catch (err) {

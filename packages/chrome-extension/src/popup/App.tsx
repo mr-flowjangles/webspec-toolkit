@@ -16,15 +16,16 @@ import type {
   WorkflowRecording,
 } from '@webspec/core/browser';
 import { attachIOToRecording } from './io-authoring.js';
-import type {
-  AuditRequest,
-  AuditResponse,
-  RecorderStartRequest,
-  RecorderStartResponse,
-  RecorderStatusRequest,
-  RecorderStatusResponse,
-  RecorderStopRequest,
-  RecorderStopResponse,
+import {
+  isRecorderOverlayStopRequest,
+  type AuditRequest,
+  type AuditResponse,
+  type RecorderStartRequest,
+  type RecorderStartResponse,
+  type RecorderStatusRequest,
+  type RecorderStatusResponse,
+  type RecorderStopRequest,
+  type RecorderStopResponse,
 } from '../shared/messages.js';
 import { loadProfiles } from '../shared/profiles.js';
 import {
@@ -123,6 +124,29 @@ export function App(): JSX.Element {
       chrome.tabs.onUpdated.removeListener(onUpdated);
     };
   }, []);
+
+  // v1.7.8 — the on-page floating overlay's Stop button broadcasts a
+  // `recorder:overlay-stop` runtime message. When the side panel is open (the
+  // v1.7 premise: it stays open during recording), run the same stop→review
+  // flow the panel's own Stop button uses. Re-registered on each recorder
+  // change so the listener closes over the current recording fields.
+  useEffect(() => {
+    const onMessage = (message: unknown): void => {
+      if (isRecorderOverlayStopRequest(message) && recorder.kind === 'recording') {
+        void stopAndReviewRecording(
+          recorder.tabId,
+          recorder.startedAt,
+          recorder.startUrl,
+          recorder.name,
+          recorder.description,
+          recorder.runAs,
+          recorder.matchedProfile,
+        );
+      }
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
+  }, [recorder]);
 
   const auditRunning = audit.kind === 'running';
   const recording = recorder.kind === 'recording';
