@@ -18,13 +18,19 @@ const TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'general', label: 'General' },
 ];
 
-export function SettingsPage(): JSX.Element {
+export function SettingsPage({ onBack }: { onBack?: () => void } = {}): JSX.Element {
   const [tab, setTab] = useState<SettingsTab>('auth');
 
   return (
     <main className="settings">
       <header className="settings-head">
-        <h1>webspec</h1>
+        {onBack ? (
+          <button type="button" className="settings-back" onClick={onBack}>
+            ‹ Back
+          </button>
+        ) : (
+          <h1>webspec</h1>
+        )}
         <nav className="settings-tabs" role="tablist" aria-label="Settings sections">
           {TABS.map((t) => (
             <button

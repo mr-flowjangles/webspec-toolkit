@@ -1,5 +1,54 @@
 # v1.7
 
+## v1.7.9 — Side Panel Single Surface (2026-06-01)
+
+### Problem
+
+The last unfinished piece of the v1.7 recorder UX overhaul (`docs/11`, piece 1). v1.7.1 scaffolded Chrome's side panel and made the toolbar icon open it, but the migration stopped there: the side panel just mounted the old popup `App`, and **Settings (Auth Profiles / Queues / General) still opened in a separate browser tab** via `chrome.tabs.create`. So composing a Queue meant leaving the page you were working on, and the extension had two surfaces (side panel + a settings tab) instead of one. The popup HTML was also still declared as the action surface.
+
+### Solution
+
+One surface. Settings now renders **inside the side panel** as a sub-view:
+
+- `App.tsx` gains a `view` state (`'main' | 'settings'`). The `⚙` button flips to `'settings'` instead of opening a tab; an early return renders `<SettingsPage onBack={…} />`.
+- `SettingsPage` gained an optional `onBack` prop — when embedded it shows a `‹ Back` affordance in place of the standalone-page `<h1>`, so there's no duplicate header. The auth/queues/general tabs are otherwise untouched (the component is reused as-is).
+- `App` imports `settings.css` so the panel styles are present wherever the shared App renders.
+- **Popup retired:** `default_popup` removed from the manifest. The toolbar icon opens the side panel (unchanged `setPanelBehavior` in the service worker). The vite build confirms no `popup/index.html` is emitted and the manifest carries no popup reference.
+
+The `report/` full-audit view deliberately **stays** a separate full-tab artifact — it's a print/share output, not part of the record→review loop, so it doesn't belong in the narrow panel. (Recorded as a resolved open question in `docs/11`.)
+
+This closes the v1.7 recorder UX overhaul — all four design pieces (side panel, floating overlay, auto-proposed I/O, composer auto-wire) are now shipped.
+
+### Verification
+
+- `tsc -b` clean; `vite build` clean (manifest 1.31 kB, no popup entry); `eslint .` clean.
+- Full suite **517 passing** — no test regressions from the manifest/App changes.
+- Manual walkthrough pending Rob: open side panel → `⚙` → Settings/Queues render in-panel → Back returns to the main view.
+
+### Changed
+
+- `src/popup/App.tsx` — `view` state; `⚙` toggles in-panel Settings; removed `openSettingsTab`; footer label → `v1.7.9 — side panel single surface`.
+- `src/settings/SettingsPage.tsx` — optional `onBack` prop + `‹ Back` header affordance.
+- `src/settings/settings.css` — `.settings-back` style.
+- `manifest.config.ts` — removed `action.default_popup` (popup retired).
+- `src/sidepanel/main.tsx` — comment updated to reflect the completed migration.
+- `docs/11-recorder-ux-overhaul.md` — piece 1 marked shipped; report-view open question resolved; status → complete.
+
+### Fixed
+
+- Two-surface confusion: composing a Queue no longer navigates away to a separate Settings tab.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/chrome-extension/src/popup/App.tsx` | **Edit** — in-panel Settings view; removed `openSettingsTab`. |
+| `packages/chrome-extension/src/settings/SettingsPage.tsx` | **Edit** — `onBack` prop + Back affordance. |
+| `packages/chrome-extension/src/settings/settings.css` | **Edit** — `.settings-back` style. |
+| `packages/chrome-extension/manifest.config.ts` | **Edit** — removed `default_popup`. |
+| `packages/chrome-extension/src/sidepanel/main.tsx` | **Edit** — comment refresh. |
+| `docs/11-recorder-ux-overhaul.md` | **Edit** — piece 1 shipped; status complete. |
+
 ## v1.7.8 — Floating Recorder Overlay (2026-06-01)
 
 ### Problem

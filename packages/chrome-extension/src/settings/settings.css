@@ -29,6 +29,25 @@ body {
   font-size: 22px;
 }
 
+/* v1.7.9 — when Settings renders embedded in the side panel, the header
+   shows a Back affordance instead of the standalone-page h1. */
+.settings-back {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 0;
+  margin: 0 0 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.settings-back:hover {
+  opacity: 1;
+}
+
 .settings-tabs {
   display: flex;
   gap: 4px;
