@@ -27,7 +27,9 @@ Replace the click-to-open extension popup with Chrome's native side panel (Chrom
 - Hosts every current view: Audit, Record, Save, Settings, Queues.
 - One React app, one entry point — replaces the current `popup/` + `settings/` split.
 
-**Open questions:** How does the side panel relate to the existing `report/` view? Does Audit-this-tab open in the side panel now, or stay as a separate full-tab view? Probably side panel, but TBD.
+**Shipped (v1.7.9):** The toolbar icon opens the side panel (was scaffolded in v1.7.1); v1.7.9 finishes the job — Settings (Auth Profiles / Queues / General) now renders **in-panel** as a sub-view (the `⚙` button toggles a `view` state; `SettingsPage` gained an optional `onBack`) instead of `chrome.tabs.create`-ing a separate browser tab. The `default_popup` is removed from the manifest — the popup HTML is retired. The shared `App` component still lives under `popup/` for git-history continuity but is the side-panel app now.
+
+**Resolved open question:** `report/` (the full audit report) stays a separate full-tab view — it's a print/share artifact, not part of the record/review loop, so it doesn't belong in the narrow side panel.
 
 ### 2. Floating overlay during record
 
@@ -89,7 +91,7 @@ The placeholder plan below was **superseded by what actually shipped** — the p
 - **v1.7.4** — ✅ composer auto-wire by name (piece 4).
 - **v1.7.5 / .6 / .7** — ✅ side-panel hardening (tab error reset, URL permission) + a helper-import bugfix.
 - **v1.7.8** — ✅ floating recorder overlay with live event feed + on-page Stop (piece 2).
-- **v1.7.9** — side panel becomes the single surface: Settings/Queues migrated in, popup retired (piece 1). *In progress.*
+- **v1.7.9** — ✅ side panel becomes the single surface: Settings/Queues migrated in, popup retired (piece 1).
 
 Deferred (preserved): LLM-fallback for I/O proposals (heuristic-only stays — banked for a future Pro tier per `feedback_llm_cost_vs_flexibility`).
 
@@ -109,4 +111,4 @@ Deferred (preserved): LLM-fallback for I/O proposals (heuristic-only stays — b
 
 ## Status
 
-**Locked & nearly complete** (updated 2026-06-01). Three of four pieces shipped (3 + 4 + 2); piece 1 (side-panel single surface) is the final patch, v1.7.9. Tracking issue: #62.
+**Complete** (updated 2026-06-01). All four pieces shipped: side panel single surface (v1.7.1 + v1.7.9), floating overlay (v1.7.8), auto-proposed I/O (v1.7.2/.3), composer auto-wire (v1.7.4). The v1.7 recorder UX overhaul is done. Tracking issue: #62. Next milestone: AI variation amplification (v1.5+ futures item #3).

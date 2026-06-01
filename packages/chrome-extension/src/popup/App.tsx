@@ -38,6 +38,8 @@ import { ensureBootstrap } from '../shared/bootstrap.js';
 import { NamingForm } from './NamingForm.js';
 import { ReportView } from './ReportView.js';
 import { RecordingSummaryPanel } from './RecordingSummaryPanel.js';
+import { SettingsPage } from '../settings/SettingsPage.js';
+import '../settings/settings.css';
 
 type SaveLocation = { kind: 'downloads' } | { kind: 'repo'; folderName: string };
 
@@ -82,6 +84,10 @@ type RecorderStatus =
 export function App(): JSX.Element {
   const [audit, setAudit] = useState<AuditStatus>({ kind: 'idle' });
   const [recorder, setRecorder] = useState<RecorderStatus>({ kind: 'idle' });
+  // v1.7.9 — the side panel is the single surface: Settings (auth profiles,
+  // queues, general) renders in-panel as a sub-view rather than opening a
+  // separate browser tab.
+  const [view, setView] = useState<'main' | 'settings'>('main');
 
   // Chrome popups are transient: every close-then-reopen mounts a fresh App
   // with `recorder: idle`, even though the content-script recorder may still
@@ -374,6 +380,10 @@ export function App(): JSX.Element {
     setRecorder({ kind: 'discarded' });
   }
 
+  if (view === 'settings') {
+    return <SettingsPage onBack={() => setView('main')} />;
+  }
+
   return (
     <main className="popup">
       <header>
@@ -408,10 +418,10 @@ export function App(): JSX.Element {
         <button
           type="button"
           className="settings-btn"
-          onClick={() => void openSettingsTab()}
+          onClick={() => setView('settings')}
           disabled={auditRunning || recorderBusy}
           aria-label="Open settings"
-          title="Settings — auth profiles"
+          title="Settings — auth profiles, queues"
         >
           ⚙
         </button>
@@ -500,7 +510,7 @@ export function App(): JSX.Element {
       )}
 
       <footer>
-        <p className="meta">v1.7.6 — side panel UX</p>
+        <p className="meta">v1.7.9 — side panel single surface</p>
       </footer>
     </main>
   );
@@ -568,11 +578,6 @@ async function getMatchedProfileForActiveTab(): Promise<AuthProfile | null> {
   } catch {
     return null;
   }
-}
-
-async function openSettingsTab(): Promise<void> {
-  const url = chrome.runtime.getURL('src/settings/index.html');
-  await chrome.tabs.create({ url });
 }
 
 async function activeHttpTab(): Promise<{ tabId: number; url: string }> {
