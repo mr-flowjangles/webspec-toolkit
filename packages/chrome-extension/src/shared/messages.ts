@@ -194,6 +194,27 @@ export function isRecorderAppendEventRequest(
 }
 
 // ---------------------------------------------------------------------------
+// Floating recorder overlay → side panel: Stop request (v1.7.8)
+//
+// The on-page overlay's Stop button can't build a WorkflowRecording on its
+// own — that logic lives in the side panel (App.tsx). The overlay's content
+// script broadcasts this fire-and-forget runtime message; the side panel
+// listens and runs its normal stop→review flow, which sends `recorder:stop`
+// back to the content script (tearing the overlay down). One stop path, two
+// triggers. The service worker ignores this message (unknown → return false).
+// ---------------------------------------------------------------------------
+
+export interface RecorderOverlayStopRequest {
+  type: 'recorder:overlay-stop';
+}
+
+export function isRecorderOverlayStopRequest(
+  value: unknown,
+): value is RecorderOverlayStopRequest {
+  return isObjectWithType(value, 'recorder:overlay-stop');
+}
+
+// ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 

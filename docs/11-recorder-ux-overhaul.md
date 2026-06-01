@@ -39,7 +39,7 @@ While recording, inject a page-level overlay (content script) with:
 
 The recorder already runs in the content script; rendering an event-by-event feed is just emitting to the overlay as each event is captured.
 
-**Open questions:** Where on the page does it anchor by default? Top-right? User-draggable? Should it disappear when the user clicks Stop (and we transition to the Save panel in the side panel)?
+**Locked (v1.7.8):** Anchors **top-right** by default, **draggable** by its header, and **closes on Stop** — the overlay's Stop button broadcasts a `recorder:overlay-stop` runtime message; the side panel runs its normal stop→review flow, which tears the overlay down and opens the Save panel. The overlay is style-isolated via Shadow DOM and its own events are ignored by the recorder (capture handlers skip targets inside `[data-webspec-overlay-host]`). **Assumption:** the side panel is open during recording (the v1.7 premise — it's persistent per-window), so overlay-Stop has a listener; the side panel's own Stop button remains the fallback if the panel is closed. Shipped in **v1.7.8**.
 
 ### 3. Auto-proposed I/O at record-stop
 
@@ -80,17 +80,18 @@ The current per-step Inputs subsection (v1.6.3) only surfaces when there's a rea
 
 ## Patch plan (placeholder — refined as design locks)
 
-- **v1.7.0** — this design doc (the stub you're reading; iterates in conversation until locked).
-- **v1.7.1** — side panel scaffold (Chrome side panel manifest + one-view migration; existing popup behavior preserved during transition).
-- **v1.7.2** — Audit + Save view migration into side panel.
-- **v1.7.3** — Settings + Queues view migration; popup retired.
-- **v1.7.4** — Floating recorder overlay with live event feed + Stop button.
-- **v1.7.5** — Auto-proposed I/O at record-stop (heuristic-first); v1.6.2 promote-picker removed.
-- **v1.7.6** — Composer auto-wire; v1.6.3 manual wiring dropdown becomes the unresolved-only escape hatch.
-- **v1.7.7** — LLM-fallback for I/O proposals (Bedrock seam).
-- **v1.7.x** — integration tests + manual test plan update.
+The placeholder plan below was **superseded by what actually shipped** — the patches landed in a different order. Actual:
 
-Patch plan will be revised once the design is locked through conversation.
+- **v1.7.0** — ✅ this design doc.
+- **v1.7.1** — ✅ side panel scaffold (mounts the popup `App`; popup behavior preserved during transition).
+- **v1.7.2** — ✅ auto-proposed **inputs** at Save (piece 3).
+- **v1.7.3** — ✅ auto-proposed **outputs** at Save (piece 3).
+- **v1.7.4** — ✅ composer auto-wire by name (piece 4).
+- **v1.7.5 / .6 / .7** — ✅ side-panel hardening (tab error reset, URL permission) + a helper-import bugfix.
+- **v1.7.8** — ✅ floating recorder overlay with live event feed + on-page Stop (piece 2).
+- **v1.7.9** — side panel becomes the single surface: Settings/Queues migrated in, popup retired (piece 1). *In progress.*
+
+Deferred (preserved): LLM-fallback for I/O proposals (heuristic-only stays — banked for a future Pro tier per `feedback_llm_cost_vs_flexibility`).
 
 ## Out of scope for v1.7 (preserved for later)
 
@@ -108,4 +109,4 @@ Patch plan will be revised once the design is locked through conversation.
 
 ## Status
 
-**Stub** (2026-05-28). Awaits the design conversation that locks each piece. Tracking issue: #62.
+**Locked & nearly complete** (updated 2026-06-01). Three of four pieces shipped (3 + 4 + 2); piece 1 (side-panel single surface) is the final patch, v1.7.9. Tracking issue: #62.
